@@ -4,8 +4,7 @@ from fastapi import FastAPI, HTTPException
 from loguru import logger
 from motor.motor_asyncio import AsyncIOMotorClient
 
-
-from app.odk_client import ODKClient
+from app.utilits.odk_client import ODKClient
 
 # Configure loguru logger
 logger.add("./../app.log", rotation="500 MB")
