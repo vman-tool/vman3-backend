@@ -69,7 +69,7 @@ ODK_PASSWORD=""
 Run the following command to start the FastAPI application:
 
 ```bash
-uvicorn app.main:app --host 0.0.0.0 --port 8081 --reload
+uvicorn app.main:app --host 0.0.0.0 --port 8080 --reload
 ```
 
 The application will be accessible at `http://

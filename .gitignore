@@ -70,3 +70,12 @@ settings.json
 */settings.json
 
 
+# just ignore
+
+*ipynb
+.pyodk_config.toml
+.pyodk_cache.toml
+
+
+
+venv/
