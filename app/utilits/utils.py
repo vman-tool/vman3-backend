@@ -133,7 +133,7 @@ class ODKClient:
             date_filter = f'&$filter=__system/submissionDate lt {end_date}'
         
         url = f"{self.odk_base_url}/{self.odk_api_version}/projects/{self.odk_default_project_id}/forms/{self.odk_settings['va_tables'][0]['odk_form_id']}.svc/Submissions?$count=true{pagination_string}{date_filter}"
-
+            
         response = self.send_request('get', url, headers=headers)
         if response.status_code == 200 or response.status_code == 201:
             data = json.loads(response.text)

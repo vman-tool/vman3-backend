@@ -8,7 +8,7 @@ from decouple import config
 
 class ODKClient:
     def __init__(self):
-        settings_path = "./../settings.json"
+        settings_path = "./settings.json"
         if os.path.exists(settings_path):
             with open(settings_path, 'r') as file:
                 self.odk_settings = json.load(file)
@@ -118,17 +118,17 @@ class ODKClient:
 
 
         date_filter = ""
-        if(len(start_date) > 0 and len(end_date) > 0):
-            date_filter += f'&$filter=__system/submissionDate ge {start_date} and __system/submissionDate le {end_date}'
+        # if(len(start_date) > 0 and len(end_date) > 0):
+        #     date_filter += f'&$filter=__system/submissionDate ge {start_date} and __system/submissionDate le {end_date}'
 
-        if len(start_date) > 0 and len(end_date) == 0:
-            date_filter = f'&$filter=__system/submissionDate gt {start_date}'
+        # if len(start_date) > 0 and len(end_date) == 0:
+        #     date_filter = f'&$filter=__system/submissionDate gt {start_date}'
         
-        if(len(end_date) > 0) and len(start_date) == 0:
-            date_filter = f'&$filter=__system/submissionDate lt {end_date}'
+        # if(len(end_date) > 0) and len(start_date) == 0:
+        #     date_filter = f'&$filter=__system/submissionDate lt {end_date}'
         
         url = f"{self.odk_base_url}/{self.odk_api_version}/projects/{self.odk_default_project_id}/forms/{self.odk_settings['va_tables'][0]['odk_form_id']}.svc/Submissions?$count=true{pagination_string}{date_filter}"
-
+        print(url)
         response = self.send_request('get', url, headers=headers)
         if response.status_code == 200 or response.status_code == 201:
             data = json.loads(response.text)
