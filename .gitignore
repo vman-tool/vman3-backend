@@ -79,3 +79,12 @@ settings.json
 
 
 venv/
+virtualenv
+virtual_env
+vman_env
+vmanenv
+.virtual_env
+.virtualenv
+.vman_env
+.vmanenv
+.venv
