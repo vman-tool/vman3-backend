@@ -62,6 +62,7 @@ profile_default​⬤
 # mypy
 */*.log
 *.log
+*.json
 */session.json
 session.json
 */.env
