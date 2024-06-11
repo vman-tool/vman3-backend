@@ -141,3 +141,41 @@ class ODKClient:
         else:
             return "Failed to fetch form submissions!"            
         return "Failed to fetch form submissions!"
+    
+    def flatten_json(self, y):
+        out = {}
+
+        def flatten(x, name=''):
+            if type(x) is dict:
+                for a in x:
+                    flatten(x[a], name + a + '_')
+            elif type(x) is list:
+                i = 0
+                for a in x:
+                    flatten(a, name + str(i) + '_')
+                    i += 1
+            else:
+                out[name[:-1]] = x
+
+        flatten(y)
+        return out
+    
+    def flatten_preserve_array_json(self, y):
+        out = {}
+
+        def flatten(x, name=''):
+            if isinstance(x, dict):
+                for a in x:
+                    flatten(x[a], name + a + '_')
+            elif isinstance(x, list):
+                for i, a in enumerate(x):
+                    if isinstance(a, dict):
+                        for k, v in self.flatten_preserve_array_json(a).items():
+                            out[name + str(i) + '_' + k] = v
+                    else:
+                        out[name + str(i)] = a
+            else:
+                out[name[:-1]] = x
+
+        flatten(y)
+        return out
