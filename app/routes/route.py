@@ -55,6 +55,7 @@ async def fetch_and_store_data(
 
             progress = ((i + 1) / num_iterations) * 100
             records_saved += len(json_flattened)
+            
             if int(progress) != last_progress:
                 last_progress = int(progress)
                 print(f"\rDownloading: [{'*' * int(progress // 2)}{' ' * (50 - int(progress // 2))}] {progress:.0f}%", end='')
