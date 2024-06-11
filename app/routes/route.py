@@ -25,9 +25,9 @@ async def fetch_and_store_data(
 ):
     
     if start_date or end_date:
-        logger.info(f"\n Fetching data from ODK between {start_date} and {end_date}")
+        logger.info(f"\nFetching data from ODK between {start_date} and {end_date} \n\n")
     else:
-        logger.info(f"\n Fetching data from ODK Central")
+        logger.info(f"\nFetching data from ODK Central \n\n")
 
     with ODKClient() as odk_client:
         data_for_count = odk_client.getFormSubmissions(top=1)
@@ -55,7 +55,7 @@ async def fetch_and_store_data(
 
             progress = ((i + 1) / num_iterations) * 100
             records_saved += len(json_flattened)
-            
+
             if int(progress) != last_progress:
                 last_progress = int(progress)
                 print(f"\rDownloading: [{'*' * int(progress // 2)}{' ' * (50 - int(progress // 2))}] {progress:.0f}%", end='')
