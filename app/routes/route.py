@@ -3,7 +3,9 @@ from fastapi import APIRouter, HTTPException, status
 from loguru import logger
 
 from app.configs.database import db
-from app.utilits.odk_client import ODKClient
+from app.utilits.utils import ODKClient
+import json
+from pandas import json_normalize # type: ignore
 
 odk_router = APIRouter(
     prefix="/odk",
@@ -19,21 +21,48 @@ async def fetch_and_store_data(
     start_date: str = None, 
     end_date: str = None,
     skip: int = 0,
-    top: int = 1000,
+    top: int = 10,
 ):
-    if start_date is None:
-        start_date = '2021-01-01'  # Replace with your desired default start date
-    if end_date is None:
-        end_date = '2024-06-06' 
-            
-    logger.info(f"Fetching data from ODK between {start_date} and {end_date}")
-    with ODKClient() as odk_client:
-        data = odk_client.get_form_submissions(start_date, end_date, top=top, skip=skip)
+    
+    if start_date or end_date:
+        logger.info(f"\n Fetching data from ODK between {start_date} and {end_date}")
+    else:
+        logger.info(f"\n Fetching data from ODK Central")
 
-    if isinstance(data, str):
-        logger.error(f"Error fetching data: {data}")
-        raise HTTPException(status_code=500, detail=data)
-    collection = db["form_submissions"]
-    await collection.insert_many(data['value'])
-    logger.info(f"Data inserted successfully: {len(data['value'])} records")
-    return {"status": "Data inserted successfully"}
+    with ODKClient() as odk_client:
+        data_for_count = odk_client.getFormSubmissions(top=1)
+
+        total_data_count = data_for_count["@odata.count"]
+
+        num_iterations = (total_data_count // top) + (1 if total_data_count % top != 0 else 0)
+
+        records_saved = 0
+        last_progress = 0
+
+        for i in range(num_iterations):
+
+            data = odk_client.getFormSubmissions(start_date, end_date, top=top, skip=skip)
+
+            json_flattened = json.loads(json_normalize(data=data['value'], sep='/').to_json(orient='records'))
+
+            if isinstance(data, str):
+                logger.error(f"Error fetching data: {data}")
+                raise HTTPException(status_code=500, detail=data)
+            collection = db["form_submissions"]
+            await collection.insert_many(json_flattened)
+
+            skip += top
+
+            progress = ((i + 1) / num_iterations) * 100
+            records_saved += len(json_flattened)
+            if int(progress) != last_progress:
+                last_progress = int(progress)
+                print(f"\rDownloading: [{'*' * int(progress // 2)}{' ' * (50 - int(progress // 2))}] {progress:.0f}%", end='')
+
+
+    if records_saved == total_data_count:
+        logger.info(f"\n Data inserted successfully: {records_saved} records")
+        return {"status": "Data inserted successfully"}
+    else:
+        logger.info(f"\n Successfully inserted {records_saved} records while records were {total_data_count}")
+        return {"status": "Data inserted with issues"}
