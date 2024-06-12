@@ -17,7 +17,7 @@ Create a virtual environment to manage your project dependencies.
 
 ```bash
 # Create a virtual environment
-python -m venv venv
+python3 -m venv venv
 
 # Activate the virtual environment (Linux/Mac)
 source venv/bin/activate
@@ -28,7 +28,7 @@ venv\Scripts\activate
 
 ### 2. Run the following command to install the required dependencies:
 ```bash
-pip install -r requirements.txt
+pip3 install -r requirements.txt
 ```
 
 ### 3. Configure Environment Variables
@@ -49,18 +49,11 @@ ODK_PASSWORD=""
 ```
 
 ### 4. add settings.json
+# command copy the content of settings.json.example to settings.json
 
 ```bash
 
-{
-    "odk": {
-        "api_url": "",
-        "api_version": "v1",
-        "username": "",
-        "password": ""
-    },
-    .....
-}
+cp settings.json.example settings.json
     
 ```
 
