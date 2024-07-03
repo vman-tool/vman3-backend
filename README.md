@@ -29,7 +29,10 @@ venv\Scripts\activate
 ### 2. Run the following command to install the required dependencies:
 ```bash
 pip3 install -r requirements.txt
+# update .txt from venv
+pip freeze > requirements.txt
 ```
+
 
 ### 3. Configure Environment Variables
 
