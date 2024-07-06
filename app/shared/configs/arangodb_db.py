@@ -29,7 +29,7 @@ class ArangoDBClient:
     async def replace_one(self, collection_name, document):
         try:
             aql_query = """
-            UPSERT { _key: @key }
+            UPSERT { __id: @key }
             INSERT @document
             UPDATE @document IN @@collection
             OPTIONS { exclusive: true }

@@ -33,9 +33,15 @@ async def fetch_and_store_data(
 
 
 @odk_router.post("/fetch_endpoint_with_async", status_code=status.HTTP_201_CREATED)
-async def fetch_odk_data_with_async(background_tasks: BackgroundTasks):
+async def fetch_odk_data_with_async(background_tasks: BackgroundTasks,  start_date: str = None, 
+    end_date: str = None,
+    skip: int = 0,
+    top: int = 10000):
     try:
-        await data_download.fetch_odk_data_with_async()
+        await data_download.fetch_odk_data_with_async(       start_date= start_date,
+    end_date=end_date,
+    skip=skip,
+    top=top)
         return {"status": "Data fetched sucessfuly"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
