@@ -8,8 +8,13 @@ from fastapi import Depends, HTTPException
 from loguru import logger
 
 from app.odk_download.services.data_tracker import (
-    get_last_processed_timestamp, log_chunk_remove, log_chunk_start,
-    log_chunk_update, log_error, update_last_processed_timestamp)
+    get_last_processed_timestamp,
+    log_chunk_remove,
+    log_chunk_start,
+    log_chunk_update,
+    log_error,
+    update_last_processed_timestamp,
+)
 from app.shared.configs.arangodb_db import ArangoDBClient, get_arangodb_client
 from app.shared.configs.database import form_submissions_collection
 from app.utilits.odk_client import ODKClientAsync
@@ -19,7 +24,7 @@ async def fetch_odk_data_with_async(
     start_date: str = None, 
     end_date: str = None,
     skip: int = 0,
-    top: int = 1000,
+    top: int = 3000,
     resend: bool = False # resend flag to resend data
 ):   
     try:

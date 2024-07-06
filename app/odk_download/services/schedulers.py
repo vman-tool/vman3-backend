@@ -13,6 +13,7 @@ async def scheduled_failed_chucks_retry():
 # Function to retry failed chunks
 async def retry_failed_chunks():
     failed_chunks = await get_incomplete_chunks()
+    print(f"Failed chunks: {len(failed_chunks)}")
     for chunk in failed_chunks:
         start_date = chunk['start_date']
         end_date = chunk['end_date']
