@@ -1,9 +1,7 @@
 from typing import List
+from app.shared.configs.models import VmanBaseModel
 
 
-from pydantic import BaseModel
-
-
-class Role(BaseModel):
+class Role(VmanBaseModel):
     name: str
     privileges: List[str]
