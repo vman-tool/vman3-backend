@@ -35,7 +35,8 @@ settings = get_settings()
 
 
 async def create_user_account(data: RegisterUserRequest, db: StandardDatabase, background_tasks: BackgroundTasks):
-
+    print(data)
+    
     collection = db.collection('users')
 
     cursor = cursor =collection.find({'email': data.email}, limit=1)
@@ -57,6 +58,11 @@ async def create_user_account(data: RegisterUserRequest, db: StandardDatabase, b
         "created_by": data.created_by, # TODOS: Change to the user id of the user creating the account
     }
     User(**user_data).save(db)
+    # await User.save(user_data, 'users')
+
+    # collection.insert(user_data)
+    
+    # Retrieve the inserted user to refresh session data
     cursor = collection.find({'email': data.email}, limit=1)
     user = [doc for doc in cursor]
 
@@ -66,8 +72,8 @@ async def create_user_account(data: RegisterUserRequest, db: StandardDatabase, b
         "id": user[0]["_key"],
         "name": user[0]["name"],
         "email": user[0]["email"],
-        "created_at": user[0]["created_at"],
-        "is_active": user[0]["is_active"]
+        "is_active": user[0]["is_active"],
+        "created_at":user[0]["created_at"]
     }
     
     
