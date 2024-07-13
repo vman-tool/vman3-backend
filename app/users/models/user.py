@@ -8,19 +8,20 @@ from app.users.models.role import Role
 
 
 class User(VmanBaseModel):
-    id: Optional[str] = None
+    # id: Optional[str] = None
     name: str
     email: EmailStr
     is_active: bool
+
     verified_at: Optional[Union[str, datetime]] = None
-    tokens: Optional[List[str]] = None
-    roles: Optional [List[Role]] = None
+    tokens: Optional[str] = None
+    roles: Optional[List[Role]] = None
     
+   
     @classmethod
     def get_collection_name(cls) -> str:
         return "users"
 
-    
 
 
 
