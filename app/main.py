@@ -6,11 +6,10 @@ from apscheduler.triggers.interval import IntervalTrigger
 from fastapi import FastAPI
 from loguru import logger
 
-from app import routes
+from app import main_router
 from app.odk_download.services import data_download, schedulers
 from app.shared.configs.arangodb_db import get_arangodb_client
-from app.shared.configs.database import (close_mongo_connection,
-                                         connect_to_mongo)
+from app.shared.configs.database import close_mongo_connection, connect_to_mongo
 
 logger.add("./../app.log", rotation="500 MB")
 scheduler = AsyncIOScheduler()
@@ -20,9 +19,7 @@ async def lifespan(app: FastAPI):
     logger.info("Application startup")
     print("Visit http://localhost:8080/api/docs for the API documentation (Swagger UI)")
     print("Visit http://localhost:8080/api for the main API")
-    # scheduler = BackgroundScheduler()
-    # scheduler.add_job(scheduled_failed_chucks_retry,"interval",minutes = 1)
-    # scheduler.add_job(scheduled_failed_chucks_retry,"interval",minutes = 1)
+ 
     scheduler.add_job(schedulers. scheduled_failed_chucks_retry, IntervalTrigger(minutes=60*3))
     scheduler.add_job(data_download. fetch_odk_data_with_async, CronTrigger(hour=18, minute=0))
     scheduler.start()
@@ -50,7 +47,7 @@ def create_application():
         openapi_url="/api/openapi.json",
         lifespan=lifespan
     )
-    routes.main_route(application)
+    main_router.main_route(application)
     return application
 
 app = create_application()

@@ -1,8 +1,4 @@
-# Define the database client and collections as global variables
-# client = None
-# db = None
-# form_submissions_collection = None
-# tracker_collection = None
+
 from decouple import config
 from motor.motor_asyncio import AsyncIOMotorClient
 
