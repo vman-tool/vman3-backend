@@ -3,7 +3,7 @@ from typing import List, Optional, Union
 
 from pydantic import BaseModel, EmailStr
 
-from app.shared.models import VmanBaseModel
+from app.shared.configs.models import VmanBaseModel
 from app.users.models.role import Role
 
 
