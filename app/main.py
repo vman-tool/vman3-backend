@@ -6,10 +6,11 @@ from apscheduler.triggers.interval import IntervalTrigger
 from fastapi import FastAPI
 from loguru import logger
 
-from app import main_router
+from app import routes
 from app.odk_download.services import data_download, schedulers
 from app.shared.configs.arangodb_db import get_arangodb_client
-from app.shared.configs.database import close_mongo_connection, connect_to_mongo
+from app.shared.configs.database import (close_mongo_connection,
+                                         connect_to_mongo)
 
 logger.add("./../app.log", rotation="500 MB")
 scheduler = AsyncIOScheduler()
@@ -47,7 +48,7 @@ def create_application():
         openapi_url="/api/openapi.json",
         lifespan=lifespan
     )
-    main_router.main_route(application)
+    routes.main_route(application)
     return application
 
 app = create_application()

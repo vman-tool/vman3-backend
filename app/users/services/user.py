@@ -7,16 +7,24 @@ from arango.database import StandardDatabase
 from fastapi import BackgroundTasks, HTTPException
 from pydantic import BaseModel
 
-from app.shared.configs.security import (generate_token, get_token_payload,
-                                         hash_password,
-                                         is_password_strong_enough, load_user,
-                                         str_decode, str_encode,
-                                         verify_password)
+from app.shared.configs.security import (
+    generate_token,
+    get_token_payload,
+    hash_password,
+    is_password_strong_enough,
+    load_user,
+    str_decode,
+    str_encode,
+    verify_password,
+)
 from app.shared.configs.settings import get_settings
+from app.users.models.user import User
 from app.users.responses.user import UserResponse
 from app.users.schemas.user import RegisterUserRequest, VerifyUserRequest
 from app.users.services.email import (
-    send_account_activation_confirmation_email, send_password_reset_email)
+    send_account_activation_confirmation_email,
+    send_password_reset_email,
+)
 from app.users.utils.string import unique_string
 
 settings = get_settings()
@@ -27,8 +35,7 @@ settings = get_settings()
 
 
 async def create_user_account(data: RegisterUserRequest, db: StandardDatabase, background_tasks: BackgroundTasks):
-    print(data)
-    
+
     collection = db.collection('users')
 
     cursor = cursor =collection.find({'email': data.email}, limit=1)
@@ -46,16 +53,10 @@ async def create_user_account(data: RegisterUserRequest, db: StandardDatabase, b
         "email": data.email,
         "password": hash_password(data.password),
         "is_active": True, # TODOS: Change to false if you want to verify email first
-        "verified_at":datetime.utcnow().isoformat(), # TODOS: Change to None if you want to verify email first
-        "updated_at": datetime.utcnow().isoformat(),
-        "created_at": datetime.utcnow().isoformat(),
-        # "created_by": data.created_by, # TODOS: Change to the user id of the user creating the account
+        "verified_at":datetime.now().isoformat(), # TODOS: Change to None if you want to verify email first
+        "created_by": data.created_by, # TODOS: Change to the user id of the user creating the account
     }
-    # await User.save(user_data, 'users')
-
-    collection.insert(user_data)
-    
-    # Retrieve the inserted user to refresh session data
+    User(**user_data).save(db)
     cursor = collection.find({'email': data.email}, limit=1)
     user = [doc for doc in cursor]
 
@@ -65,6 +66,7 @@ async def create_user_account(data: RegisterUserRequest, db: StandardDatabase, b
         "id": user[0]["_key"],
         "name": user[0]["name"],
         "email": user[0]["email"],
+        "created_at": user[0]["created_at"],
         "is_active": user[0]["is_active"]
     }
     
