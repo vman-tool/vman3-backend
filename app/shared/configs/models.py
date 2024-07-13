@@ -8,14 +8,16 @@ from arango.database import StandardDatabase
 class VmanBaseModel(BaseModel):
     uuid: str = Field(default_factory=lambda: str(uuid.uuid4()), unique=True)
     create_by: str
-    created_on: datetime = Field(default_factory=datetime.now)
+    created_on: str = Field(default_factory=lambda: datetime.now().isoformat())
     updated_by: str
-    updated_on: datetime = Field(default_factory=datetime.now)
+    updated_on: str = Field(default_factory=lambda: datetime.now().isoformat())
     deleted_by: Optional[str] = None
     deleted_on: Optional[datetime] = None
     is_deleted: bool = False
 
-    collection_name: str
+    @classmethod
+    def get_collection_name(cls) -> str:
+        raise NotImplementedError("get_collection_name method not implemented in derived class")
 
     @classmethod
     def init_collection(cls, db):
