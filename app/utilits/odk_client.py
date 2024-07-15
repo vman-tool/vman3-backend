@@ -45,7 +45,6 @@ class ODKClientAsync:
 
 
         response = await self.client.request(method, url, **kwargs)
-        print(response)
         # If unauthorized, recheck cached session key before continuing
         if response.status_code == 401:
             if os.path.exists("session.json"):

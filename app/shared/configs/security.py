@@ -6,6 +6,7 @@ import jwt
 from arango.database import StandardDatabase
 from passlib.context import CryptContext
 
+from app.shared.configs.constants import db_collections
 from app.shared.configs.settings import get_settings
 
 # from sqlalchemy.orm import Session
@@ -79,7 +80,7 @@ async def get_token_user(token: str, db:StandardDatabase ):
         access_key = payload.get('a')
 
         aql_query = """
-        FOR token IN user_tokens
+        FOR token IN {db_collections.USER_TOKENS}
             FILTER token.access_key == @access_key
             FILTER token._key == @user_token_id
             FILTER token.user_id == @user_id
@@ -98,14 +99,14 @@ async def get_token_user(token: str, db:StandardDatabase ):
 
 
         if user_token:
-            user_collection = db.collection('users')
+            user_collection = db.collection(db_collections.USERS)
             user = user_collection.get(user_token['user_id'])
             return user
     return None
 
 
 async def load_user(email: str, db:StandardDatabase):
-    collection = db.collection('users')
+    collection = db.collection(db_collections.USERS)
     try:
         cursor =  collection.find({'email': email}, limit=1)
         user_cursor  = [doc for doc in cursor][0]

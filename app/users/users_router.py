@@ -73,8 +73,8 @@ async def fetch_user(user = Depends(get_current_user)):
     return user
 
 
-@auth_router.get("/{uid}", status_code=status.HTTP_200_OK, response_model=UserResponse)
-async def get_user_info(uid, session = Depends(get_arangodb_session)):
-    return await user.fetch_user_detail(uid, session)
+@auth_router.get("/{uuid}", status_code=status.HTTP_200_OK, response_model=UserResponse)
+async def get_user_info(uuid, session = Depends(get_arangodb_session)):
+    return await user.fetch_user_detail(uuid, session)
 
 
