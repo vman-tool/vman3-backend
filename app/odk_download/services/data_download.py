@@ -48,7 +48,7 @@ async def fetch_odk_data_with_async(
             records_saved = 0
             last_progress = 0
 
-            async def fetch_data_chunk(skip, top, chunk_id):
+            async def fetch_data_chunk(skip, top):
                 try:
                     data = await odk_client.getFormSubmissions(top=top, skip=skip)
                     if isinstance(data, str):
@@ -82,9 +82,9 @@ async def fetch_odk_data_with_async(
                 chunk__id = f"{start_date or 'null'}-{end_date or 'null'}-{chunk_skip}-{chunk_top}"
 
                 try:
-                    data_chunk = await fetch_data_chunk(chunk_skip, chunk_top, chunk__id)
+                    data_chunk = await fetch_data_chunk(chunk_skip, chunk_top)
                     if data_chunk:
-                        await insert_all_data(data_chunk, chunk__id)
+                        await insert_all_data(data_chunk)
                 except Exception as e:
                     raise HTTPException(status_code=500, detail=str(e))
 

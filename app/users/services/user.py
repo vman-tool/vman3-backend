@@ -7,6 +7,7 @@ from arango.database import StandardDatabase
 from fastapi import BackgroundTasks, HTTPException
 from pydantic import BaseModel
 
+from app.shared.configs.constants import db_collections
 from app.shared.configs.security import (
     generate_token,
     get_token_payload,
@@ -33,7 +34,7 @@ settings = get_settings()
 async def create_user_account(data: RegisterUserRequest, db: StandardDatabase, background_tasks: BackgroundTasks):
     print(data)
     
-    collection = db.collection('users')
+    collection = db.collection(db_collections.USERS)
 
     cursor = cursor =collection.find({'email': data.email}, limit=1)
     result = [doc for doc in cursor]
@@ -74,7 +75,7 @@ async def create_user_account(data: RegisterUserRequest, db: StandardDatabase, b
     
     
 async def activate_user_account(data: VerifyUserRequest, db, background_tasks: BackgroundTasks):
-    collection = db.collection('users')
+    collection = db.collection(db_collections.USERS)
     user_cursor = await collection.find({'email': data.email}, limit=1).next()
     if not user_cursor:
         raise HTTPException(status_code=400, detail="This link is not valid.")
@@ -136,7 +137,7 @@ async def get_refresh_token(refresh_token: str, db, settings):
     access_key = token_payload.get('a')
     user_id = str_decode(token_payload.get('sub'))
 
-    collection = db.collection('user_tokens')
+    collection = db.collection(db_collections.USER_TOKENS)
     user_token_cursor = await collection.find({
         'refresh_key': refresh_key,
         'access_key': access_key,
@@ -167,9 +168,9 @@ async def _generate_tokens(user, db: StandardDatabase):
         "expires_at": (datetime.utcnow() + rt_expires).isoformat()
     }
 
-    # collection = db.collection('user_tokens')
+    # collection = db.collection(db_collections.USER_TOKENS)
     # collection.insert(user_token)
-    collection =  db.collection('user_tokens')
+    collection =  db.collection(db_collections.USER_TOKENS)
     insert_result =  collection.insert(user_token, return_new=True)
     inserted_user_token = insert_result["new"]
 
@@ -231,7 +232,7 @@ async def reset_user_password(data: ResetPasswordData, db):
     user['password'] = hash_password(data.password)
     user['updated_at'] = datetime.utcnow().isoformat()
 
-    collection = db.collection('users')
+    collection = db.collection(db_collections.USERS)
     await collection.update(user)
 
     # Notify user that password has been updated
@@ -241,7 +242,7 @@ async def reset_user_password(data: ResetPasswordData, db):
     
     
 async def fetch_user_detail(pk: str, db):
-    collection = db.collection('users')
+    collection = db.collection(db_collections.USERS)
     cursor =  collection.find({'_key': pk}, limit=1)
     user_cursor = [doc for doc in cursor]
 
@@ -265,7 +266,7 @@ async def fetch_user_detail(pk: str, db):
 #     raise HTTPException(status_code=400, detail="User does not exist.")
 
 # def sync_fetch_user_detail(pk: str, db: StandardDatabase):
-#     collection = db.collection('users')
+#     collection = db.collection(db_collections.USERS)
 #     cursor = collection.find({'_key': pk}, limit=1)
 #     user_cursor = [doc for doc in cursor]
 #     if user_cursor:

@@ -1,8 +1,9 @@
-from fastapi import APIRouter
+from typing import List, Optional
+from fastapi import APIRouter, HTTPException, Query
 from arango.database import StandardDatabase
-from fastapi import APIRouter, BackgroundTasks, Depends, Header, status
+from fastapi import APIRouter, Depends, status
 
-from app.pcva.services.va_records import check_va_data
+from app.pcva.services.va_records import fetch_va_records
 from app.shared.configs.arangodb_db import get_arangodb_session
 
 
@@ -13,7 +14,15 @@ pcva_router = APIRouter(
 )
 
 
-@pcva_router.get("/", status_code=status.HTTP_201_CREATED)
+@pcva_router.get("/", status_code=status.HTTP_200_OK)
+async def get_va_records(
+    paging: Optional[bool] = Query(True, alias="paging"),
+    page_number: Optional[int] = Query(1, alias="page_number"),
+    page_size: Optional[int] = Query(10, alias="page_size"),
+    db: StandardDatabase = Depends(get_arangodb_session)):
 
-async def get_va_records(data, background_tasks: BackgroundTasks, db: StandardDatabase = Depends(get_arangodb_session)):
-    return check_va_data()
+    try:
+        records = await fetch_va_records(paging, page_number, page_size, db)
+        return records
+    except:
+        raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to get va records")
