@@ -30,10 +30,6 @@ from app.users.utils.string import unique_string
 settings = get_settings()
 
 
-
-
-
-
 async def create_user_account(data: RegisterUserRequest, db: StandardDatabase, background_tasks: BackgroundTasks):
     print(data)
     
