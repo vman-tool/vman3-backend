@@ -65,7 +65,7 @@ def get_token_payload(token: str, secret: str, algo: str):
 
 
 def generate_token(payload: dict, secret: str, algo: str, expiry: timedelta):
-    expire = datetime.utcnow() + expiry
+    expire = datetime.now() + expiry
     payload.update({"exp": expire})
     return jwt.encode(payload, secret, algorithm=algo)
 
@@ -79,7 +79,7 @@ async def get_token_user(token: str, db:StandardDatabase ):
         user_id = str_decode(payload.get('sub'))
         access_key = payload.get('a')
 
-        aql_query = """
+        aql_query = f"""
         FOR token IN {db_collections.USER_TOKENS}
             FILTER token.access_key == @access_key
             FILTER token._key == @user_token_id

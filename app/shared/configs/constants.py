@@ -1,6 +1,6 @@
 class db_collections:
     """
-    Constant class for NoSQL database Collections. use this class for consistency
+    Constants class for NoSQL database Collections. Use this class to call your collection
     """
     USERS: str = 'users'
     USER_TOKENS: str = 'user_tokens'

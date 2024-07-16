@@ -104,7 +104,7 @@ async def get_login_token(data, session):
     print(res)
     
     return res
-async def get_refresh_token(refresh_token: str, db, settings):
+async def get_refresh_token(refresh_token: str, db):
     token_payload = get_token_payload(refresh_token, settings.SECRET_KEY, settings.JWT_ALGORITHM)
     if not token_payload:
         raise HTTPException(status_code=400, detail="Invalid Request.")
@@ -118,14 +118,15 @@ async def get_refresh_token(refresh_token: str, db, settings):
         'refresh_key': refresh_key,
         'access_key': access_key,
         'user_id': user_id,
-        'expires_at': {'$gt': datetime.utcnow().isoformat()}
+        'expires_at': {'$gt': datetime.now().isoformat()}
     }, limit=1).next()
+    print("User token: ", token_payload.get('a'))
 
     if not user_token_cursor:
         raise HTTPException(status_code=400, detail="Invalid Request.")
 
     user_token = user_token_cursor
-    user_token['expires_at'] = datetime.utcnow().isoformat()
+    user_token['expires_at'] = datetime.now().isoformat()
     await collection.update(user_token)
 
     return _generate_tokens(user_token['user'], db)
