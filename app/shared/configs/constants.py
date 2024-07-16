@@ -1,4 +1,7 @@
 class db_collections:
+    """
+    Constant class for NoSQL database Collections. use this class for consistency
+    """
     USERS: str = 'users'
     USER_TOKENS: str = 'user_tokens'
     USER_ROLES: str = 'role'

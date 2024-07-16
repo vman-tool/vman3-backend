@@ -8,17 +8,24 @@ from pydantic import BaseModel, Field
 
 
 class VmanBaseModel(BaseModel):
+    """
+    This class abstracts the CRUD operations for the Vman Models that are used to interract with the database.
+    """
+
     uuid: str = Field(default_factory=lambda: str(uuid.uuid4()), unique=True)
     created_by: str
     created_at: str = Field(default_factory=lambda: datetime.now().isoformat())
     updated_by: Optional[str] = None
     updated_at: str = Field(default_factory=lambda: datetime.now().isoformat())
     deleted_by: Optional[str] = None
-    deleted_at: Optional[datetime] = None
+    deleted_at: Optional[str] = None
     is_deleted: bool = False
 
     @classmethod
     def get_collection_name(cls) -> str:
+        """
+        Implement this method in order to be able to specify the collection name for Arango DB
+        """
         raise NotImplementedError("Derived classes must define the collection name.")
 
 
@@ -35,12 +42,16 @@ class VmanBaseModel(BaseModel):
                 collection.add_hash_index(fields=['uuid'], unique=True)
 
     def save(self, db: StandardDatabase):
+        """
+        This method saved the data and returns the new saved data.
+        
+        """
         self.init_collection(db)
         collection = db.collection(self.get_collection_name())
         doc = self.model_dump()
         # doc['_key'] = str(doc.pop('id', None))
-        collection.insert(doc)
-        return doc
+        return collection.insert(doc, return_new=True)["new"]
+        
 
     @classmethod
     def get(cls, doc_id: str, db: StandardDatabase):

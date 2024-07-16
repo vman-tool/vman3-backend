@@ -20,7 +20,7 @@ from app.shared.configs.security import (
     verify_password,
 )
 from app.shared.configs.settings import get_settings
-from app.users.models.user import User
+from app.users.models.user import User, UserToken
 from app.users.responses.user import UserResponse
 from app.users.schemas.user import RegisterUserRequest, VerifyUserRequest
 from app.users.services.email import (
@@ -138,17 +138,21 @@ async def _generate_tokens(user, db: StandardDatabase):
     rt_expires = timedelta(minutes=settings.REFRESH_TOKEN_EXPIRE_MINUTES)
 
     user_token = {
+        "id": "",
         "user_id": user["_key"],
+        "created_by": user["_key"],
         "refresh_key": refresh_key,
         "access_key": access_key,
-        "expires_at": (datetime.utcnow() + rt_expires).isoformat()
+        "expires_at": (datetime.now() + rt_expires).isoformat()
     }
 
     # collection = db.collection(db_collections.USER_TOKENS)
     # collection.insert(user_token)
-    collection =  db.collection(db_collections.USER_TOKENS)
-    insert_result =  collection.insert(user_token, return_new=True)
-    inserted_user_token = insert_result["new"]
+    # collection =  db.collection(db_collections.USER_TOKENS)
+    # insert_result =  collection.insert(user_token, return_new=True)
+    # inserted_user_token = insert_result["new"]
+
+    inserted_user_token = UserToken(**user_token).save(db)
 
     at_payload = {
         "sub": str_encode(str(user["_key"])),
