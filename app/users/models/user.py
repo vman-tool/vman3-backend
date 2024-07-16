@@ -55,7 +55,7 @@ class User(VmanBaseModel):
 
 
 class UserToken(VmanBaseModel):
-    id: str
+    id: Optional[str]
     user_id: str
     access_key: Optional[str] = None
     refresh_key: Optional[str] = None
