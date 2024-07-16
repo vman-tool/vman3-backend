@@ -5,6 +5,7 @@ from datetime import datetime, timedelta
 
 from arango.database import StandardDatabase
 from fastapi import BackgroundTasks, HTTPException
+from fastapi.security import OAuth2PasswordRequestForm
 from pydantic import BaseModel
 
 from app.shared.configs.constants import db_collections
