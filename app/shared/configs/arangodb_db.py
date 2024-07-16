@@ -15,7 +15,7 @@ class ArangoDBClient:
 
     async def connect(self):
         sys_db = self.client.db("_system", username=self.username, password=self.password)
-        print(sys_db.databases())
+        # print(sys_db.databases())
 
         
         # # Check if the database exists and create it if not

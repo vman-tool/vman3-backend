@@ -8,9 +8,9 @@ async def fetch_va_records(paging: bool = True,  page_number: int = 1, page_size
     try:
         collection = db.collection(db_collections.SUBMISSIONS)
         query = f"FOR doc IN {collection.name} "
+        bind_vars = {}
             
         if paging and page_number and page_size:
-            bind_vars = {}
         
             query += "LIMIT @offset, @size RETURN doc"
         
@@ -18,17 +18,19 @@ async def fetch_va_records(paging: bool = True,  page_number: int = 1, page_size
                 "offset": (page_number - 1) * page_size,
                 "size": page_size
             })
-
+        else:
+            query += "RETURN doc"
 
         cursor = db.aql.execute(query, bind_vars=bind_vars)
 
         data = [document for document in cursor]
         
+        
         return {
-            "page": page_number,
-            "size": page_size,
+            "page_number": page_number,
+            "page_size": page_size,
             "data": data
-        }
+        } if paging else data
     
     except ArangoError as e:
         raise HTTPException(status_code=500, detail=f"Failed to fetch data: {e}")
