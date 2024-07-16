@@ -59,7 +59,6 @@ class UserToken(VmanBaseModel):
     user_id: str
     access_key: Optional[str] = None
     refresh_key: Optional[str] = None
-    created_at: Optional[Union[str, datetime]] = None
     expires_at: Optional[Union[str, datetime]] = None
     user: Optional[User] = None
 
