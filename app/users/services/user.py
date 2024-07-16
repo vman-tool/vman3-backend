@@ -33,45 +33,20 @@ settings = get_settings()
 
 async def create_user_account(data: RegisterUserRequest, db: StandardDatabase, background_tasks: BackgroundTasks):
     print(data)
-    
-    collection = db.collection(db_collections.USERS)
-
-    cursor = cursor =collection.find({'email': data.email}, limit=1)
-    result = [doc for doc in cursor]
-    
-    user_exist =  result
-    if user_exist:
-        raise HTTPException(status_code=400, detail="Email already exists.")
 
     if not is_password_strong_enough(data.password):
-        raise HTTPException(status_code=400, detail="Please provide a strong password.")
+            raise HTTPException(status_code=400, detail="Please provide a strong password.")
 
     user_data = {
-        "name": data.name,
-        "email": data.email,
-        "password": hash_password(data.password),
-        "is_active": True, # TODOS: Change to false if you want to verify email first
-        "verified_at":datetime.now().isoformat(), # TODOS: Change to None if you want to verify email first
-        "created_by": data.created_by, # TODOS: Change to the user id of the user creating the account
-    }
-    User(**user_data).save(db)
-    # await User.save(user_data, 'users')
-
-    # collection.insert(user_data)
+            "name": data.name,
+            "email": data.email,
+            "password": hash_password(data.password),
+            "is_active": True, # TODOS: Change to false if you want to verify email first
+            "verified_at":datetime.now().isoformat(), # TODOS: Change to None if you want to verify email first
+            "created_by": data.created_by, # TODOS: Change to the user id of the user creating the account
+        }
     
-    # Retrieve the inserted user to refresh session data
-    cursor = collection.find({'email': data.email}, limit=1)
-    user = [doc for doc in cursor]
-
-    # Account Verification Email
-    # await send_account_verification_email(user[0], background_tasks=background_tasks) #todos
-    return {
-        "id": user[0]["_key"],
-        "name": user[0]["name"],
-        "email": user[0]["email"],
-        "is_active": user[0]["is_active"],
-        "created_at":user[0]["created_at"]
-    }
+    return User(**user_data).save(db)
     
     
 async def activate_user_account(data: VerifyUserRequest, db, background_tasks: BackgroundTasks):

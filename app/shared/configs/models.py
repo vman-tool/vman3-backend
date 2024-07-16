@@ -35,7 +35,7 @@ class VmanBaseModel(BaseModel):
                 collection.add_hash_index(fields=['uuid'], unique=True)
 
     def save(self, db: StandardDatabase):
-        # self.init_collection(db)
+        self.init_collection(db)
         collection = db.collection(self.get_collection_name())
         doc = self.model_dump()
         # doc['_key'] = str(doc.pop('id', None))

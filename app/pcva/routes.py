@@ -5,12 +5,15 @@ from fastapi import APIRouter, Depends, status
 
 from app.pcva.services.va_records import fetch_va_records
 from app.shared.configs.arangodb_db import get_arangodb_session
+from app.users.decorators.user import get_current_user, oauth2_scheme
+from app.users.models.user import User
 
 
 pcva_router = APIRouter(
     prefix="/pcva",
     tags=["PCVA"],
     responses={404: {"description": "Not found"}},
+    dependencies=[Depends(oauth2_scheme), Depends(get_current_user)]
 )
 
 
@@ -23,7 +26,7 @@ async def get_va_records(
 
     try:
         allowPaging = False if paging is not None and paging.lower() == 'false' else True
-        records = await fetch_va_records(allowPaging, page_number, page_size, db)
-        return records
+        return await fetch_va_records(allowPaging, page_number, page_size, db)
+        
     except:
         raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to get va records")

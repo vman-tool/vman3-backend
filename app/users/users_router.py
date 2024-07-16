@@ -26,7 +26,7 @@ auth_router = APIRouter(
     prefix="/users",
     tags=["Users"],
     responses={404: {"description": "Not found"}},
-    dependencies=[Depends(oauth2_scheme), Depends(get_current_user)]
+    # dependencies=[Depends(oauth2_scheme), Depends(get_current_user)]
 )
 
 guest_router = APIRouter(
@@ -39,8 +39,8 @@ guest_router = APIRouter(
 # @created_by_decorator
 @auth_router.post("/", status_code=status.HTTP_201_CREATED, response_model=UserResponse)
 
-async def register_user(data: RegisterUserRequest, background_tasks: BackgroundTasks, db: StandardDatabase = Depends(get_arangodb_session),creator = Depends(get_current_user)):
-    data.created_by=creator['_key']
+async def register_user(data: RegisterUserRequest, background_tasks: BackgroundTasks, db: StandardDatabase = Depends(get_arangodb_session)):
+    # data.created_by=creator['_key']
     return await user.create_user_account(data, db, background_tasks)
 
 @user_router.post("/verify", status_code=status.HTTP_200_OK)
