@@ -72,7 +72,7 @@ async def fetch_odk_data_with_async(
                         if int(progress) != last_progress:
                             last_progress = int(progress)
                             elapsed_time = time.time() - start_time
-                            logger.info(f"\rDownloading: [{'=' * int(progress // 2)}{' ' * (50 - int(progress // 2))}] {progress:.0f}% - Elapsed time: {elapsed_time:.2f}s")
+                            print(f"\rDownloading: [{'=' * int(progress // 2)}{' ' * (50 - int(progress // 2))}] {progress:.0f}% - Elapsed time: {elapsed_time:.2f}s", end='', flush=True)
                 except Exception as e:
                     raise HTTPException(status_code=500, detail=str(e))
 

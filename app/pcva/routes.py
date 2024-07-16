@@ -16,13 +16,14 @@ pcva_router = APIRouter(
 
 @pcva_router.get("/", status_code=status.HTTP_200_OK)
 async def get_va_records(
-    paging: Optional[bool] = Query(True, alias="paging"),
+    paging: Optional[str] = Query(None, alias="paging"),
     page_number: Optional[int] = Query(1, alias="page_number"),
     page_size: Optional[int] = Query(10, alias="page_size"),
     db: StandardDatabase = Depends(get_arangodb_session)):
 
     try:
-        records = await fetch_va_records(paging, page_number, page_size, db)
+        allowPaging = False if paging is not None and paging.lower() == 'false' else True
+        records = await fetch_va_records(allowPaging, page_number, page_size, db)
         return records
     except:
         raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to get va records")
