@@ -16,10 +16,10 @@ class User(VmanBaseModel):
     name: str
     email: EmailStr
     is_active: bool
-
     verified_at: Optional[Union[str, datetime]] = None
     tokens: Optional[str] = None
     roles: Optional[List[Role]] = None
+    password: str
     
    
     @classmethod
