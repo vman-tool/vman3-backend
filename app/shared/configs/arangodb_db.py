@@ -24,7 +24,7 @@ class ArangoDBClient:
         
         # Connect to the specified database
         self.db = self.client.db(self.db_name, username=self.username, password=self.password)
-        await create_collections(self.db, ["form_submissions", "download_tracker", "download_process_tracker"])
+        await create_collections(self.db, ["form_submissions", "download_tracker", "download_process_tracker","users"])
 
     async def insert_many(self, collection_name:str, documents: list[dict]):
         collection = self.db.collection(collection_name)
