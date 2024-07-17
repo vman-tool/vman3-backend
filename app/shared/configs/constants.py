@@ -1,4 +1,7 @@
-class db_collections:
+from enum import Enum
+
+
+class db_collections(Enum):
     """
     Constants class for NoSQL database Collections. Use this class to call your collection
     """
