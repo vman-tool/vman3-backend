@@ -17,7 +17,7 @@ class ICD10Category(VmanBaseModel):
 class ICD10(VmanBaseModel):
     code: str
     name: str
-    category: Optional[ICD10Category] = None
+    category: Optional[str] = None
 
     @classmethod
     def get_collection_name(cls) -> str:
