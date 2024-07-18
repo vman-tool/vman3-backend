@@ -109,9 +109,9 @@ class ResponseUser(BaseModel):
 
 class BaseResponseModel(BaseModel):
     uuid: str
-    created_by: Optional[ResponseUser] = None
-    updated_by: Optional[ResponseUser] = None
-    deleted_by: Optional[ResponseUser] = None
+    created_by: Optional[ResponseUser]
+    updated_by: Optional[ResponseUser]
+    deleted_by: Optional[ResponseUser]
 
     @classmethod
     def get_user(cls, user_uuid: str, db: StandardDatabase) -> ResponseUser:

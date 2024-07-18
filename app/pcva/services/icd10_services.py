@@ -4,7 +4,7 @@ from arango.database import StandardDatabase
 from fastapi import HTTPException
 
 from app.pcva.models.models import ICD10, ICD10Category
-from app.pcva.responses.icd10_response_classes import ICD10CategoryResponseClass
+from app.pcva.responses.icd10_response_classes import ICD10CategoryResponseClass, ICD10ResponseClass
 from app.shared.configs.constants import db_collections
 
 async def create_icd10_categories_service(categories, user, db: StandardDatabase = None):
@@ -20,14 +20,15 @@ async def create_icd10_categories_service(categories, user, db: StandardDatabase
     except ArangoError as e:
         raise HTTPException(status_code=500, detail=f"Failed to create categories: {e}")
 
-async def create_icd10_codes(codes, user, db: StandardDatabase = None):
+async def create_icd10_codes(codes, user, db: StandardDatabase = None) -> List[ICD10ResponseClass]:
     try:
         created_codes = []
         for code in codes:
             code = code.model_dump()
             code['created_by']=user['uuid']
             saved_code = ICD10(**code).save(db)
-            created_codes.append(saved_code)
+            created_code = ICD10ResponseClass.get_structured_code(icd10_code = saved_code, db = db)
+            created_codes.append(created_code)
         return created_codes
     except ArangoError as e:
         raise HTTPException(status_code=500, detail=f"Failed to create categories: {e}")
