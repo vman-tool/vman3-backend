@@ -64,11 +64,21 @@ class VmanBaseModel(BaseModel):
 
     def update(self, updated_by: str, db: StandardDatabase):
         self.init_collection()
-        collection = db.collection(self.collection_name)
+        collection = db.collection(self.get_collection_name())
         self.updated_by = updated_by
         self.updated_at = datetime.now()
         doc = self.model_dump()
-        collection.update({'_key': doc['id'], **doc})
+
+        if "id" not in doc and "_key" not in doc:
+            query = f"""
+                LET doc = FIRST(FOR doc IN {self.get_collection_name()} FILTER doc.uuid == @uuid RETURN doc)
+                UPDATE doc WITH @updated_data IN {self.get_collection_name()} RETURN NEW
+            """
+            bind_vars = {'uuid': self.uuid, 'updated_data': doc}
+            cursor = db.aql.execute(query, bind_vars=bind_vars)
+            doc = cursor.next()
+        else:
+            doc = collection.update({'_key': doc['id'], **doc}, return_new=True) 
         return doc
 
     @classmethod

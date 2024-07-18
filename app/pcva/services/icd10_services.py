@@ -26,7 +26,20 @@ async def create_icd10_codes(codes, user, db: StandardDatabase = None) -> List[I
         for code in codes:
             code = code.model_dump()
             code['created_by']=user['uuid']
+            code.pop("uuid")
             saved_code = ICD10(**code).save(db)
+            created_code = ICD10ResponseClass.get_structured_code(icd10_code = saved_code, db = db)
+            created_codes.append(created_code)
+        return created_codes
+    except ArangoError as e:
+        raise HTTPException(status_code=500, detail=f"Failed to create categories: {e}")
+
+async def update_icd10_codes(codes, user, db: StandardDatabase = None) -> List[ICD10ResponseClass]:
+    try:
+        created_codes = []
+        for code in codes:
+            code = code.model_dump()
+            saved_code = ICD10(**code).update(db)
             created_code = ICD10ResponseClass.get_structured_code(icd10_code = saved_code, db = db)
             created_codes.append(created_code)
         return created_codes
