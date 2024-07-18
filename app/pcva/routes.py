@@ -4,7 +4,7 @@ from arango.database import StandardDatabase
 from fastapi import APIRouter, Depends, status
 
 from app.pcva.requests.icd10 import ICD10CategoryRequestClass, ICD10RequestClass
-from app.pcva.services.icd10_services import create_icd10_categories, create_icd10_codes
+from app.pcva.services.icd10_services import create_icd10_categories_service, create_icd10_codes
 from app.pcva.services.va_records import fetch_va_records
 from app.shared.configs.arangodb_db import get_arangodb_session
 from app.users.decorators.user import get_current_user, oauth2_scheme
@@ -40,7 +40,7 @@ async def create_icd10_categories(
     db: StandardDatabase = Depends(get_arangodb_session)):
 
     try:
-        return await create_icd10_categories(categories, user, db)
+        return await create_icd10_categories_service(categories, user, db)
     except:
         raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed create icd10 categories")
 

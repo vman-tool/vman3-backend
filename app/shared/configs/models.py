@@ -1,10 +1,10 @@
 import uuid
 from datetime import datetime
 from http.client import HTTPException
-from typing import Optional
 
 from arango.database import StandardDatabase
 from pydantic import BaseModel, Field
+from typing import Dict, Optional
 
 
 class VmanBaseModel(BaseModel):
@@ -98,3 +98,44 @@ class VmanBaseModel(BaseModel):
         doc['deleted_at'] = None
         collection.update(doc)
         return doc
+
+
+from app.shared.configs.constants import db_collections
+
+
+class ResponseUser(BaseModel):
+    uuid: str
+    name: str
+
+class BaseResponseModel(BaseModel):
+    uuid: str
+    created_by: Optional[ResponseUser] = None
+    updated_by: Optional[ResponseUser] = None
+    deleted_by: Optional[ResponseUser] = None
+
+    @classmethod
+    def get_user(cls, user_uuid: str, db: StandardDatabase) -> ResponseUser:
+        query = rf"""
+        FOR user IN {db_collections.USERS}
+            FILTER user.uuid == @user_uuid
+            RETURN {{
+                "uuid": user.uuid,
+                "name": user.name
+            }}
+        """
+        bind_vars = {'user_uuid': user_uuid}
+        cursor = db.aql.execute(query, bind_vars=bind_vars)
+        user_data = cursor.next()
+        if not user_data:
+            return ResponseUser(**{"uuid": "", "name": ""})
+        return ResponseUser(**user_data)
+
+    @classmethod
+    def populate_user_fields(cls, db: StandardDatabase, data: Dict) -> Dict:
+        if 'created_by' in data and data['created_by']:
+            data['created_by'] = cls.get_user(data['created_by'], db)
+        if 'updated_by' in data and data['updated_by']:
+            data['updated_by'] = cls.get_user(data['updated_by'], db)
+        if 'deleted_by' in data and data['deleted_by']:
+            data['deleted_by'] = cls.get_user(data['deleted_by'], db)
+        return data
