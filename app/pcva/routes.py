@@ -4,6 +4,7 @@ from arango.database import StandardDatabase
 from fastapi import APIRouter, Depends, status
 
 from app.pcva.requests.icd10 import ICD10CategoryRequestClass, ICD10RequestClass
+from app.pcva.responses.icd10_response_classes import ICD10ResponseClass
 from app.pcva.services.icd10_services import create_icd10_categories_service, create_icd10_codes
 from app.pcva.services.va_records import fetch_va_records
 from app.shared.configs.arangodb_db import get_arangodb_session
@@ -49,7 +50,7 @@ async def create_icd10_categories(
 async def create_icd10(
     codes: List[ICD10RequestClass],
     user: User = Depends(get_current_user),
-    db: StandardDatabase = Depends(get_arangodb_session)):
+    db: StandardDatabase = Depends(get_arangodb_session)) -> List[ICD10ResponseClass]:
 
     try:
         return await create_icd10_codes(codes, user, db)
