@@ -3,10 +3,11 @@ from fastapi import APIRouter, HTTPException, Query
 from arango.database import StandardDatabase
 from fastapi import APIRouter, Depends, status
 
-from app.pcva.requests.icd10 import ICD10CategoryRequestClass, ICD10RequestClass
+from app.pcva.requests.icd10_request_classes import ICD10CategoryRequestClass, ICD10RequestClass
+from app.pcva.requests.va_request_classes import AssignVARequestClass
 from app.pcva.responses.icd10_response_classes import ICD10ResponseClass
-from app.pcva.services.icd10_services import create_icd10_categories_service, create_icd10_codes
-from app.pcva.services.va_records import fetch_va_records
+from app.pcva.services.icd10_services import create_icd10_categories_service, create_icd10_codes, update_icd10_codes
+from app.pcva.services.va_records_services import assign_va_service, fetch_va_records
 from app.shared.configs.arangodb_db import get_arangodb_session
 from app.users.decorators.user import get_current_user, oauth2_scheme
 from app.users.models.user import User
@@ -46,13 +47,44 @@ async def create_icd10_categories(
         raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed create icd10 categories")
 
 
-@pcva_router.post("/create-icd10", status_code=status.HTTP_201_CREATED)
+@pcva_router.post(
+        path="/create-icd10", 
+        status_code=status.HTTP_201_CREATED,
+        response_description="Submit array of icd10 codes in a json format"
+)
 async def create_icd10(
     codes: List[ICD10RequestClass],
     user: User = Depends(get_current_user),
-    db: StandardDatabase = Depends(get_arangodb_session)) -> List[ICD10ResponseClass]:
+    db: StandardDatabase = Depends(get_arangodb_session)) -> List[ICD10RequestClass]:
 
     try:
         return await create_icd10_codes(codes, user, db)
+    except:
+        raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed create icd10 codes")
+
+@pcva_router.post(
+        path="/update-icd10", 
+        status_code=status.HTTP_201_CREATED,
+        response_description="Submit array of icd10 codes in a json format"
+)
+async def update_icd10(
+    codes: List[ICD10RequestClass],
+    user: User = Depends(get_current_user),
+    db: StandardDatabase = Depends(get_arangodb_session)) -> List[ICD10RequestClass]:
+
+    try:
+        return await update_icd10_codes(codes, user, db)
+    except:
+        raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed create icd10 codes")
+
+
+@pcva_router.post("/assign-va", status_code=status.HTTP_201_CREATED)
+async def assign_va(
+    va: List[AssignVARequestClass],
+    user: User = Depends(get_current_user),
+    db: StandardDatabase = Depends(get_arangodb_session)):
+
+    try:
+        return await assign_va_service(va, user, db)
     except:
         raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed create icd10 codes")

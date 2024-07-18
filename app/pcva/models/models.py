@@ -26,8 +26,8 @@ class ICD10(VmanBaseModel):
 
 class AssignedVA(VmanBaseModel):
     vaId: str
-    coder1: Optional[User]
-    coder2: Optional[User]
+    coder1: Optional[str]
+    coder2: Optional[str]
 
     @classmethod
     def get_collection_name(cls) -> str:
@@ -36,11 +36,11 @@ class AssignedVA(VmanBaseModel):
 
 class CodedVA(VmanBaseModel):
     assignedVA: AssignedVA
-    coda: ICD10
-    codb: Optional[ICD10]
-    codc: Optional[ICD10]
-    codd: Optional[ICD10]
-    codContributory: Optional[ICD10]
+    coda: str
+    codb: Optional[str]
+    codc: Optional[str]
+    codd: Optional[str]
+    codContributory: Optional[str]
     comment: Optional[str]
     datetime: Optional[str] = Field(default_factory=lambda: datetime.now().isoformat())
 

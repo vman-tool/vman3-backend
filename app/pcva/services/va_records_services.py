@@ -2,6 +2,7 @@ from arango import ArangoError
 from arango.database import StandardDatabase
 from fastapi import HTTPException
 
+from app.pcva.requests.va_request_classes import AssignVARequestClass
 from app.shared.configs.constants import db_collections
 
 async def fetch_va_records(paging: bool = True,  page_number: int = 1, page_size: int = 10, db: StandardDatabase = None):
@@ -34,3 +35,11 @@ async def fetch_va_records(paging: bool = True,  page_number: int = 1, page_size
     
     except ArangoError as e:
         raise HTTPException(status_code=500, detail=f"Failed to fetch data: {e}")
+    
+
+def assign_va_service(va_records: AssignVARequestClass, db: StandardDatabase = None):
+    vaIds  = va_records.vaIds
+
+    print(vaIds)
+    return va_records
+    
