@@ -23,9 +23,9 @@ async def create_icd10_categories_service(categories, user, db: StandardDatabase
 
 async def get_icd10_codes(paging: bool = True,  page_number: int = 1, page_size: int = 10, db: StandardDatabase = None) -> List[ICD10ResponseClass]:
     try:
-        codes = ICD10().get()
+        return [await ICD10ResponseClass.get_structured_code(icd10_code = icd10_code, db = db) for icd10_code in await ICD10.get_many(db = db)]
     except ArangoError as e:
-        raise HTTPException(status_code=500, detail=f"Failed to create categories: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to get codes: {e}")
 
 async def create_icd10_codes(codes, user, db: StandardDatabase = None) -> List[ICD10ResponseClass]:
     try:
