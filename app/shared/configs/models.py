@@ -4,7 +4,7 @@ from http.client import HTTPException
 
 from arango.database import StandardDatabase
 from pydantic import BaseModel, Field
-from typing import Dict, Optional
+from typing import Any, Dict, Optional
 
 
 class VmanBaseModel(BaseModel):
@@ -12,11 +12,11 @@ class VmanBaseModel(BaseModel):
     This class abstracts the CRUD operations for the Vman Models that are used to interract with the database.
     """
 
-    uuid: str = Field(default_factory=lambda: str(uuid.uuid4()), unique=True)
-    created_by: str
-    created_at: str = Field(default_factory=lambda: datetime.now().isoformat())
+    uuid: Optional[str] = Field(default=None, unique=True)
+    created_by: Optional[str] = None
+    created_at: Optional[str] = None
     updated_by: Optional[str] = None
-    updated_at: str = Field(default_factory=lambda: datetime.now().isoformat())
+    updated_at: Optional[str] = None
     deleted_by: Optional[str] = None
     deleted_at: Optional[str] = None
     is_deleted: bool = False
@@ -48,38 +48,82 @@ class VmanBaseModel(BaseModel):
         """
         self.init_collection(db)
         collection = db.collection(self.get_collection_name())
+        self.uuid = str(uuid.uuid4())
+        self.created_at = datetime.now().isoformat()
         doc = self.model_dump()
         # doc['_key'] = str(doc.pop('id', None))
         return collection.insert(doc, return_new=True)["new"]
         
 
     @classmethod
-    def get(cls, doc_id: str, db: StandardDatabase):
+    def get(cls, doc_id: str = None, doc_uuid: str = None, db: StandardDatabase = None):
         cls.init_collection(db)
         collection = db.collection(cls.get_collection_name())
-        doc = collection.get(doc_id)
+        if doc_id:
+            doc = collection.get(doc_id)
+        if doc_uuid:
+            query = f"""
+                LET doc = FIRST(FOR doc IN {collection.name} FILTER doc.uuid == @uuid RETURN doc)
+                RETURN doc
+            """
+            bind_vars = {'uuid': doc_uuid}
+            cursor = db.aql.execute(query, bind_vars=bind_vars)
+            doc = cursor.next()
         if not doc:
-            raise HTTPException(status_code=404, detail=f"{cls.get_collection_name()} not found")
+            raise HTTPException(status_code=404, detail=f"Record not found")
         return doc
+   
+    @classmethod
+    def get_many(cls, paging: bool = True, page_number: int = 1, page_size: int = 10, filters: Dict[str, Any] = [], db: StandardDatabase = None):
+        cls.init_collection(db)
+        collection = db.collection(cls.get_collection_name())
+        """
+        Fetch records from the specified collection using dynamic filters.
+
+        :param db: The ArangoDB database instance.
+        :param collection_name: The name of the collection to query.
+        :param filters: A dictionary of filters to apply to the query.
+        :return: A list of records matching the filters.
+        """
+        query, bind_vars = cls.build_query(
+                collection = collection.name, 
+                paging = paging, 
+                page_number = page_number, 
+                page_size = page_size,
+                filters = filters
+            )
+
+        cursor = db.aql.execute(query, bind_vars=bind_vars)
+        records = list(cursor)
+        if not records:
+            raise HTTPException(status_code=404, detail=f"Record not found")
+        return records
 
     def update(self, updated_by: str, db: StandardDatabase):
-        self.init_collection()
+        self.init_collection(db)
         collection = db.collection(self.get_collection_name())
         self.updated_by = updated_by
-        self.updated_at = datetime.now()
+        self.updated_at = datetime.now().isoformat()
         doc = self.model_dump()
 
+        # Get the original record first
         if "id" not in doc and "_key" not in doc:
             query = f"""
                 LET doc = FIRST(FOR doc IN {self.get_collection_name()} FILTER doc.uuid == @uuid RETURN doc)
-                UPDATE doc WITH @updated_data IN {self.get_collection_name()} RETURN NEW
+                RETURN doc
             """
-            bind_vars = {'uuid': self.uuid, 'updated_data': doc}
+            bind_vars = {'uuid': self.uuid}
             cursor = db.aql.execute(query, bind_vars=bind_vars)
-            doc = cursor.next()
+            original_doc = cursor.next()
         else:
-            doc = collection.update({'_key': doc['id'], **doc}, return_new=True) 
-        return doc
+            key = doc["_key"] if "_key" in doc else doc["id"]
+            original_doc = collection.get({'_key': key})
+        
+        for key, value in doc.items():
+            if value:
+                original_doc[key] = value
+        
+        return collection.update({'_key': original_doc['_key'], **original_doc}, return_new=True)["new"]
 
     @classmethod
     def delete(cls, doc_id: str, deleted_by: str, db: StandardDatabase):
@@ -108,6 +152,34 @@ class VmanBaseModel(BaseModel):
         doc['deleted_at'] = None
         collection.update(doc)
         return doc
+    
+    @classmethod
+    def build_query(collection_name: str, filters: Dict[str, Any], page_number: Optional[int] = None, page_size: Optional[int] = None):
+        query = f"FOR doc IN {collection_name}"
+        
+        bind_vars = {}
+        
+        if filters:
+            query += " FILTER "
+            aql_filters = []
+            
+            for field, value in filters.items():
+                aql_filters.append(f"doc.{field} == @{field}")
+                bind_vars[field] = value
+            
+            query += " AND ".join(aql_filters)
+        
+        if page_number is not None and page_size is not None:
+            offset = (page_number - 1) * page_size
+            query += f" LIMIT @offset, @size"
+            bind_vars.update({
+                "offset": offset,
+                "size": page_size
+            })
+        
+        query += " RETURN doc"
+        
+        return query, bind_vars
 
 
 from app.shared.configs.constants import db_collections
@@ -141,9 +213,10 @@ class BaseResponseModel(BaseModel):
         return ResponseUser(**user_data)
 
     @classmethod
-    def populate_user_fields(cls, db: StandardDatabase, data: Dict) -> Dict:
+    def populate_user_fields(cls, data: Dict, db: StandardDatabase,) -> Dict:
         if 'created_by' in data and data['created_by']:
             data['created_by'] = cls.get_user(data['created_by'], db)
+            print(data)
         if 'updated_by' in data and data['updated_by']:
             data['updated_by'] = cls.get_user(data['updated_by'], db)
         if 'deleted_by' in data and data['deleted_by']:

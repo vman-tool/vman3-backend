@@ -1,3 +1,4 @@
+from arango.database import StandardDatabase
 from app.shared.configs.constants import db_collections
 from app.shared.configs.models import VmanBaseModel
 from app.users.models.user import User
@@ -22,7 +23,6 @@ class ICD10(VmanBaseModel):
     @classmethod
     def get_collection_name(cls) -> str:
         return db_collections.ICD10
-
 
 class AssignedVA(VmanBaseModel):
     vaId: str
