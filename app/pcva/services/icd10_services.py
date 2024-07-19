@@ -6,6 +6,7 @@ from fastapi import HTTPException
 from app.pcva.models.models import ICD10, ICD10Category
 from app.pcva.responses.icd10_response_classes import ICD10CategoryResponseClass, ICD10ResponseClass
 from app.shared.configs.constants import db_collections
+from app.users.models.user import User
 
 async def create_icd10_categories_service(categories, user, db: StandardDatabase = None):
     try:
@@ -20,15 +21,21 @@ async def create_icd10_categories_service(categories, user, db: StandardDatabase
     except ArangoError as e:
         raise HTTPException(status_code=500, detail=f"Failed to create categories: {e}")
 
+async def get_icd10_codes(paging: bool = True,  page_number: int = 1, page_size: int = 10, db: StandardDatabase = None) -> List[ICD10ResponseClass]:
+    try:
+        codes = ICD10().get()
+    except ArangoError as e:
+        raise HTTPException(status_code=500, detail=f"Failed to create categories: {e}")
+
 async def create_icd10_codes(codes, user, db: StandardDatabase = None) -> List[ICD10ResponseClass]:
     try:
         created_codes = []
         for code in codes:
             code = code.model_dump()
             code['created_by']=user['uuid']
-            code.pop("uuid")
+            code.pop("uuid") if 'uuid' in code else code
             saved_code = ICD10(**code).save(db)
-            created_code = ICD10ResponseClass.get_structured_code(icd10_code = saved_code, db = db)
+            created_code = await ICD10ResponseClass.get_structured_code(icd10_code = saved_code, db = db)
             created_codes.append(created_code)
         return created_codes
     except ArangoError as e:
@@ -38,10 +45,10 @@ async def update_icd10_codes(codes, user, db: StandardDatabase = None) -> List[I
     try:
         created_codes = []
         for code in codes:
-            code = code.model_dump()
-            saved_code = ICD10(**code).update(db)
-            created_code = ICD10ResponseClass.get_structured_code(icd10_code = saved_code, db = db)
+            code_json = code.model_dump()
+            saved_code = ICD10(**code_json).update(user['uuid'], db)
+            created_code = await ICD10ResponseClass.get_structured_code(icd10_code = saved_code, db = db)
             created_codes.append(created_code)
         return created_codes
-    except ArangoError as e:
-        raise HTTPException(status_code=500, detail=f"Failed to create categories: {e}")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to update categories: {e}")

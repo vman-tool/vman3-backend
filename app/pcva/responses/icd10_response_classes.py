@@ -93,7 +93,7 @@ class ICD10ResponseClass(BaseResponseModel):
         return [cls(**code) for code in codes_data]
     
     @classmethod
-    def get_structured_code(cls, icd10_code_uuid = None, icd10_code = None, db: StandardDatabase = None):
+    async def get_structured_code(cls, icd10_code_uuid = None, icd10_code = None, db: StandardDatabase = None):
         code_data = icd10_code
         if not code_data:
             query = f"""
@@ -104,6 +104,7 @@ class ICD10ResponseClass(BaseResponseModel):
             bind_vars = {'icd10_code_uuid': icd10_code_uuid}
             cursor = db.aql.execute(query, bind_vars=bind_vars)
             code_data = cursor.next()
-        populated_code_data = populate_user_fields(code_data, db)
+        populated_code_data = await populate_user_fields(code_data, db)
+        # print("With User Data: ", populated_code_data)
         populated_code_data['category'] = ICD10CategoryFieldClass.get_icd10_category(populated_code_data['category'], db)
         return cls(**populated_code_data)
