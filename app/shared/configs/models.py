@@ -131,6 +131,13 @@ class VmanBaseModel(BaseModel):
 
     @classmethod
     def delete(cls, doc_id: str = None, doc_uuid: str = None, deleted_by: str = None, db: StandardDatabase = None):
+        """
+        Delete the record with the provided id or uuid and user uuid.
+
+        :param doc_id: The ID of the record to delete.
+        :param doc_uuid: The UUID of the record to delete.
+        :param deleted_by: The user UUID deleting the record.
+        """
         cls.init_collection(db)
         collection = db.collection(cls.get_collection_name())
 
@@ -151,7 +158,15 @@ class VmanBaseModel(BaseModel):
         return collection.update(doc, silent=True)
 
     @classmethod
-    def restore(cls, doc_id: str = None, doc_uuid: str = None, updated_by: str= None, db: StandardDatabase = None):
+    def restore(cls, doc_id: str = None, doc_uuid: str = None, restored_by: str= None, db: StandardDatabase = None):
+        """
+         Restore the record with the provided id or uuid and user uuid.
+
+        :param doc_id: The ID of the deleted record to restore.
+        :param doc_uuid: The UUID of the deleted record to restore.
+        :param restored_by: The user UUID restoring the record.
+        
+        """
         cls.init_collection(db)
         collection = db.collection(cls.get_collection_name())
         if doc_id:
@@ -167,7 +182,7 @@ class VmanBaseModel(BaseModel):
         if not doc:
             raise HTTPException(status_code=404, detail=f"{cls.get_collection_name()} not found")
         doc['is_deleted'] = False
-        doc['updated_by'] = updated_by
+        doc['updated_by'] = restored_by
         doc['updated_at'] = datetime.now().isoformat()
         doc["deleted_by"] = None
         doc["deleted_at"] = None
@@ -176,6 +191,7 @@ class VmanBaseModel(BaseModel):
     
     @classmethod
     def build_query(cls, collection_name: str, filters: Dict[str, Any] = {}, paging: bool = None, page_number: Optional[int] = None, page_size: Optional[int] = None, include_deleted: bool = None):
+        
         query = f"FOR doc IN {collection_name}"
     
         bind_vars = {}
