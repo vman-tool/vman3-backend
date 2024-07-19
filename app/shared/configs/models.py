@@ -151,19 +151,28 @@ class VmanBaseModel(BaseModel):
         return collection.update(doc, silent=True)
 
     @classmethod
-    def restore(cls, doc_id: str, updated_by: str, db: StandardDatabase):
+    def restore(cls, doc_id: str = None, doc_uuid: str = None, updated_by: str= None, db: StandardDatabase = None):
         cls.init_collection(db)
         collection = db.collection(cls.get_collection_name())
-        doc = collection.get(doc_id)
+        if doc_id:
+            doc = collection.get(doc_id)
+        if doc_uuid:
+            query = f"""
+                LET doc = FIRST(FOR doc IN {collection.name} FILTER doc.uuid == @uuid RETURN doc)
+                RETURN doc
+            """
+            bind_vars = {'uuid': doc_uuid}
+            cursor = db.aql.execute(query, bind_vars=bind_vars)
+            doc = cursor.next()
         if not doc:
             raise HTTPException(status_code=404, detail=f"{cls.get_collection_name()} not found")
         doc['is_deleted'] = False
         doc['updated_by'] = updated_by
-        doc['updated_at'] = datetime.now()
-        doc['deleted_by'] = None
-        doc['deleted_at'] = None
-        collection.update(doc)
-        return doc
+        doc['updated_at'] = datetime.now().isoformat()
+        doc["deleted_by"] = None
+        doc["deleted_at"] = None
+        
+        return collection.update(doc, return_new=True)["new"]
     
     @classmethod
     def build_query(cls, collection_name: str, filters: Dict[str, Any] = {}, paging: bool = None, page_number: Optional[int] = None, page_size: Optional[int] = None, include_deleted: bool = None):
