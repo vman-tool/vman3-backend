@@ -74,9 +74,7 @@ class VmanBaseModel(BaseModel):
         return doc
    
     @classmethod
-    def get_many(cls, paging: bool = True, page_number: int = 1, page_size: int = 10, filters: Dict[str, Any] = [], db: StandardDatabase = None):
-        cls.init_collection(db)
-        collection = db.collection(cls.get_collection_name())
+    async def get_many(cls, paging: bool = None, page_number: int = None, page_size: int = None, filters: Dict[str, Any] = {}, db: StandardDatabase = None):
         """
         Fetch records from the specified collection using dynamic filters.
 
@@ -85,18 +83,19 @@ class VmanBaseModel(BaseModel):
         :param filters: A dictionary of filters to apply to the query.
         :return: A list of records matching the filters.
         """
+        cls.init_collection(db)
+        collection = db.collection(cls.get_collection_name())
         query, bind_vars = cls.build_query(
-                collection = collection.name, 
+                collection_name = collection.name, 
+                filters = filters,
                 paging = paging, 
                 page_number = page_number, 
                 page_size = page_size,
-                filters = filters
             )
-
         cursor = db.aql.execute(query, bind_vars=bind_vars)
         records = list(cursor)
         if not records:
-            raise HTTPException(status_code=404, detail=f"Record not found")
+            raise HTTPException(status_code=404, detail=f"Records not found")
         return records
 
     def update(self, updated_by: str, db: StandardDatabase):
@@ -154,7 +153,7 @@ class VmanBaseModel(BaseModel):
         return doc
     
     @classmethod
-    def build_query(collection_name: str, filters: Dict[str, Any], page_number: Optional[int] = None, page_size: Optional[int] = None):
+    def build_query(cls, collection_name: str, filters: Dict[str, Any] = {}, paging: bool = None, page_number: Optional[int] = None, page_size: Optional[int] = None):
         query = f"FOR doc IN {collection_name}"
         
         bind_vars = {}
