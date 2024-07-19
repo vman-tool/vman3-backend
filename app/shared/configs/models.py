@@ -74,7 +74,7 @@ class VmanBaseModel(BaseModel):
         return doc
    
     @classmethod
-    async def get_many(cls, paging: bool = None, page_number: int = None, page_size: int = None, filters: Dict[str, Any] = {}, db: StandardDatabase = None):
+    async def get_many(cls, paging: bool = None, page_number: int = None, page_size: int = None, filters: Dict[str, Any] = {}, include_deleted: bool = None, db: StandardDatabase = None):
         """
         Fetch records from the specified collection using dynamic filters.
 
@@ -99,13 +99,18 @@ class VmanBaseModel(BaseModel):
         return records
 
     def update(self, updated_by: str, db: StandardDatabase):
+        """
+        Update the record with the provided updated_by.
+
+        :param updated_by: The user who made the update.
+        :param db: The ArangoDB database instance.
+        """
         self.init_collection(db)
         collection = db.collection(self.get_collection_name())
         self.updated_by = updated_by
         self.updated_at = datetime.now().isoformat()
         doc = self.model_dump()
 
-        # Get the original record first
         if "id" not in doc and "_key" not in doc:
             query = f"""
                 LET doc = FIRST(FOR doc IN {self.get_collection_name()} FILTER doc.uuid == @uuid RETURN doc)
@@ -125,17 +130,25 @@ class VmanBaseModel(BaseModel):
         return collection.update({'_key': original_doc['_key'], **original_doc}, return_new=True)["new"]
 
     @classmethod
-    def delete(cls, doc_id: str, deleted_by: str, db: StandardDatabase):
+    def delete(cls, doc_id: str = None, doc_uuid: str = None, deleted_by: str = None, db: StandardDatabase = None):
         cls.init_collection(db)
         collection = db.collection(cls.get_collection_name())
-        doc = collection.get(doc_id)
-        if not doc:
-            raise HTTPException(status_code=404, detail=f"{cls.get_collection_name()} not found")
-        doc['is_deleted'] = True
-        doc['deleted_by'] = deleted_by
-        doc['deleted_at'] = datetime.now()
-        collection.update(doc)
-        return doc
+
+        if doc_id:
+            doc = collection.get(doc_id)
+        if doc_uuid:
+            query = f"""
+                LET doc = FIRST(FOR doc IN {collection.name} FILTER doc.uuid == @uuid RETURN doc)
+                RETURN doc
+            """
+            bind_vars = {'uuid': doc_uuid}
+            cursor = db.aql.execute(query, bind_vars=bind_vars)
+            doc = cursor.next()
+
+        doc["deleted_by"] = deleted_by
+        doc["deleted_at"] = datetime.now().isoformat()
+        
+        return collection.update(doc, silent=True)
 
     @classmethod
     def restore(cls, doc_id: str, updated_by: str, db: StandardDatabase):
@@ -153,24 +166,30 @@ class VmanBaseModel(BaseModel):
         return doc
     
     @classmethod
-    def build_query(cls, collection_name: str, filters: Dict[str, Any] = {}, paging: bool = None, page_number: Optional[int] = None, page_size: Optional[int] = None):
+    def build_query(cls, collection_name: str, filters: Dict[str, Any] = {}, paging: bool = None, page_number: Optional[int] = None, page_size: Optional[int] = None, include_deleted: bool = None):
         query = f"FOR doc IN {collection_name}"
-        
+    
         bind_vars = {}
         
-        if filters:
-            query += " FILTER "
-            aql_filters = []
-            
-            for field, value in filters.items():
-                aql_filters.append(f"doc.{field} == @{field}")
-                bind_vars[field] = value
-            
-            query += " AND ".join(aql_filters)
+        aql_filters = []
         
+        # Add user-defined filters
+        for field, value in filters.items():
+            aql_filters.append(f"doc.{field} == @{field}")
+            bind_vars[field] = value
+        
+        # Add the is_deleted filter
+        if not include_deleted:
+            aql_filters.append("doc.is_deleted == false")
+        
+        # Combine all filters
+        if aql_filters:
+            query += " FILTER " + " AND ".join(aql_filters)
+        
+        # Add pagination
         if page_number is not None and page_size is not None:
             offset = (page_number - 1) * page_size
-            query += f" LIMIT @offset, @size"
+            query += " LIMIT @offset, @size"
             bind_vars.update({
                 "offset": offset,
                 "size": page_size

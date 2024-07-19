@@ -1,4 +1,4 @@
-from typing import List, Optional
+from typing import Any, List, Optional
 from fastapi import APIRouter, HTTPException, Query
 from arango.database import StandardDatabase
 from fastapi import APIRouter, Depends, status
@@ -58,11 +58,21 @@ async def create_icd10_categories(
         response_description="Submit array of icd10 codes in a json format"
 )
 async def get_icd10(
-    user: User = Depends(get_current_user),
-    db: StandardDatabase = Depends(get_arangodb_session)) -> List[ICD10ResponseClass]:
+    paging: Optional[str] = Query(None, alias="paging"),
+    page_number: Optional[int] = Query(1, alias="page_number"),
+    page_size: Optional[int] = Query(10, alias="page_size"),
+    include_deleted: Optional[str] = Query(None, alias="include_deleted"),
+    db: StandardDatabase = Depends(get_arangodb_session)) -> List[ICD10ResponseClass] | Any:
 
     try:
-        return await get_icd10_codes(db = db)
+        allowPaging = False if paging is not None and paging.lower() == 'false' else True
+        include_deleted = False if include_deleted is not None and include_deleted.lower() == 'false' else True
+        return await get_icd10_codes(
+            paging = allowPaging, 
+            page_number = page_number, 
+            page_size = page_size, 
+            include_deleted = include_deleted, 
+            db = db)
     except:
         raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed get icd10 codes")
 
