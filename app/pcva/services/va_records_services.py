@@ -6,6 +6,7 @@ from app.pcva.models.models import AssignedVA
 from app.pcva.requests.va_request_classes import AssignVARequestClass
 from app.pcva.responses.va_response_classes import AssignVAResponseClass
 from app.shared.configs.constants import db_collections
+from app.shared.utils.database_utilities import record_exists
 from app.users.models.user import User
 
 async def fetch_va_records(paging: bool = True,  page_number: int = 1, page_size: int = 10, db: StandardDatabase = None):
@@ -40,7 +41,7 @@ async def fetch_va_records(paging: bool = True,  page_number: int = 1, page_size
         raise HTTPException(status_code=500, detail=f"Failed to fetch data: {e}")
     
 
-async def assign_va_service(va_records: AssignVARequestClass, user: User,  db: StandardDatabase = None):
+async def assign_va_service(va_records: AssignVARequestClass, user,  db: StandardDatabase = None):
     vaIds  = va_records.vaIds
     va_assignment_data = []
     for vaId in vaIds:
@@ -48,18 +49,21 @@ async def assign_va_service(va_records: AssignVARequestClass, user: User,  db: S
             "vaId": vaId,
             "coder1": va_records.coder1,
             "coder2": va_records.coder2,
-            "created": user.uuid
+            "created_by": user["uuid"]
         }
         va_object = AssignedVA(**va_data)
+        if not record_exists("form_submissions", custom_fields={"__id": vaId}, db = db):
+            continue
         existing_va_assignment_data = await AssignedVA.get_many(
             filters= {
                 "vaId": vaId
-            }
-        )[0]
+            },
+            db = db
+        )
         if existing_va_assignment_data:
-            saved_object = va_object.update(user.uuid)
+            saved_object = va_object.update(user["uuid"], db = db)
         else:
-            saved_object = va_object.save()
+            saved_object = va_object.save(db = db)
         va_assignment_data.append(await AssignVAResponseClass.get_structured_assignment(assignment=saved_object))
     
     return va_assignment_data

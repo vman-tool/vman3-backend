@@ -95,7 +95,7 @@ class VmanBaseModel(BaseModel):
         cursor = db.aql.execute(query, bind_vars=bind_vars)
         records = list(cursor)
         if not records:
-            raise HTTPException(status_code=404, detail=f"Records not found")
+            return None
         return records
 
     async def update(self, updated_by: str, db: StandardDatabase):
