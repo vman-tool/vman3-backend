@@ -264,7 +264,6 @@ class BaseResponseModel(BaseModel):
         """
         if 'created_by' in data and data['created_by']:
             data['created_by'] = cls.get_user(data['created_by'], db)
-            print(data)
         if 'updated_by' in data and data['updated_by']:
             data['updated_by'] = cls.get_user(data['updated_by'], db)
         if 'deleted_by' in data and data['deleted_by']:
