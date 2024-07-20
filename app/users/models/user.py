@@ -27,7 +27,7 @@ class User(VmanBaseModel):
         return db_collections.USERS
     
     def save(self, db: StandardDatabase):
-        super().init_collection(db)
+        self.init_collection(db)
 
         collection = db.collection(db_collections.USERS)
 
@@ -38,17 +38,18 @@ class User(VmanBaseModel):
         if user_exist:
             raise HTTPException(status_code=400, detail="Email already exists.")
 
-        super().save(db)
+        user = super().save(db)
 
-        cursor = collection.find({'email': self.email}, limit=1)
-        user = [doc for doc in cursor]
+        # cursor = collection.find({'email': self.email}, limit=1)
+        # user = [doc for doc in cursor]
 
         return {
-            "id": user[0]["_key"],
-            "name": user[0]["name"],
-            "email": user[0]["email"],
-            "is_active": user[0]["is_active"],
-            "created_at":user[0]["created_at"]
+            "id": user["_key"],
+            "uuid": user["uuid"],
+            "name": user["name"],
+            "email": user["email"],
+            "is_active": user["is_active"],
+            "created_at":user["created_at"]
         }
 
 

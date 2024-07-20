@@ -33,8 +33,6 @@ settings = get_settings()
 
 
 async def create_user_account(data: RegisterUserRequest, db: StandardDatabase, background_tasks: BackgroundTasks):
-    print(data)
-
     if not is_password_strong_enough(data.password):
             raise HTTPException(status_code=400, detail="Please provide a strong password.")
 
@@ -42,9 +40,9 @@ async def create_user_account(data: RegisterUserRequest, db: StandardDatabase, b
             "name": data.name,
             "email": data.email,
             "password": hash_password(data.password),
-            "is_active": True, # TODOS: Change to false if you want to verify email first
-            "verified_at":datetime.now().isoformat(), # TODOS: Change to None if you want to verify email first
-            "created_by": data.created_by, # TODOS: Change to the user id of the user creating the account
+            "is_active": True, # TODO: Change to false if you want to verify email first
+            "verified_at":datetime.now().isoformat(), # TODO: Change to None if you want to verify email first
+            "created_by": data.created_by, # TODO: Change to the user id of the user creating the account
         }
     
     return User(**user_data).save(db)
