@@ -151,11 +151,11 @@ async def update_icd10(
 
 @pcva_router.post("/assign-va", status_code=status.HTTP_201_CREATED)
 async def assign_va(
-    va: List[AssignVARequestClass],
+    vaAssignment: List[AssignVARequestClass],
     user: User = Depends(get_current_user),
     db: StandardDatabase = Depends(get_arangodb_session)):
 
     try:
-        return await assign_va_service(va, user, db)
+        return await assign_va_service(vaAssignment, user, db)
     except:
         raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed create icd10 codes")

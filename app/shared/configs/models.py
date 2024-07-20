@@ -4,7 +4,7 @@ from http.client import HTTPException
 
 from arango.database import StandardDatabase
 from pydantic import BaseModel, Field
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 from app.shared.configs.constants import db_collections
 
 
@@ -54,10 +54,9 @@ class VmanBaseModel(BaseModel):
         doc = self.model_dump()
         # doc['_key'] = str(doc.pop('id', None))
         return collection.insert(doc, return_new=True)["new"]
-        
 
     @classmethod
-    def get(cls, doc_id: str = None, doc_uuid: str = None, db: StandardDatabase = None):
+    async def get(cls, doc_id: str = None, doc_uuid: str = None, db: StandardDatabase = None):
         cls.init_collection(db)
         collection = db.collection(cls.get_collection_name())
         if doc_id:
@@ -99,7 +98,7 @@ class VmanBaseModel(BaseModel):
             raise HTTPException(status_code=404, detail=f"Records not found")
         return records
 
-    def update(self, updated_by: str, db: StandardDatabase):
+    async def update(self, updated_by: str, db: StandardDatabase):
         """
         Update the record with the provided updated_by.
 
@@ -131,7 +130,7 @@ class VmanBaseModel(BaseModel):
         return collection.update({'_key': original_doc['_key'], **original_doc}, return_new=True)["new"]
 
     @classmethod
-    def delete(cls, doc_id: str = None, doc_uuid: str = None, deleted_by: str = None, db: StandardDatabase = None):
+    async def delete(cls, doc_id: str = None, doc_uuid: str = None, deleted_by: str = None, db: StandardDatabase = None):
         """
         Delete the record with the provided id or uuid and user uuid.
 
@@ -160,7 +159,7 @@ class VmanBaseModel(BaseModel):
         return collection.update(doc, silent=True)
 
     @classmethod
-    def restore(cls, doc_id: str = None, doc_uuid: str = None, restored_by: str= None, db: StandardDatabase = None):
+    async def restore(cls, doc_id: str = None, doc_uuid: str = None, restored_by: str= None, db: StandardDatabase = None):
         """
          Restore the record with the provided id or uuid and user uuid.
 
@@ -258,7 +257,7 @@ class BaseResponseModel(BaseModel):
         return ResponseUser(**user_data)
 
     @classmethod
-    def populate_user_fields(cls, data: Dict, db: StandardDatabase,) -> Dict:
+    def populate_user_fields(cls, data: Dict = {}, specific_fields: List[str] = None, db: StandardDatabase = None) -> Dict:
         """
             Use this method to populate user fields as a standard response.
         """
@@ -268,4 +267,8 @@ class BaseResponseModel(BaseModel):
             data['updated_by'] = cls.get_user(data['updated_by'], db)
         if 'deleted_by' in data and data['deleted_by']:
             data['deleted_by'] = cls.get_user(data['deleted_by'], db)
+
+        for field in specific_fields:
+            if field in data and data[field]:
+                data[field] = cls.get_user(data[field], db)
         return data
