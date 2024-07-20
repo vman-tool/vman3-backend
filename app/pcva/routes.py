@@ -52,7 +52,7 @@ async def create_icd10_categories(
         raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed create icd10 categories")
 
 
-@pcva_router.post(
+@pcva_router.get(
         path="/get-icd10", 
         status_code=status.HTTP_200_OK,
         response_description="Submit array of icd10 codes in a json format"

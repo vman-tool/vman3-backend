@@ -5,6 +5,7 @@ from http.client import HTTPException
 from arango.database import StandardDatabase
 from pydantic import BaseModel, Field
 from typing import Any, Dict, Optional
+from app.shared.configs.constants import db_collections
 
 
 class VmanBaseModel(BaseModel):
@@ -138,6 +139,7 @@ class VmanBaseModel(BaseModel):
         :param doc_uuid: The UUID of the record to delete.
         :param deleted_by: The user UUID deleting the record.
         """
+        # TODO: Include hard deletion logics so that the method allows both soft and hard deletion
         cls.init_collection(db)
         collection = db.collection(cls.get_collection_name())
 
@@ -225,14 +227,14 @@ class VmanBaseModel(BaseModel):
         return query, bind_vars
 
 
-from app.shared.configs.constants import db_collections
-
-
 class ResponseUser(BaseModel):
     uuid: str
     name: str
 
 class BaseResponseModel(BaseModel):
+    """
+    Use this class to standardize the response of your API endpoints.
+    """
     uuid: str
     created_by: Optional[ResponseUser]
     updated_by: Optional[ResponseUser]
@@ -257,6 +259,9 @@ class BaseResponseModel(BaseModel):
 
     @classmethod
     def populate_user_fields(cls, data: Dict, db: StandardDatabase,) -> Dict:
+        """
+            Use this method to populate user fields as a standard response.
+        """
         if 'created_by' in data and data['created_by']:
             data['created_by'] = cls.get_user(data['created_by'], db)
             print(data)
