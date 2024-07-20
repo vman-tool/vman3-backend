@@ -93,7 +93,6 @@ async def get_login_token(data, session):
     
     if not user['verified_at']:
         raise HTTPException(status_code=400, detail="Your account is not verified. Please check your email inbox to verify your account.")
-    
     if not user['is_active']:
         raise HTTPException(status_code=400, detail="Your account has been deactivated. Please contact support.")
     
@@ -106,6 +105,7 @@ async def get_refresh_token(refresh_token: str, db):
     token_payload = get_token_payload(refresh_token, settings.SECRET_KEY, settings.JWT_ALGORITHM)
     if not token_payload:
         raise HTTPException(status_code=400, detail="Invalid Request.")
+    
 
     refresh_key = token_payload.get('t')
     access_key = token_payload.get('a')

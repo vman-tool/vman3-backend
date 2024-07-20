@@ -1,4 +1,5 @@
 
+from http.client import HTTPException
 from arango.database import StandardDatabase
 from fastapi import APIRouter, BackgroundTasks, Depends, Header, status
 from fastapi.responses import JSONResponse
@@ -45,8 +46,10 @@ async def verify_user_account(data: VerifyUserRequest, background_tasks: Backgro
 
 @guest_router.post("/login", status_code=status.HTTP_200_OK, response_model=LoginResponse)
 async def user_login(data: OAuth2PasswordRequestForm = Depends(), db = Depends(get_arangodb_session)):
-   
-    return await user.get_login_token(data, db)
+    try:
+        return await user.get_login_token(data, db)
+    except Exception as e:
+        raise e
 
 @guest_router.post("/refresh", status_code=status.HTTP_200_OK, response_model=LoginResponse)
 async def refresh_token(refresh_token = Header(), session = Depends(get_arangodb_session)):
