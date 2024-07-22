@@ -94,7 +94,6 @@ class VmanBaseModel(BaseModel):
                 page_size = page_size,
                 include_deleted = include_deleted
             )
-        print(query)
         cursor = db.aql.execute(query, bind_vars=bind_vars)
         records = list(cursor)
         if not records:
@@ -230,9 +229,9 @@ class VmanBaseModel(BaseModel):
         #             bind_vars[bind_var_key] = sub_value
         #         or_clauses.append(" AND ".join(sub_conditions))
         #     aql_filters.append(f"({' OR '.join(or_clauses)})")
-        query_conditions_string, vars = add_query_filters(query, filters, bind_vars)
 
-        query += query_conditions_string
+        aql_filters, vars = add_query_filters(filters, bind_vars)
+
         bind_vars.update(vars)
         
         if not include_deleted:

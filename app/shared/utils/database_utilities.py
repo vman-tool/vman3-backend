@@ -11,6 +11,7 @@ async def record_exists(collection_name: str, uuid: str = None, id: str = None, 
     :custom_fields: Use this variable whenever you have more than one field (including uuid, id), Otherwise the check will use only these
     """
     bind_vars = {}
+    aql_filters = []
     
     if custom_fields or (uuid and id):
         
@@ -23,10 +24,10 @@ async def record_exists(collection_name: str, uuid: str = None, id: str = None, 
         if id:
             custom_fields['_key'] = id
         
-        query_filters_string, vars = add_query_filters(query, custom_fields, bind_vars = bind_vars)
+        aql_filters, bind_vars = add_query_filters(query, custom_fields, bind_vars = bind_vars)
         
-        query += query_filters_string
-        bind_vars.update(vars)
+        if aql_filters:
+            query += " FILTER " + " AND ".join(aql_filters)
         
         query += """
             RETURN doc
@@ -72,7 +73,7 @@ async def replace_object_values(new_dict: Dict, old_dict: Dict):
         print(f"Error occurred while replacing values: {str(e)}")
         return None
     
-def add_query_filters(query: str = None, filters: Dict = {}, bind_vars: Dict = {}):
+def add_query_filters(filters: Dict = {}, bind_vars: Dict = {}):
     aql_filters = []
 
         
@@ -96,7 +97,5 @@ def add_query_filters(query: str = None, filters: Dict = {}, bind_vars: Dict = {
             or_clauses.append(" AND ".join(sub_conditions))
         aql_filters.append(f"({' OR '.join(or_clauses)})")
     
-    if aql_filters:
-        query += " FILTER " + " AND ".join(aql_filters)
-
-    return query, bind_vars
+    
+    return aql_filters, bind_vars
