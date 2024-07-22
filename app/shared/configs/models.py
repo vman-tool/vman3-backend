@@ -92,6 +92,7 @@ class VmanBaseModel(BaseModel):
                 paging = paging, 
                 page_number = page_number, 
                 page_size = page_size,
+                include_deleted = include_deleted
             )
         cursor = db.aql.execute(query, bind_vars=bind_vars)
         records = list(cursor)
