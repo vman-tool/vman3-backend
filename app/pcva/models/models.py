@@ -35,13 +35,13 @@ class AssignedVA(VmanBaseModel):
 
 
 class CodedVA(VmanBaseModel):
-    assignedVA: str
-    coda: str
-    codb: Optional[str]
-    codc: Optional[str]
-    codd: Optional[str]
-    codContributory: Optional[str]
-    comment: Optional[str]
+    assigned_va: str
+    immediate_cod: str
+    intermediate_cod: Optional[str]
+    intermediate_cod: Optional[str]
+    underlying_cod: Optional[str]
+    contributory_cod: Optional[str]
+    clinical_notes: Optional[str]
     datetime: Optional[str] = Field(default_factory=lambda: datetime.now().isoformat())
 
     @classmethod
