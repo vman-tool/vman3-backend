@@ -49,7 +49,8 @@ class AssignVAResponseClass(BaseResponseModel):
             """
             bind_vars = {'assignment_uuid': assignment_uuid}
             cursor = db.aql.execute(query, bind_vars=bind_vars)
-            code_data = cursor.next()
-        populated_code_data = await populate_user_fields(code_data, ['coder1', 'coder2'], db)
+            assignment_data = cursor.next()
+        
+        populated_code_data = await populate_user_fields(assignment_data, ['coder1', 'coder2'], db)
         
         return cls(**populated_code_data)

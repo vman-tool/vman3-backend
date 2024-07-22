@@ -14,7 +14,7 @@ async def create_icd10_categories_service(categories, user, db: StandardDatabase
         for category in categories:
             category = category.model_dump()
             category['created_by']=user['uuid']
-            saved_category = ICD10Category(**category).save(db)
+            saved_category = await ICD10Category(**category).save(db)
             created_category = ICD10CategoryResponseClass.get_structured_category(icd10_category = saved_category, db = db)
             created_categories.append(created_category)
         return created_categories
@@ -79,7 +79,7 @@ async def create_icd10_codes(codes, user, db: StandardDatabase = None) -> List[I
             code = code.model_dump()
             code['created_by']=user['uuid']
             code.pop("uuid") if 'uuid' in code else code
-            saved_code = ICD10(**code).save(db)
+            saved_code = await ICD10(**code).save(db)
             created_code = await ICD10ResponseClass.get_structured_code(icd10_code = saved_code, db = db)
             created_codes.append(created_code)
         return created_codes

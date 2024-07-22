@@ -1,7 +1,7 @@
 from typing import Dict
 from arango.database import StandardDatabase
 
-def record_exists(collection_name: str, uuid: str = None, id: str = None, custom_fields: Dict = {}, db: StandardDatabase = None) -> bool:
+async def record_exists(collection_name: str, uuid: str = None, id: str = None, custom_fields: Dict = {}, db: StandardDatabase = None) -> bool:
     """
     Use this method to check existence of record with given fields and their values
 
@@ -56,3 +56,21 @@ def record_exists(collection_name: str, uuid: str = None, id: str = None, custom
     cursor = db.aql.execute(query, bind_vars=bind_vars)
     exists = cursor.next()
     return exists
+
+async def replace_object_values(new_dict: Dict, old_dict: Dict):
+    """
+    Use this method to replace the values from old_dict with new_dict
+
+    :new_dict : Dictionary with values to replace
+    :old_dict : Dictionary with values to be replaced
+    :Returns the old dictionary with new values
+    """
+    try:
+        for key, value in new_dict.items():
+                if value:
+                    old_dict[key] = value
+
+        return old_dict
+    except Exception as e:
+        print(f"Error occurred while replacing values: {str(e)}")
+        return None

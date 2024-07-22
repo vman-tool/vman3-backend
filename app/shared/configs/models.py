@@ -6,6 +6,7 @@ from arango.database import StandardDatabase
 from pydantic import BaseModel, Field
 from typing import Any, Dict, List, Optional
 from app.shared.configs.constants import db_collections
+from app.shared.utils.database_utilities import replace_object_values
 
 
 class VmanBaseModel(BaseModel):
@@ -42,7 +43,7 @@ class VmanBaseModel(BaseModel):
             if not any(index['fields'] == ['uuid'] for index in indexes):
                 collection.add_hash_index(fields=['uuid'], unique=True)
 
-    def save(self, db: StandardDatabase):
+    async def save(self, db: StandardDatabase):
         """
         This method saved the data and returns the new saved data.
         
@@ -123,9 +124,7 @@ class VmanBaseModel(BaseModel):
             key = doc["_key"] if "_key" in doc else doc["id"]
             original_doc = collection.get({'_key': key})
         
-        for key, value in doc.items():
-            if value:
-                original_doc[key] = value
+        original_doc = await replace_object_values(doc, original_doc)
         
         return collection.update({'_key': original_doc['_key'], **original_doc}, return_new=True)["new"]
 
