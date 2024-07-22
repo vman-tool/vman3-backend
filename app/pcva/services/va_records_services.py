@@ -4,7 +4,7 @@ from arango.database import StandardDatabase
 from fastapi import HTTPException
 
 from app.pcva.models.models import AssignedVA
-from app.pcva.requests.va_request_classes import AssignVARequestClass
+from app.pcva.requests.va_request_classes import AssignVARequestClass, CodeAssignedVARequestClass
 from app.pcva.responses.va_response_classes import AssignVAResponseClass
 from app.shared.configs.constants import db_collections
 from app.shared.utils.database_utilities import record_exists
@@ -88,5 +88,14 @@ async def get_va_assignment_service(paging: bool, page_number: int = None, page_
     
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to get assigned va: {e}")
+    
+
+async def code_assigned_va_service(coded_va: CodeAssignedVARequestClass = None, current_user: User = None, db: StandardDatabase = None)
+        # 1. Check if va exists in the db and is already assigned
+        # 2. Check all causes of dealths exists and grab their uuid values
+        # 3. Confirm existence of contributory cods before saving them as comma separated values
+        # 4. Make sure clinical notes are written before saving the value
+
+        return coded_va
     
     
