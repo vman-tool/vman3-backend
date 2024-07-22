@@ -1,4 +1,4 @@
-from typing import Any, List, Optional
+from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, HTTPException, Query
 from arango.database import StandardDatabase
 from fastapi import APIRouter, Depends, status
@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, status
 from app.pcva.requests.icd10_request_classes import ICD10CategoryRequestClass, ICD10CategoryUpdateClass, ICD10CreateRequestClass, ICD10UpdateRequestClass
 from app.pcva.requests.va_request_classes import AssignVARequestClass
 from app.pcva.responses.icd10_response_classes import ICD10CategoryResponseClass, ICD10ResponseClass
+from app.pcva.responses.va_response_classes import AssignVAResponseClass
 from app.pcva.services.icd10_services import (
     create_icd10_categories_service,
     get_icd10_categories_service, 
@@ -14,7 +15,7 @@ from app.pcva.services.icd10_services import (
     update_icd10_categories_service, 
     update_icd10_codes
 )
-from app.pcva.services.va_records_services import assign_va_service, fetch_va_records
+from app.pcva.services.va_records_services import assign_va_service, fetch_va_records, get_va_assignment_service
 from app.shared.configs.arangodb_db import get_arangodb_session
 from app.users.decorators.user import get_current_user, oauth2_scheme
 from app.users.models.user import User
@@ -159,3 +160,30 @@ async def assign_va(
         return await assign_va_service(vaAssignment, user, db)    
     except:
         raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to assign va")
+
+@pcva_router.get("/va-assignments", status_code=status.HTTP_200_OK)
+async def get_assigned_va(
+    paging: Optional[str] = Query(None, alias="paging"),
+    page_number: Optional[int] = Query(1, alias="page_number"),
+    page_size: Optional[int] = Query(10, alias="page_size"),
+    include_deleted: Optional[str] = Query(None, alias="include_deleted"),
+    va_id: Optional[str] = Query(None, alias="va_id"),
+    coder1: Optional[str] = Query(None, alias="coder1"),
+    coder2: Optional[str] = Query(None, alias="coder2"),
+    current_user: User = Depends(get_current_user),
+    db: StandardDatabase = Depends(get_arangodb_session)) -> List[AssignVAResponseClass] | Dict:
+
+    try:
+        filters = {}
+        if va_id:
+            filters['vaId'] = va_id
+        if coder1: 
+            filters['coder1'] = coder1
+        if coder2:
+            filters['coder2'] = coder2
+        allowPaging = False if paging is not None and paging.lower() == 'false' else True
+        include_deleted = False if include_deleted is not None and include_deleted.lower() == 'false' else True
+        
+        return await get_va_assignment_service(allowPaging, page_number, page_size, include_deleted, filters, current_user, db)    
+    except:
+        raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to get assigned va")
