@@ -11,7 +11,7 @@ from app.users.models.user import User
 
 async def fetch_va_records(paging: bool = True,  page_number: int = 1, page_size: int = 10, db: StandardDatabase = None):
     try:
-        collection = db.collection(db_collections.SUBMISSIONS)
+        collection = db.collection(db_collections.VA_TABLE)
         query = f"FOR doc IN {collection.name} "
         bind_vars = {}
             
@@ -52,7 +52,8 @@ async def assign_va_service(va_records: AssignVARequestClass, user,  db: Standar
             "created_by": user["uuid"]
         }
         va_object = AssignedVA(**va_data)
-        if not record_exists("form_submissions", custom_fields={"__id": vaId}, db = db):
+        is_valid_va = await record_exists(db_collections.VA_TABLE, custom_fields={"__id": vaId}, db = db)
+        if not is_valid_va:
             continue
         existing_va_assignment_data = await AssignedVA.get_many(
             filters= {
