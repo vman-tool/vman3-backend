@@ -6,7 +6,7 @@ from arango.database import StandardDatabase
 from pydantic import BaseModel, Field
 from typing import Any, Dict, List, Optional
 from app.shared.configs.constants import db_collections
-from app.shared.utils.database_utilities import replace_object_values
+from app.shared.utils.database_utilities import add_query_filters, replace_object_values
 
 
 class VmanBaseModel(BaseModel):
@@ -211,25 +211,29 @@ class VmanBaseModel(BaseModel):
         bind_vars = {}
         aql_filters = []
         
-        or_conditions = filters.pop("or_conditions", [])
+        #or_conditions = filters.pop("or_conditions", [])
+        #
+        # for field, value in filters.items():
+        #     if isinstance(value, list):
+        #         or_conditions.append({field: v} for v in value)
+        #     else:
+        #         aql_filters.append(f"doc.{field} == @{field}")
+        #         bind_vars[field] = value
         
-        for field, value in filters.items():
-            if isinstance(value, list):
-                or_conditions.append({field: v} for v in value)
-            else:
-                aql_filters.append(f"doc.{field} == @{field}")
-                bind_vars[field] = value
-        
-        if or_conditions:
-            or_clauses = []
-            for i, condition_set in enumerate(or_conditions):
-                sub_conditions = []
-                for sub_field, sub_value in condition_set.items():
-                    bind_var_key = f"{sub_field}_or_{i}"
-                    sub_conditions.append(f"doc.{sub_field} == @{bind_var_key}")
-                    bind_vars[bind_var_key] = sub_value
-                or_clauses.append(" AND ".join(sub_conditions))
-            aql_filters.append(f"({' OR '.join(or_clauses)})")
+        # if or_conditions:
+        #     or_clauses = []
+        #     for i, condition_set in enumerate(or_conditions):
+        #         sub_conditions = []
+        #         for sub_field, sub_value in condition_set.items():
+        #             bind_var_key = f"{sub_field}_or_{i}"
+        #             sub_conditions.append(f"doc.{sub_field} == @{bind_var_key}")
+        #             bind_vars[bind_var_key] = sub_value
+        #         or_clauses.append(" AND ".join(sub_conditions))
+        #     aql_filters.append(f"({' OR '.join(or_clauses)})")
+        query_conditions_string, vars = add_query_filters(query, filters, bind_vars)
+
+        query += query_conditions_string
+        bind_vars.update(vars)
         
         if not include_deleted:
             aql_filters.append("doc.is_deleted == false")
