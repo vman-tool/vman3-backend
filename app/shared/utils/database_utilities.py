@@ -13,6 +13,11 @@ async def record_exists(collection_name: str, uuid: str = None, id: str = None, 
     bind_vars = {}
     
     if custom_fields or (uuid and id):
+        
+        query = f"""
+        RETURN LENGTH(
+            FOR doc IN {collection_name}
+        """
         aql_filters = []
 
         if uuid:
@@ -20,16 +25,28 @@ async def record_exists(collection_name: str, uuid: str = None, id: str = None, 
         if id:
             custom_fields['_key'] = id
         
-        # Add user-defined filters
+        or_conditions = custom_fields.pop("or_conditions", [])
+        
         for field, value in custom_fields.items():
-            aql_filters.append(f"doc.{field} == @{field}")
-            bind_vars[field] = value
-        query = f"""
-        RETURN LENGTH(
-            FOR doc IN {collection_name}
-        """
-
-        query += " FILTER " + " AND ".join(aql_filters)
+            if isinstance(value, list):
+                or_conditions.append({field: v} for v in value)
+            else:
+                aql_filters.append(f"doc.{field} == @{field}")
+                bind_vars[field] = value
+        
+        if or_conditions:
+            or_clauses = []
+            for i, condition_set in enumerate(or_conditions):
+                sub_conditions = []
+                for sub_field, sub_value in condition_set.items():
+                    bind_var_key = f"{sub_field}_or_{i}"
+                    sub_conditions.append(f"doc.{sub_field} == @{bind_var_key}")
+                    bind_vars[bind_var_key] = sub_value
+                or_clauses.append(" AND ".join(sub_conditions))
+            aql_filters.append(f"({' OR '.join(or_clauses)})")
+        
+        if aql_filters:
+            query += " FILTER " + " AND ".join(aql_filters)
 
         query += """
             RETURN doc
