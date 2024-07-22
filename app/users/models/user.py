@@ -26,7 +26,7 @@ class User(VmanBaseModel):
     def get_collection_name(cls) -> str:
         return db_collections.USERS
     
-    def save(self, db: StandardDatabase):
+    async def save(self, db: StandardDatabase):
         self.init_collection(db)
 
         collection = db.collection(db_collections.USERS)
@@ -38,7 +38,7 @@ class User(VmanBaseModel):
         if user_exist:
             raise HTTPException(status_code=400, detail="Email already exists.")
 
-        user = super().save(db)
+        user = await super().save(db)
 
         # cursor = collection.find({'email': self.email}, limit=1)
         # user = [doc for doc in cursor]

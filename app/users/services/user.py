@@ -151,7 +151,7 @@ async def _generate_tokens(user, db: StandardDatabase):
     # insert_result =  collection.insert(user_token, return_new=True)
     # inserted_user_token = insert_result["new"]
 
-    inserted_user_token = UserToken(**user_token).save(db)
+    inserted_user_token = await UserToken(**user_token).save(db)
 
     at_payload = {
         "sub": str_encode(str(user["_key"])),

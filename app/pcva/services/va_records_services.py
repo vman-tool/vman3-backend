@@ -61,10 +61,11 @@ async def assign_va_service(va_records: AssignVARequestClass, user,  db: Standar
             db = db
         )
         if existing_va_assignment_data:
-            saved_object = va_object.update(user["uuid"], db = db)
+            va_object.uuid = existing_va_assignment_data[0]["uuid"]
+            saved_object = await va_object.update(user["uuid"], db = db)
         else:
-            saved_object = va_object.save(db = db)
-        va_assignment_data.append(await AssignVAResponseClass.get_structured_assignment(assignment=saved_object))
+            saved_object = await va_object.save(db = db)
+        va_assignment_data.append(await AssignVAResponseClass.get_structured_assignment(assignment=saved_object, db = db))
     
     return va_assignment_data
     
