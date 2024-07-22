@@ -38,45 +38,55 @@ async def fetch_va_records(paging: bool = True,  page_number: int = 1, page_size
             "data": data
         } if paging else data
     
-    except ArangoError as e:
+    except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to fetch data: {e}")
     
 
 async def assign_va_service(va_records: AssignVARequestClass, user,  db: StandardDatabase = None):
-    vaIds  = va_records.vaIds
-    va_assignment_data = []
-    for vaId in vaIds:
-        va_data = {
-            "vaId": vaId,
-            "coder1": va_records.coder1,
-            "coder2": va_records.coder2,
-            "created_by": user["uuid"]
-        }
-        va_object = AssignedVA(**va_data)
-        is_valid_va = await record_exists(db_collections.VA_TABLE, custom_fields={"__id": vaId}, db = db)
-        if not is_valid_va:
-            continue
-        existing_va_assignment_data = await AssignedVA.get_many(
-            filters= {
-                "vaId": vaId
-            },
-            db = db
-        )
-        if existing_va_assignment_data:
-            va_object.uuid = existing_va_assignment_data[0]["uuid"]
-            saved_object = await va_object.update(user["uuid"], db = db)
-        else:
-            saved_object = await va_object.save(db = db)
-        va_assignment_data.append(await AssignVAResponseClass.get_structured_assignment(assignment=saved_object, db = db))
-    
-    return va_assignment_data
+    try:
+        vaIds  = va_records.vaIds
+        va_assignment_data = []
+        for vaId in vaIds:
+            va_data = {
+                "vaId": vaId,
+                "coder1": va_records.coder1,
+                "coder2": va_records.coder2,
+                "created_by": user["uuid"]
+            }
+            va_object = AssignedVA(**va_data)
+            is_valid_va = await record_exists(db_collections.VA_TABLE, custom_fields={"__id": vaId}, db = db)
+            if not is_valid_va:
+                continue
+            existing_va_assignment_data = await AssignedVA.get_many(
+                filters= {
+                    "vaId": vaId
+                },
+                db = db
+            )
+            if existing_va_assignment_data:
+                va_object.uuid = existing_va_assignment_data[0]["uuid"]
+                saved_object = await va_object.update(user["uuid"], db = db)
+            else:
+                saved_object = await va_object.save(db = db)
+            va_assignment_data.append(await AssignVAResponseClass.get_structured_assignment(assignment=saved_object, db = db))
+        
+        return va_assignment_data
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to assign va: {e}")
 
 
 async def get_va_assignment_service(paging: bool, page_number: int = None, page_size: int = None, include_deleted: bool = None, filters: Dict = {}, user = None, db: StandardDatabase = None):
-    assined_vas = await AssignedVA.get_many(paging, page_number, page_size, filters, include_deleted, db)
-    return {
-        "page_number": page_number,
-        "page_size": page_size,
-        "data": [await AssignVAResponseClass.get_structured_assignment(assignment=va, db = db) for va in assined_vas]
-    } if paging else [await AssignVAResponseClass.get_structured_assignment(assignment=va, db = db) for va in assined_vas]
+    
+    try:
+        assigned_vas = await AssignedVA.get_many(paging, page_number, page_size, filters, include_deleted, db)
+        
+        return {
+            "page_number": page_number,
+            "page_size": page_size,
+            "data": [await AssignVAResponseClass.get_structured_assignment(assignment=va, db = db) for va in assigned_vas]
+        } if paging else [await AssignVAResponseClass.get_structured_assignment(assignment=va, db = db) for va in assigned_vas]
+    
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get assigned va: {e}")
+    
     

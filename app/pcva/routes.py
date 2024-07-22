@@ -183,6 +183,14 @@ async def get_assigned_va(
             filters['coder2'] = coder2
         allowPaging = False if paging is not None and paging.lower() == 'false' else True
         include_deleted = False if include_deleted is not None and include_deleted.lower() == 'false' else True
+
+        if coder1 and coder2:
+            filters["or_conditions"]= [
+                {"coder1": coder1},
+                {"coder2": coder2}
+            ]
+            filters.pop('coder1', None)
+            filters.pop('coder2', None)
         
         return await get_va_assignment_service(allowPaging, page_number, page_size, include_deleted, filters, current_user, db)    
     except:
