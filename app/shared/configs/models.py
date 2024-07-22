@@ -193,7 +193,19 @@ class VmanBaseModel(BaseModel):
     
     @classmethod
     def build_query(cls, collection_name: str, filters: Dict[str, Any] = {}, paging: bool = None, page_number: Optional[int] = None, page_size: Optional[int] = None, include_deleted: bool = None):
+        """
+         Build a query from filters object and pagination values.
+
+        :param collection_name: The ID of the deleted record to restore.
+        :param paging: Boolean value to allow paging.
+        :param page_number: Integer value for page number.
+        :param page_size: Integer value for number of records to be returned in a page.
+        :param include_deleted: Boolean value to include or exclude soft deleted objects.
+        :param filters: Dictionary to build conditional query. Include or_conditions objects with key, value pairs. (keys being field names).
         
+        :return query: A string of the built query
+        :return bind_vars: A dictionary of bind variables for the query.
+        """
         query = f"FOR doc IN {collection_name}"
     
         bind_vars = {}
