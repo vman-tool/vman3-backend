@@ -74,6 +74,16 @@ async def replace_object_values(new_dict: Dict, old_dict: Dict):
         return None
     
 def add_query_filters(filters: Dict = {}, bind_vars: Dict = {}):
+    """
+    This function creates a string of query filters for ArangoDB as well as bind variables
+
+    :param filters: Input dictionary of fields and their values (Use actual names of collection fields)
+    :param bind_vars: Input dictionary to hold bind variables, input yours to update the already available values
+
+    Returns
+    :aql_filters: A list of string filters arranges accordingly
+    :bind_vars: A dictionary of bind variables, updated with the values from input filters
+    """
     aql_filters = []
 
         
