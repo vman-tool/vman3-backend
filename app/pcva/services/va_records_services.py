@@ -90,7 +90,7 @@ async def get_va_assignment_service(paging: bool, page_number: int = None, page_
         raise HTTPException(status_code=500, detail=f"Failed to get assigned va: {e}")
     
 
-async def code_assigned_va_service(coded_va: CodeAssignedVARequestClass = None, current_user: User = None, db: StandardDatabase = None)
+async def code_assigned_va_service(coded_va: CodeAssignedVARequestClass = None, current_user: User = None, db: StandardDatabase = None):
         # 1. Check if va exists in the db and is already assigned
         # 2. Check all causes of dealths exists and grab their uuid values
         # 3. Confirm existence of contributory cods before saving them as comma separated values
