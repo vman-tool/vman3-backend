@@ -195,3 +195,38 @@ async def get_assigned_va(
         return await get_va_assignment_service(allowPaging, page_number, page_size, include_deleted, filters, current_user, db)    
     except:
         raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to get assigned va")
+
+@pcva_router.post("/code-va-assignment", status_code=status.HTTP_200_OK)
+async def get_assigned_va(
+    paging: Optional[str] = Query(None, alias="paging"),
+    page_number: Optional[int] = Query(1, alias="page_number"),
+    page_size: Optional[int] = Query(10, alias="page_size"),
+    include_deleted: Optional[str] = Query(None, alias="include_deleted"),
+    va_id: Optional[str] = Query(None, alias="va_id"),
+    coder1: Optional[str] = Query(None, alias="coder1"),
+    coder2: Optional[str] = Query(None, alias="coder2"),
+    current_user: User = Depends(get_current_user),
+    db: StandardDatabase = Depends(get_arangodb_session)) -> List[AssignVAResponseClass] | Dict:
+
+    try:
+        filters = {}
+        if va_id:
+            filters['vaId'] = va_id
+        if coder1: 
+            filters['coder1'] = coder1
+        if coder2:
+            filters['coder2'] = coder2
+        allowPaging = False if paging is not None and paging.lower() == 'false' else True
+        include_deleted = False if include_deleted is not None and include_deleted.lower() == 'false' else True
+
+        if coder1 and coder2:
+            filters["or_conditions"]= [
+                {"coder1": coder1},
+                {"coder2": coder2}
+            ]
+            filters.pop('coder1', None)
+            filters.pop('coder2', None)
+        
+        return await get_va_assignment_service(allowPaging, page_number, page_size, include_deleted, filters, current_user, db)    
+    except:
+        raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to get assigned va")
