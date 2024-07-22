@@ -263,22 +263,14 @@ class BaseResponseModel(BaseModel):
         """
         if 'created_by' in data and data['created_by']:
             data['created_by'] = cls.get_user(data['created_by'], db)
-        else:
-            data.pop('created_by', None)
         
         if 'updated_by' in data and data['updated_by']:
             data['updated_by'] = cls.get_user(data['updated_by'], db)
-        else:
-            data.pop('updated_by', None)
         
         if 'deleted_by' in data and data['deleted_by']:
             data['deleted_by'] = cls.get_user(data['deleted_by'], db)
-        else:
-            data.pop('deleted_by', None)
 
         for field in specific_fields:
             if field in data and data[field]:
                 data[field] = cls.get_user(data[field], db)
-            else:
-                data.pop(field, None)
         return data

@@ -74,7 +74,6 @@ async def assign_va_service(va_records: AssignVARequestClass, user,  db: Standar
 
 async def get_va_assignment_service(paging: bool, page_number: int = None, page_size: int = None, include_deleted: bool = None, filters: Dict = {}, user = None, db: StandardDatabase = None):
     assined_vas = await AssignedVA.get_many(paging, page_number, page_size, filters, include_deleted, db)
-    
     return {
         "page_number": page_number,
         "page_size": page_size,
