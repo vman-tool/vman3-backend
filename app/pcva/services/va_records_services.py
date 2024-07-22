@@ -1,3 +1,4 @@
+from typing import Dict
 from arango import ArangoError
 from arango.database import StandardDatabase
 from fastapi import HTTPException
@@ -69,4 +70,14 @@ async def assign_va_service(va_records: AssignVARequestClass, user,  db: Standar
         va_assignment_data.append(await AssignVAResponseClass.get_structured_assignment(assignment=saved_object, db = db))
     
     return va_assignment_data
+
+
+async def get_va_assignment_service(paging: bool, page_number: int = None, page_size: int = None, include_deleted: bool = None, filters: Dict = {}, user = None, db: StandardDatabase = None):
+    assined_vas = await AssignedVA.get_many(paging, page_number, page_size, filters, include_deleted, db)
+    
+    return {
+        "page_number": page_number,
+        "page_size": page_size,
+        "data": [await AssignVAResponseClass.get_structured_assignment(assignment=va, db = db) for va in assined_vas]
+    } if paging else [await AssignVAResponseClass.get_structured_assignment(assignment=va, db = db) for va in assined_vas]
     
