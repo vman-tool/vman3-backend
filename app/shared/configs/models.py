@@ -94,10 +94,11 @@ class VmanBaseModel(BaseModel):
                 page_size = page_size,
                 include_deleted = include_deleted
             )
+        print(query)
         cursor = db.aql.execute(query, bind_vars=bind_vars)
         records = list(cursor)
         if not records:
-            return None
+            return []
         return records
 
     async def update(self, updated_by: str, db: StandardDatabase):
@@ -196,24 +197,35 @@ class VmanBaseModel(BaseModel):
         query = f"FOR doc IN {collection_name}"
     
         bind_vars = {}
-        
         aql_filters = []
         
-        # Add user-defined filters
-        for field, value in filters.items():
-            aql_filters.append(f"doc.{field} == @{field}")
-            bind_vars[field] = value
+        or_conditions = filters.pop("or_conditions", [])
         
-        # Add the is_deleted filter
+        for field, value in filters.items():
+            if isinstance(value, list):
+                or_conditions.append({field: v} for v in value)
+            else:
+                aql_filters.append(f"doc.{field} == @{field}")
+                bind_vars[field] = value
+        
+        if or_conditions:
+            or_clauses = []
+            for i, condition_set in enumerate(or_conditions):
+                sub_conditions = []
+                for sub_field, sub_value in condition_set.items():
+                    bind_var_key = f"{sub_field}_or_{i}"
+                    sub_conditions.append(f"doc.{sub_field} == @{bind_var_key}")
+                    bind_vars[bind_var_key] = sub_value
+                or_clauses.append(" AND ".join(sub_conditions))
+            aql_filters.append(f"({' OR '.join(or_clauses)})")
+        
         if not include_deleted:
             aql_filters.append("doc.is_deleted == false")
         
-        # Combine all filters
         if aql_filters:
             query += " FILTER " + " AND ".join(aql_filters)
         
-        # Add pagination
-        if page_number is not None and page_size is not None:
+        if paging and page_number is not None and page_size is not None:
             offset = (page_number - 1) * page_size
             query += " LIMIT @offset, @size"
             bind_vars.update({
