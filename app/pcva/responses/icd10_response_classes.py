@@ -51,7 +51,7 @@ class ICD10CategoryResponseClass(BaseResponseModel):
         return [cls(**subject) for subject in categories_data]
     
     @classmethod
-    def get_structured_category(cls, icd10_category_uuid = None, icd10_category = None, db: StandardDatabase = None):
+    async def get_structured_category(cls, icd10_category_uuid = None, icd10_category = None, db: StandardDatabase = None):
         category_data = icd10_category
         if not category_data:
             query = f"""
@@ -63,7 +63,7 @@ class ICD10CategoryResponseClass(BaseResponseModel):
             cursor = db.aql.execute(query, bind_vars=bind_vars)
             category_data = cursor.next()
 
-        populated_category_data = populate_user_fields(category_data, db)
+        populated_category_data = await populate_user_fields(category_data, db)
         return cls(**populated_category_data)
 
 class ICD10ResponseClass(BaseResponseModel):

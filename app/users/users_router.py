@@ -1,4 +1,5 @@
 
+from http.client import HTTPException
 from arango.database import StandardDatabase
 from fastapi import APIRouter, BackgroundTasks, Depends, Header, status
 from fastapi.responses import JSONResponse
@@ -6,7 +7,7 @@ from fastapi.security import OAuth2PasswordRequestForm
 
 # from sqlalchemy.orm import Session
 from app.shared.configs.arangodb_db import ArangoDBClient, get_arangodb_session
-from app.users.decorators.user import get_current_user
+from app.users.decorators.user import get_current_user, oauth2_scheme
 from app.users.responses.user import LoginResponse, UserResponse
 from app.users.schemas.user import (EmailRequest, RegisterUserRequest,
                                     ResetRequest, VerifyUserRequest)
@@ -22,7 +23,7 @@ auth_router = APIRouter(
     prefix="/users",
     tags=["Users"],
     responses={404: {"description": "Not found"}},
-    # dependencies=[Depends(oauth2_scheme), Depends(get_current_user)]
+    dependencies=[Depends(oauth2_scheme), Depends(get_current_user)]
 )
 
 guest_router = APIRouter(
@@ -35,9 +36,8 @@ guest_router = APIRouter(
 # @created_by_decorator
 @auth_router.post("/", status_code=status.HTTP_201_CREATED, response_model=UserResponse)
 
-async def register_user(data: RegisterUserRequest, background_tasks: BackgroundTasks, db: StandardDatabase = Depends(get_arangodb_session)):
-    # data.created_by=creator['_key']
-    return await user.create_user_account(data, db, background_tasks)
+async def register_user(data: RegisterUserRequest, background_tasks: BackgroundTasks, current_user = Depends(get_current_user), db: StandardDatabase = Depends(get_arangodb_session)):
+    return await user.create_user_account(data.add_created_by(current_user['_key']), db, background_tasks)
 
 @user_router.post("/verify", status_code=status.HTTP_200_OK)
 async def verify_user_account(data: VerifyUserRequest, background_tasks: BackgroundTasks, session = Depends(get_arangodb_session)):
@@ -46,8 +46,10 @@ async def verify_user_account(data: VerifyUserRequest, background_tasks: Backgro
 
 @guest_router.post("/login", status_code=status.HTTP_200_OK, response_model=LoginResponse)
 async def user_login(data: OAuth2PasswordRequestForm = Depends(), db = Depends(get_arangodb_session)):
-   
-    return await user.get_login_token(data, db)
+    try:
+        return await user.get_login_token(data, db)
+    except Exception as e:
+        raise e
 
 @guest_router.post("/refresh", status_code=status.HTTP_200_OK, response_model=LoginResponse)
 async def refresh_token(refresh_token = Header(), session = Depends(get_arangodb_session)):
