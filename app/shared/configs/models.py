@@ -4,7 +4,9 @@ from http.client import HTTPException
 
 from arango.database import StandardDatabase
 from pydantic import BaseModel, Field
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
+from app.shared.configs.constants import db_collections
+from app.shared.utils.database_utilities import replace_object_values
 
 
 class VmanBaseModel(BaseModel):
@@ -41,7 +43,7 @@ class VmanBaseModel(BaseModel):
             if not any(index['fields'] == ['uuid'] for index in indexes):
                 collection.add_hash_index(fields=['uuid'], unique=True)
 
-    def save(self, db: StandardDatabase):
+    async def save(self, db: StandardDatabase):
         """
         This method saved the data and returns the new saved data.
         
@@ -53,10 +55,9 @@ class VmanBaseModel(BaseModel):
         doc = self.model_dump()
         # doc['_key'] = str(doc.pop('id', None))
         return collection.insert(doc, return_new=True)["new"]
-        
 
     @classmethod
-    def get(cls, doc_id: str = None, doc_uuid: str = None, db: StandardDatabase = None):
+    async def get(cls, doc_id: str = None, doc_uuid: str = None, db: StandardDatabase = None):
         cls.init_collection(db)
         collection = db.collection(cls.get_collection_name())
         if doc_id:
@@ -91,14 +92,15 @@ class VmanBaseModel(BaseModel):
                 paging = paging, 
                 page_number = page_number, 
                 page_size = page_size,
+                include_deleted = include_deleted
             )
         cursor = db.aql.execute(query, bind_vars=bind_vars)
         records = list(cursor)
         if not records:
-            raise HTTPException(status_code=404, detail=f"Records not found")
+            return None
         return records
 
-    def update(self, updated_by: str, db: StandardDatabase):
+    async def update(self, updated_by: str, db: StandardDatabase):
         """
         Update the record with the provided updated_by.
 
@@ -123,14 +125,12 @@ class VmanBaseModel(BaseModel):
             key = doc["_key"] if "_key" in doc else doc["id"]
             original_doc = collection.get({'_key': key})
         
-        for key, value in doc.items():
-            if value:
-                original_doc[key] = value
+        original_doc = await replace_object_values(doc, original_doc)
         
         return collection.update({'_key': original_doc['_key'], **original_doc}, return_new=True)["new"]
 
     @classmethod
-    def delete(cls, doc_id: str = None, doc_uuid: str = None, deleted_by: str = None, db: StandardDatabase = None):
+    async def delete(cls, doc_id: str = None, doc_uuid: str = None, deleted_by: str = None, db: StandardDatabase = None):
         """
         Delete the record with the provided id or uuid and user uuid.
 
@@ -138,6 +138,7 @@ class VmanBaseModel(BaseModel):
         :param doc_uuid: The UUID of the record to delete.
         :param deleted_by: The user UUID deleting the record.
         """
+        # TODO: Include hard deletion logics so that the method allows both soft and hard deletion
         cls.init_collection(db)
         collection = db.collection(cls.get_collection_name())
 
@@ -158,7 +159,7 @@ class VmanBaseModel(BaseModel):
         return collection.update(doc, silent=True)
 
     @classmethod
-    def restore(cls, doc_id: str = None, doc_uuid: str = None, restored_by: str= None, db: StandardDatabase = None):
+    async def restore(cls, doc_id: str = None, doc_uuid: str = None, restored_by: str= None, db: StandardDatabase = None):
         """
          Restore the record with the provided id or uuid and user uuid.
 
@@ -225,14 +226,14 @@ class VmanBaseModel(BaseModel):
         return query, bind_vars
 
 
-from app.shared.configs.constants import db_collections
-
-
 class ResponseUser(BaseModel):
     uuid: str
     name: str
 
 class BaseResponseModel(BaseModel):
+    """
+    Use this class to standardize the response of your API endpoints.
+    """
     uuid: str
     created_by: Optional[ResponseUser]
     updated_by: Optional[ResponseUser]
@@ -256,12 +257,18 @@ class BaseResponseModel(BaseModel):
         return ResponseUser(**user_data)
 
     @classmethod
-    def populate_user_fields(cls, data: Dict, db: StandardDatabase,) -> Dict:
+    def populate_user_fields(cls, data: Dict = {}, specific_fields: List[str] = None, db: StandardDatabase = None) -> Dict:
+        """
+            Use this method to populate user fields as a standard response.
+        """
         if 'created_by' in data and data['created_by']:
             data['created_by'] = cls.get_user(data['created_by'], db)
-            print(data)
         if 'updated_by' in data and data['updated_by']:
             data['updated_by'] = cls.get_user(data['updated_by'], db)
         if 'deleted_by' in data and data['deleted_by']:
             data['deleted_by'] = cls.get_user(data['deleted_by'], db)
+
+        for field in specific_fields:
+            if field in data and data[field]:
+                data[field] = cls.get_user(data[field], db)
         return data

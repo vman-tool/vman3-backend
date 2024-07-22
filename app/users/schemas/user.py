@@ -9,7 +9,10 @@ class RegisterUserRequest(BaseModel):
     name: str
     email: str
     password: str
-    created_by: Optional[str] = None
+
+    def add_created_by(self, created_by):
+        self.created_by = created_by
+        return self
     
     
 class VerifyUserRequest(BaseModel):

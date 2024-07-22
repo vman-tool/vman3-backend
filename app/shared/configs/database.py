@@ -2,9 +2,11 @@
 from decouple import config
 from motor.motor_asyncio import AsyncIOMotorClient
 
+from app.shared.configs.constants import db_collections
+
 client = AsyncIOMotorClient( config("MONGODB_URL", default="mongodb://localhost:27017/")  )
 db = client[config("DB_NAME", default="vman3") ]
-form_submissions_collection = db["form_submissions"]
+form_submissions_collection = db[db_collections.VA_TABLE]
 tracker_collection = db["download_tracker"]
 process_tracker_collection= db["download_process_tracker"]
 

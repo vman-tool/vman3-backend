@@ -35,7 +35,7 @@ class AssignedVA(VmanBaseModel):
 
 
 class CodedVA(VmanBaseModel):
-    assignedVA: AssignedVA
+    assignedVA: str
     coda: str
     codb: Optional[str]
     codc: Optional[str]

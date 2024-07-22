@@ -4,6 +4,8 @@ from arango import ArangoClient
 from arango.database import StandardDatabase
 from decouple import config
 
+from app.shared.configs.constants import db_collections
+
 
 class ArangoDBClient:
     def __init__(self):
@@ -24,7 +26,7 @@ class ArangoDBClient:
         
         # Connect to the specified database
         self.db = self.client.db(self.db_name, username=self.username, password=self.password)
-        await create_collections(self.db, ["form_submissions", "download_tracker", "download_process_tracker","users"])
+        await create_collections(self.db, [db_collections.VA_TABLE, "download_tracker", "download_process_tracker","users"])
 
     async def insert_many(self, collection_name:str, documents: list[dict]):
         collection = self.db.collection(collection_name)
