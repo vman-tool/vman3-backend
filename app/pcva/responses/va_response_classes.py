@@ -31,6 +31,32 @@ class ICD10FieldClass(BaseModel):
         icd10_data = cursor.next()
         return cls(**icd10_data)
 
+class AssignedVAFieldClass(BaseModel):
+    uuid: str
+    coder1: Optional[ResponseUser]
+    coder2: Optional[ResponseUser]
+    vaId: Any = None
+
+    @classmethod
+    async def get_structured_assignment_by_vaId(cls, vaId = None, db: StandardDatabase = None):
+        
+        assignment_data = {}
+        if vaId:
+            query = f"""
+            FOR assignment IN {db_collections.ASSIGNED_VA}
+                FILTER assignment.vaId == @vaId
+                RETURN assignment
+            """
+            bind_vars = {'vaId': vaId}
+            cursor = db.aql.execute(query, bind_vars=bind_vars)
+            assignment_data = cursor.next()
+        
+        if len(assignment_data.items()) > 0:
+            populated_code_data = await populate_user_fields(assignment_data, ['coder1', 'coder2'], db = db)
+            return cls(**populated_code_data)
+        return cls()
+
+
 class AssignVAResponseClass(BaseResponseModel):
     uuid: str
     coder1: Optional[ResponseUser]
@@ -70,13 +96,13 @@ class AssignVAResponseClass(BaseResponseModel):
             assignment_data = cursor.next()
         
         if len(assignment_data.items()) > 0:
-            populated_code_data = await populate_user_fields(assignment_data, db = db)
+            populated_code_data = await populate_user_fields(assignment_data, ['coder1', 'coder2'], db = db)
             return cls(**populated_code_data)
         return cls()
 
 class CodedVAResponseClass(BaseResponseModel):
     uuid: str
-    assignedVA: Optional[AssignVAResponseClass]
+    assignedVA: Optional[AssignedVAFieldClass]
     vaId: Any = None
     immediate_cod: Optional[ICD10FieldClass] = None
     intermediate1_cod: Optional[ICD10FieldClass] = None
@@ -86,15 +112,15 @@ class CodedVAResponseClass(BaseResponseModel):
 
     
     @classmethod
-    async def get_structured_codedVA(cls, assigned_va = None, coded_va = None, db: StandardDatabase = None):
+    async def get_structured_codedVA(cls, coded_va = None, db: StandardDatabase = None):
         coded_va_data = coded_va
         if not coded_va_data:
             query = f"""
             FOR coded_va IN {db_collections.CODED_VA}
-                FILTER coded_va.assigned_va == @assigned_va
+                FILTER coded_va.coded_va == @coded_va
                 RETURN coded_va
             """
-            bind_vars = {'assigned_va': assigned_va}
+            bind_vars = {'coded_va': coded_va}
             cursor = db.aql.execute(query, bind_vars=bind_vars)
             coded_va_data = cursor.next()
         
@@ -110,6 +136,5 @@ class CodedVAResponseClass(BaseResponseModel):
         
         populated_coded_va_data['contributory_cod'] = [await ICD10FieldClass.get_icd10(cod, db) for cod in coded_va_data["contributory_cod"]] if "contributory_cod" in coded_va_data and coded_va_data["contributory_cod"] else [ICD10FieldClass()]
         
-        populated_coded_va_data['assignedVA'] = await AssignVAResponseClass.get_structured_assignment_by_vaId(coded_va_data['assigned_va'])
-        
+        populated_coded_va_data['assignedVA'] = await AssignedVAFieldClass.get_structured_assignment_by_vaId(coded_va_data['assigned_va'], db)
         return cls(**populated_coded_va_data)
