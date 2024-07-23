@@ -3,11 +3,11 @@ from arango import ArangoError
 from arango.database import StandardDatabase
 from fastapi import HTTPException
 
-from app.pcva.models.models import AssignedVA
+from app.pcva.models.models import ICD10, AssignedVA, CodedVA
 from app.pcva.requests.va_request_classes import AssignVARequestClass, CodeAssignedVARequestClass
 from app.pcva.responses.va_response_classes import AssignVAResponseClass
 from app.shared.configs.constants import db_collections
-from app.shared.utils.database_utilities import record_exists
+from app.shared.utils.database_utilities import record_exists, replace_object_values
 from app.users.models.user import User
 
 async def fetch_va_records(paging: bool = True,  page_number: int = 1, page_size: int = 10, db: StandardDatabase = None):
@@ -91,11 +91,79 @@ async def get_va_assignment_service(paging: bool, page_number: int = None, page_
     
 
 async def code_assigned_va_service(coded_va: CodeAssignedVARequestClass = None, current_user: User = None, db: StandardDatabase = None):
-        # 1. Check if va exists in the db and is already assigned
-        # 2. Check all causes of dealths exists and grab their uuid values
-        # 3. Confirm existence of contributory cods before saving them as comma separated values
-        # 4. Make sure clinical notes are written before saving the value
+        try:
+            # 1. Check if va exists in the db and is already assigned
+            is_va_existing = await record_exists(db_collections.VA_TABLE, custom_fields = { "__id": coded_va.assigned_va}, db = db)
+            is_va_assigned = await record_exists(db_collections.ASSIGNED_VA, custom_fields = { "vaId": coded_va.assigned_va}, db = db)
+            if not is_va_existing:
+                raise HTTPException(status_code=404, detail="VA does not exist.")
+            if not is_va_assigned:
+                raise HTTPException(status_code=400, detail="VA is not assigned.")
+            if not coded_va.clinical_notes:
+                raise HTTPException(status_code=400, detail="Clinical Notes must be written.")
+            
+            # 2. Check all causes of dealths exists and grab their uuid values
+            in_conditions = {
+                "uuid": []
+            }
+            if coded_va.immediate_cod:
+                in_conditions["uuid"].append(coded_va.immediate_cod)
+            if coded_va.intermediate1_cod:
+                in_conditions["uuid"].append(coded_va.intermediate1_cod)
+            if coded_va.intermediate2_cod:
+                in_conditions["uuid"].append(coded_va.intermediate2_cod)
+            if coded_va.underlying_cod:
+                in_conditions["uuid"].append(coded_va.underlying_cod)
 
-        return coded_va
-    
+            for contributory in coded_va.contributory_cod:
+                if contributory:
+                    in_conditions["uuid"].append(contributory)
+
+            in_conditions = {field: values for field, values in in_conditions.items() if values}
+            
+            icd10_query_filters = {
+                "in_conditions": in_conditions
+            }
+                
+            # 3. Confirm existence of contributory cods before saving them as comma separated values
+            icd10_codes = []
+            if in_conditions["uuid"]:
+                icd10_codes = await ICD10.get_many(paging = False, filters=icd10_query_filters, db = db)
+
+            # 4. Confirm VA Assignment for this user
+            is_user_assigned = await record_exists(
+                collection_name = db_collections.ASSIGNED_VA, 
+                custom_fields= {
+                    "vaId": coded_va.assigned_va,
+                    "or_conditions": [
+                        {"coder1": current_user.uuid},
+                        {"coder2": current_user.uuid}
+                            
+                    ]
+                }, 
+                db = db
+            )
+            if is_user_assigned:
+                # 5. Check if the record needs to be updated or inserted
+                existing_coded_va = await CodedVA.get_many(
+                    paging = False, 
+                    filters = {
+                        "assigned_va": coded_va.assigned_va,
+                        "created_by": current_user.uuid
+                    },
+                    db = db
+                )
+
+                if existing_coded_va and len(existing_coded_va) == 1:
+                    updated_va = replace_object_values(coded_va.model_dump(), existing_coded_va[0], force = True)
+                    saved_coded_va = await CodedVA(**updated_va).update(current_user.uuid, db)
+                else:
+                    coded_va_object = coded_va.model_dump()
+                    coded_va_object["created_by"] = current_user.uuid
+                    saved_coded_va = await CodedVA(**coded_va_object).save(db)
+                return saved_coded_va
+            else:
+                raise HTTPException(status_code=400, detail="This VA was not assigned to this user")
+        except Exception as e:
+            raise e    
     
