@@ -87,13 +87,13 @@ class VmanBaseModel(BaseModel):
         cls.init_collection(db)
         collection = db.collection(cls.get_collection_name())
         query, bind_vars = cls.build_query(
-                collection_name = collection.name, 
-                filters = filters,
-                paging = paging, 
-                page_number = page_number, 
-                page_size = page_size,
-                include_deleted = include_deleted
-            )
+            collection_name = collection.name, 
+            filters = filters,
+            paging = paging, 
+            page_number = page_number, 
+            page_size = page_size,
+            include_deleted = include_deleted
+        )
         cursor = db.aql.execute(query, bind_vars=bind_vars)
         records = list(cursor)
         if not records:

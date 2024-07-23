@@ -13,7 +13,7 @@ async def record_exists(collection_name: str, uuid: str = None, id: str = None, 
     bind_vars = {}
     aql_filters = []
     
-    if custom_fields or (uuid and id):
+    if custom_fields:
         
         query = f"""
         RETURN LENGTH(
@@ -24,15 +24,16 @@ async def record_exists(collection_name: str, uuid: str = None, id: str = None, 
         if id:
             custom_fields['_key'] = id
         
-        aql_filters, bind_vars = add_query_filters(query, custom_fields, bind_vars = bind_vars)
-        
+        aql_filters, bind_vars = add_query_filters(custom_fields, bind_vars=bind_vars)
+
         if aql_filters:
             query += " FILTER " + " AND ".join(aql_filters)
         
         query += """
             RETURN doc
         ) > 0"""
-    if id and not custom_fields:
+
+    elif id and not custom_fields:
         query = f"""
         RETURN LENGTH(
             FOR doc IN {collection_name}
@@ -41,7 +42,8 @@ async def record_exists(collection_name: str, uuid: str = None, id: str = None, 
         ) > 0
         """
         bind_vars = {'id': id}
-    if uuid and not custom_fields:
+
+    elif uuid and not custom_fields:
         query = f"""
         RETURN LENGTH(
             FOR doc IN {collection_name}
@@ -55,17 +57,20 @@ async def record_exists(collection_name: str, uuid: str = None, id: str = None, 
     exists = cursor.next()
     return exists
 
-async def replace_object_values(new_dict: Dict, old_dict: Dict):
+async def replace_object_values(new_dict: Dict, old_dict: Dict, force: bool = False):
     """
     Use this method to replace the values from old_dict with new_dict
 
-    :new_dict : Dictionary with values to replace
-    :old_dict : Dictionary with values to be replaced
+    :param new_dict : Dictionary with values to replace
+    :param old_dict : Dictionary with values to be replaced
+    :param force: This will replace all keys available in new dictionary without checking for null value
     :Returns the old dictionary with new values
     """
     try:
         for key, value in new_dict.items():
-                if value:
+                if value and not force:
+                    old_dict[key] = value
+                elif force:
                     old_dict[key] = value
 
         return old_dict
@@ -73,21 +78,24 @@ async def replace_object_values(new_dict: Dict, old_dict: Dict):
         print(f"Error occurred while replacing values: {str(e)}")
         return None
     
-def add_query_filters(filters: Dict = {}, bind_vars: Dict = {}):
+def add_query_filters(filters: Dict = None, bind_vars: Dict = None):
     """
     This function creates a string of query filters for ArangoDB as well as bind variables
 
     :param filters: Input dictionary of fields and their values (Use actual names of collection fields)
     :param bind_vars: Input dictionary to hold bind variables, input yours to update the already available values
 
+    include array of object inside or_conditions key in filters object to incorporate OR filter
+    include array of object inside in_conditions key in filters object to incorporate IN filter
+
     Returns
     :aql_filters: A list of string filters arranges accordingly
     :bind_vars: A dictionary of bind variables, updated with the values from input filters
     """
     aql_filters = []
-
         
     or_conditions = filters.pop("or_conditions", [])
+    in_conditions = filters.pop("in_conditions", [])
     
     for field, value in filters.items():
         if isinstance(value, list):
@@ -95,7 +103,7 @@ def add_query_filters(filters: Dict = {}, bind_vars: Dict = {}):
         else:
             aql_filters.append(f"doc.{field} == @{field}")
             bind_vars[field] = value
-    
+
     if or_conditions:
         or_clauses = []
         for i, condition_set in enumerate(or_conditions):
@@ -107,5 +115,12 @@ def add_query_filters(filters: Dict = {}, bind_vars: Dict = {}):
             or_clauses.append(" AND ".join(sub_conditions))
         aql_filters.append(f"({' OR '.join(or_clauses)})")
     
+    if in_conditions:
+        in_clauses = []
+        for field, values in in_conditions.items():
+            bind_var_key = f"{field}_in_values"
+            in_clauses.append(f"doc.{field} IN @{bind_var_key}")
+            bind_vars[bind_var_key] = values
+        aql_filters.append(" AND ".join(in_clauses))
     
     return aql_filters, bind_vars

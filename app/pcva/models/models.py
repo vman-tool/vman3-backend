@@ -4,7 +4,7 @@ from app.shared.configs.models import VmanBaseModel
 from app.users.models.user import User
 
 from datetime import datetime
-from typing import Optional
+from typing import List, Optional
 from pydantic import Field
 
 
@@ -37,10 +37,10 @@ class AssignedVA(VmanBaseModel):
 class CodedVA(VmanBaseModel):
     assigned_va: str
     immediate_cod: str
-    intermediate_cod: Optional[str]
-    intermediate_cod: Optional[str]
+    intermediate1_cod: Optional[str]
+    intermediate2_cod: Optional[str]
     underlying_cod: Optional[str]
-    contributory_cod: Optional[str]
+    contributory_cod: Optional[List[str]]
     clinical_notes: Optional[str]
     datetime: Optional[str] = Field(default_factory=lambda: datetime.now().isoformat())
 
