@@ -6,7 +6,7 @@ from arango.database import StandardDatabase
 from pydantic import BaseModel, Field
 from typing import Any, Dict, List, Optional
 from app.shared.configs.constants import db_collections
-from app.shared.utils.database_utilities import replace_object_values
+from app.shared.utils.database_utilities import add_query_filters, replace_object_values
 
 
 class VmanBaseModel(BaseModel):
@@ -87,17 +87,17 @@ class VmanBaseModel(BaseModel):
         cls.init_collection(db)
         collection = db.collection(cls.get_collection_name())
         query, bind_vars = cls.build_query(
-                collection_name = collection.name, 
-                filters = filters,
-                paging = paging, 
-                page_number = page_number, 
-                page_size = page_size,
-                include_deleted = include_deleted
-            )
+            collection_name = collection.name, 
+            filters = filters,
+            paging = paging, 
+            page_number = page_number, 
+            page_size = page_size,
+            include_deleted = include_deleted
+        )
         cursor = db.aql.execute(query, bind_vars=bind_vars)
         records = list(cursor)
         if not records:
-            return None
+            return []
         return records
 
     async def update(self, updated_by: str, db: StandardDatabase):
@@ -192,28 +192,55 @@ class VmanBaseModel(BaseModel):
     
     @classmethod
     def build_query(cls, collection_name: str, filters: Dict[str, Any] = {}, paging: bool = None, page_number: Optional[int] = None, page_size: Optional[int] = None, include_deleted: bool = None):
+        """
+         Build a query from filters object and pagination values.
+
+        :param collection_name: The ID of the deleted record to restore.
+        :param paging: Boolean value to allow paging.
+        :param page_number: Integer value for page number.
+        :param page_size: Integer value for number of records to be returned in a page.
+        :param include_deleted: Boolean value to include or exclude soft deleted objects.
+        :param filters: Dictionary to build conditional query. Include or_conditions objects with key, value pairs. (keys being field names).
         
+        :return query: A string of the built query
+        :return bind_vars: A dictionary of bind variables for the query.
+        """
         query = f"FOR doc IN {collection_name}"
     
         bind_vars = {}
-        
         aql_filters = []
         
-        # Add user-defined filters
-        for field, value in filters.items():
-            aql_filters.append(f"doc.{field} == @{field}")
-            bind_vars[field] = value
+        #or_conditions = filters.pop("or_conditions", [])
+        #
+        # for field, value in filters.items():
+        #     if isinstance(value, list):
+        #         or_conditions.append({field: v} for v in value)
+        #     else:
+        #         aql_filters.append(f"doc.{field} == @{field}")
+        #         bind_vars[field] = value
         
-        # Add the is_deleted filter
+        # if or_conditions:
+        #     or_clauses = []
+        #     for i, condition_set in enumerate(or_conditions):
+        #         sub_conditions = []
+        #         for sub_field, sub_value in condition_set.items():
+        #             bind_var_key = f"{sub_field}_or_{i}"
+        #             sub_conditions.append(f"doc.{sub_field} == @{bind_var_key}")
+        #             bind_vars[bind_var_key] = sub_value
+        #         or_clauses.append(" AND ".join(sub_conditions))
+        #     aql_filters.append(f"({' OR '.join(or_clauses)})")
+
+        aql_filters, vars = add_query_filters(filters, bind_vars)
+
+        bind_vars.update(vars)
+        
         if not include_deleted:
             aql_filters.append("doc.is_deleted == false")
         
-        # Combine all filters
         if aql_filters:
             query += " FILTER " + " AND ".join(aql_filters)
         
-        # Add pagination
-        if page_number is not None and page_size is not None:
+        if paging and page_number is not None and page_size is not None:
             offset = (page_number - 1) * page_size
             query += " LIMIT @offset, @size"
             bind_vars.update({
@@ -263,8 +290,10 @@ class BaseResponseModel(BaseModel):
         """
         if 'created_by' in data and data['created_by']:
             data['created_by'] = cls.get_user(data['created_by'], db)
+        
         if 'updated_by' in data and data['updated_by']:
             data['updated_by'] = cls.get_user(data['updated_by'], db)
+        
         if 'deleted_by' in data and data['deleted_by']:
             data['deleted_by'] = cls.get_user(data['deleted_by'], db)
 
