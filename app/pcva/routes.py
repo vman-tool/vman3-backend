@@ -217,7 +217,9 @@ async def code_assigned_va(
     current_user: User = Depends(get_current_user),
     db: StandardDatabase = Depends(get_arangodb_session)) -> CodedVAResponseClass | Dict:
 
-    try:
-        return  await code_assigned_va_service(coded_va, current_user = User(**current_user), db = db)
-    except Exception as e:
-        raise e
+    print(coded_va)
+
+    return  await code_assigned_va_service(coded_va, current_user = User(**current_user), db = db)
+    # try:
+    # except Exception as e:
+    #     raise e

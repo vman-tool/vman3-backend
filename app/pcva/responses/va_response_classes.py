@@ -16,20 +16,22 @@ class ICD10FieldClass(BaseModel):
 
     @classmethod
     async def get_icd10(cls, icd10_uuid, db: StandardDatabase = None):
-        
-        query = f"""
-        FOR code IN {db_collections.ICD10}
-            FILTER code.uuid == @icd10_uuid
-            RETURN {{
-                uuid: code.uuid,
-                code: code.code,
-                name: code.name,
-            }}
-        """
-        bind_vars = {'icd10_uuid': icd10_uuid}
-        cursor = db.aql.execute(query, bind_vars=bind_vars)
-        icd10_data = cursor.next()
-        return cls(**icd10_data)
+        try:
+            query = f"""
+            FOR code IN {db_collections.ICD10}
+                FILTER code.uuid == @icd10_uuid
+                RETURN {{
+                    uuid: code.uuid,
+                    code: code.code,
+                    name: code.name,
+                }}
+            """
+            bind_vars = {'icd10_uuid': icd10_uuid}
+            cursor = db.aql.execute(query, bind_vars=bind_vars)
+            icd10_data = cursor.next()
+            return cls(**icd10_data)
+        except Exception as e:
+            return None
 
 class AssignedVAFieldClass(BaseModel):
     uuid: str
@@ -126,15 +128,16 @@ class CodedVAResponseClass(BaseResponseModel):
         
         populated_coded_va_data = await populate_user_fields(coded_va_data, db = db)
 
-        populated_coded_va_data['immediate_cod'] = await ICD10FieldClass.get_icd10(coded_va_data["immediate_cod"], db) if "immediate_cod" in coded_va_data else ICD10FieldClass()
+        populated_coded_va_data['immediate_cod'] = await ICD10FieldClass.get_icd10(coded_va_data.get("immediate_cod", None), db)
         
-        populated_coded_va_data['intermediate1_cod'] = await ICD10FieldClass.get_icd10(coded_va_data["intermediate1_cod"], db) if "intermediate1_cod" in coded_va_data else ICD10FieldClass()
+        populated_coded_va_data['intermediate1_cod'] = await ICD10FieldClass.get_icd10(coded_va_data.get("intermediate1_cod", None), db)
         
-        populated_coded_va_data['intermediate2_cod'] = await ICD10FieldClass.get_icd10(coded_va_data["intermediate2_cod"], db) if "intermediate2_cod" in coded_va_data else ICD10FieldClass()
+        populated_coded_va_data['intermediate2_cod'] = await ICD10FieldClass.get_icd10(coded_va_data.get("intermediate2_cod", None), db)
         
-        populated_coded_va_data['underlying_cod'] = await ICD10FieldClass.get_icd10(coded_va_data["underlying_cod"], db) if "underlying_cod" in coded_va_data else ICD10FieldClass()
+        populated_coded_va_data['underlying_cod'] = await ICD10FieldClass.get_icd10(coded_va_data.get("underlying_cod", None), db)
         
-        populated_coded_va_data['contributory_cod'] = [await ICD10FieldClass.get_icd10(cod, db) for cod in coded_va_data["contributory_cod"]] if "contributory_cod" in coded_va_data and coded_va_data["contributory_cod"] else [ICD10FieldClass()]
+        populated_coded_va_data['contributory_cod'] = [await ICD10FieldClass.get_icd10(cod, db) for cod in coded_va_data.get("contributory_cod", []) 
+        if cod]
         
         populated_coded_va_data['assignedVA'] = await AssignedVAFieldClass.get_structured_assignment_by_vaId(coded_va_data['assigned_va'], db)
         return cls(**populated_coded_va_data)

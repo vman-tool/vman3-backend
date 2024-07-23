@@ -9,9 +9,9 @@ class AssignVARequestClass(BaseModel):
 
 class CodeAssignedVARequestClass(BaseModel):
     assigned_va: str
-    immediate_cod: Optional[str]
-    intermediate1_cod: Optional[str]
-    intermediate2_cod: Optional[str]
-    underlying_cod: Optional[str]
-    contributory_cod: Optional[List[str]]
+    immediate_cod: Optional[str] = None
+    intermediate1_cod: Optional[str] = None
+    intermediate2_cod: Optional[str] = None
+    underlying_cod: Optional[str] = None
+    contributory_cod: Optional[List[str]] = None
     clinical_notes: str
