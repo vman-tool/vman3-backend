@@ -125,7 +125,7 @@ class VmanBaseModel(BaseModel):
             key = doc["_key"] if "_key" in doc else doc["id"]
             original_doc = collection.get({'_key': key})
         
-        original_doc = await replace_object_values(doc, original_doc)
+        original_doc = replace_object_values(doc, original_doc)
         
         return collection.update({'_key': original_doc['_key'], **original_doc}, return_new=True)["new"]
 

@@ -57,7 +57,7 @@ async def record_exists(collection_name: str, uuid: str = None, id: str = None, 
     exists = cursor.next()
     return exists
 
-async def replace_object_values(new_dict: Dict, old_dict: Dict, force: bool = False):
+def replace_object_values(new_dict: Dict, old_dict: Dict, force: bool = False):
     """
     Use this method to replace the values from old_dict with new_dict
 
