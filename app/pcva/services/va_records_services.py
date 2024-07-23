@@ -5,7 +5,7 @@ from fastapi import HTTPException
 
 from app.pcva.models.models import ICD10, AssignedVA, CodedVA
 from app.pcva.requests.va_request_classes import AssignVARequestClass, CodeAssignedVARequestClass
-from app.pcva.responses.va_response_classes import AssignVAResponseClass
+from app.pcva.responses.va_response_classes import AssignVAResponseClass, CodedVAResponseClass
 from app.shared.configs.constants import db_collections
 from app.shared.utils.database_utilities import record_exists, replace_object_values
 from app.users.models.user import User
@@ -161,9 +161,24 @@ async def code_assigned_va_service(coded_va: CodeAssignedVARequestClass = None, 
                     coded_va_object = coded_va.model_dump()
                     coded_va_object["created_by"] = current_user.uuid
                     saved_coded_va = await CodedVA(**coded_va_object).save(db)
-                return saved_coded_va
+                return await CodedVAResponseClass.get_structured_codedVA(coded_va = saved_coded_va, db = db)
             else:
                 raise HTTPException(status_code=400, detail="This VA was not assigned to this user")
         except Exception as e:
-            raise e    
+            raise e 
+
+async def get_coded_va_service(paging: bool, page_number: int = None, page_size: int = None, include_deleted: bool = None, filters: Dict = {}, user = None, db: StandardDatabase = None):
+    
+    coded_vas = await CodedVA.get_many(paging, page_number, page_size, filters, include_deleted, db)
+    try:
+        
+        return {
+            "page_number": page_number,
+            "page_size": page_size,
+            "data": [await CodedVAResponseClass.get_structured_codedVA(coded_va=va, db = db) for va in coded_vas]
+        } if paging else [await CodedVAResponseClass.get_structured_codedVA(coded_va=va, db = db) for va in coded_vas]
+    
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get coded va: {e}")
+     
     

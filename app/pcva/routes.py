@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, status
 from app.pcva.requests.icd10_request_classes import ICD10CategoryRequestClass, ICD10CategoryUpdateClass, ICD10CreateRequestClass, ICD10UpdateRequestClass
 from app.pcva.requests.va_request_classes import AssignVARequestClass, CodeAssignedVARequestClass
 from app.pcva.responses.icd10_response_classes import ICD10CategoryResponseClass, ICD10ResponseClass
-from app.pcva.responses.va_response_classes import AssignVAResponseClass
+from app.pcva.responses.va_response_classes import AssignVAResponseClass, CodedVAResponseClass
 from app.pcva.services.icd10_services import (
     create_icd10_categories_service,
     get_icd10_categories_service, 
@@ -15,7 +15,7 @@ from app.pcva.services.icd10_services import (
     update_icd10_categories_service, 
     update_icd10_codes
 )
-from app.pcva.services.va_records_services import assign_va_service, code_assigned_va_service, fetch_va_records, get_va_assignment_service
+from app.pcva.services.va_records_services import assign_va_service, code_assigned_va_service, fetch_va_records, get_coded_va_service, get_va_assignment_service
 from app.shared.configs.arangodb_db import get_arangodb_session
 from app.users.decorators.user import get_current_user, oauth2_scheme
 from app.users.models.user import User
@@ -196,13 +196,28 @@ async def get_assigned_va(
     except:
         raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to get assigned va")
 
+@pcva_router.get("/get-coded-va", status_code=status.HTTP_200_OK)
+async def get_coded_va(
+    current_user: User = Depends(get_current_user),
+    db: StandardDatabase = Depends(get_arangodb_session)) -> List[CodedVAResponseClass] | Dict:
+
+    try:
+        return  await get_coded_va_service(
+            paging=True, 
+            page_number=1,
+            page_size=10,
+            user = User(**current_user), 
+            db = db)
+    except Exception as e:
+        raise e
+
 @pcva_router.post("/code-assigned-va", status_code=status.HTTP_200_OK)
 async def code_assigned_va(
     coded_va: CodeAssignedVARequestClass,
     current_user: User = Depends(get_current_user),
-    db: StandardDatabase = Depends(get_arangodb_session)):
+    db: StandardDatabase = Depends(get_arangodb_session)) -> CodedVAResponseClass | Dict:
 
-    return  await code_assigned_va_service(coded_va, current_user = User(**current_user), db = db)
-    # try:
-    # except Exception as e:
-    #     raise e
+    try:
+        return  await code_assigned_va_service(coded_va, current_user = User(**current_user), db = db)
+    except Exception as e:
+        raise e
