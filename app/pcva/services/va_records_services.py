@@ -42,37 +42,48 @@ async def fetch_va_records(paging: bool = True,  page_number: int = 1, page_size
         raise HTTPException(status_code=500, detail=f"Failed to fetch data: {e}")
     
 
-async def assign_va_service(va_records: AssignVARequestClass, user,  db: StandardDatabase = None):
+async def assign_va_service(va_records: AssignVARequestClass, user: User,  db: StandardDatabase = None):
     try:
         vaIds  = va_records.vaIds
         va_assignment_data = []
         for vaId in vaIds:
-            va_data = {
-                "vaId": vaId,
-                "coder1": va_records.coder1,
-                "coder2": va_records.coder2,
-                "created_by": user["uuid"]
-            }
+            if va_records.new_coder:
+                va_data = {
+                    "vaId": vaId,
+                    "coder": va_records.new_coder
+                }
+            else:
+                va_data = {
+                    "vaId": vaId,
+                    "coder": va_records.coder,
+                    "created_by": user.uuid
+                }
             va_object = AssignedVA(**va_data)
             is_valid_va = await record_exists(db_collections.VA_TABLE, custom_fields={"__id": vaId}, db = db)
             if not is_valid_va:
                 continue
             existing_va_assignment_data = await AssignedVA.get_many(
                 filters= {
-                    "vaId": vaId
+                    "vaId": vaId,
+                    "coder": va_records.coder
                 },
                 db = db
             )
             if existing_va_assignment_data:
-                va_object.uuid = existing_va_assignment_data[0]["uuid"]
-                saved_object = await va_object.update(user["uuid"], db = db)
+                if len(existing_va_assignment_data) > 1:
+                    raise HTTPException(status_code=400, detail=f"Multiple assignments found for this VA with this coder")
+                if va_records.new_coder:
+                    va_object.uuid = existing_va_assignment_data[0]["uuid"]
+                    saved_object = await va_object.update(user.uuid, db = db)
+                else:
+                    raise HTTPException(status_code=400, detail=f"Include new coder Id to update existing assignment.")
             else:
                 saved_object = await va_object.save(db = db)
             va_assignment_data.append(await AssignVAResponseClass.get_structured_assignment(assignment=saved_object, db = db))
         
         return va_assignment_data
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to assign va: {e}")
+        raise e
 
 
 async def get_va_assignment_service(paging: bool, page_number: int = None, page_size: int = None, include_deleted: bool = None, filters: Dict = {}, user = None, db: StandardDatabase = None):

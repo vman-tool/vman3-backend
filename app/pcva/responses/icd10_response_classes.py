@@ -104,7 +104,7 @@ class ICD10ResponseClass(BaseResponseModel):
             bind_vars = {'icd10_code_uuid': icd10_code_uuid}
             cursor = db.aql.execute(query, bind_vars=bind_vars)
             code_data = cursor.next()
-        populated_code_data = await populate_user_fields(code_data, db)
+        populated_code_data = await populate_user_fields(code_data, db=db)
         # print("With User Data: ", populated_code_data)
         populated_code_data['category'] = ICD10CategoryFieldClass.get_icd10_category(populated_code_data['category'], db)
         return cls(**populated_code_data)
