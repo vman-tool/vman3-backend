@@ -1,9 +1,9 @@
 from typing import List
 from app.shared.configs.constants import db_collections
-from app.shared.configs.models import VmanBaseModel
+from app.shared.configs.models import VManBaseModel
 
 
-class Role(VmanBaseModel):
+class Role(VManBaseModel):
     name: str
     privileges: List[str]
 

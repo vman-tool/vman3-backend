@@ -9,7 +9,7 @@ from app.shared.configs.constants import db_collections
 from app.shared.utils.database_utilities import add_query_filters, replace_object_values
 
 
-class VmanBaseModel(BaseModel):
+class VManBaseModel(BaseModel):
     """
     This class abstracts the CRUD operations for the Vman Models that are used to interract with the database.
     """

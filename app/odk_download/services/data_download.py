@@ -57,6 +57,13 @@ async def fetch_odk_data_with_async(
                         raise HTTPException(status_code=500, detail=data)
                     df = pd.json_normalize(data['value'], sep='/')
                     df.columns = [col.split('/')[-1] for col in df.columns]
+                    
+                    # df[df.columns].to_csv('columns_before.csv', index=False)
+                    df.columns = df.columns.str.lower()
+                    # print(df.columns[df.columns.duplicated()])
+                    # df[df.columns].to_csv('columns_after.csv', index=False)
+                    df = df.dropna(axis=1, how='all')
+                    
                     return loads(df.to_json(orient='records'))
                 except Exception as e:
                     raise HTTPException(status_code=500, detail=str(e))

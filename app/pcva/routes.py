@@ -149,18 +149,6 @@ async def update_icd10(
     except:
         raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed update icd10 codes")
 
-
-@pcva_router.post("/assign-va", status_code=status.HTTP_201_CREATED)
-async def assign_va(
-    vaAssignment: AssignVARequestClass,
-    user: User = Depends(get_current_user),
-    db: StandardDatabase = Depends(get_arangodb_session)):
-
-    try:
-        return await assign_va_service(vaAssignment, user, db)    
-    except:
-        raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to assign va")
-
 @pcva_router.get("/va-assignments", status_code=status.HTTP_200_OK)
 async def get_assigned_va(
     paging: Optional[str] = Query(None, alias="paging"),
@@ -195,6 +183,18 @@ async def get_assigned_va(
         return await get_va_assignment_service(allowPaging, page_number, page_size, include_deleted, filters, current_user, db)    
     except:
         raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to get assigned va")
+
+
+@pcva_router.post("/assign-va", status_code=status.HTTP_201_CREATED)
+async def assign_va(
+    vaAssignment: AssignVARequestClass,
+    user: User = Depends(get_current_user),
+    db: StandardDatabase = Depends(get_arangodb_session)):
+
+    try:
+        return await assign_va_service(vaAssignment, user, db)    
+    except:
+        raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to assign va")
 
 @pcva_router.get("/get-coded-va", status_code=status.HTTP_200_OK)
 async def get_coded_va(
