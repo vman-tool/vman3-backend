@@ -35,21 +35,23 @@ class ICD10FieldClass(BaseModel):
 
 class AssignedVAFieldClass(BaseModel):
     uuid: str
-    coder1: Optional[ResponseUser]
-    coder2: Optional[ResponseUser]
+    coder: Optional[ResponseUser]
     vaId: Any = None
 
     @classmethod
-    async def get_structured_assignment_by_vaId(cls, vaId = None, db: StandardDatabase = None):
+    async def get_structured_assignment_by_vaId(cls, vaId = None, coder = None, db: StandardDatabase = None):
         
         assignment_data = {}
         if vaId:
             query = f"""
             FOR assignment IN {db_collections.ASSIGNED_VA}
-                FILTER assignment.vaId == @vaId
+                FILTER assignment.vaId == @vaId AND assignment.coder == @coder
                 RETURN assignment
             """
-            bind_vars = {'vaId': vaId}
+            bind_vars = {
+                'vaId': vaId,
+                'coder': coder
+            }
             cursor = db.aql.execute(query, bind_vars=bind_vars)
             assignment_data = cursor.next()
         
@@ -61,8 +63,7 @@ class AssignedVAFieldClass(BaseModel):
 
 class AssignVAResponseClass(BaseResponseModel):
     uuid: str
-    coder1: Optional[ResponseUser]
-    coder2: Optional[ResponseUser]
+    coder: Optional[ResponseUser]
     vaId: Any = None
 
     
@@ -105,7 +106,6 @@ class AssignVAResponseClass(BaseResponseModel):
 class CodedVAResponseClass(BaseResponseModel):
     uuid: str
     assignedVA: Optional[AssignedVAFieldClass]
-    vaId: Any = None
     immediate_cod: Optional[ICD10FieldClass] = None
     intermediate1_cod: Optional[ICD10FieldClass] = None
     intermediate2_cod: Optional[ICD10FieldClass] = None
@@ -141,5 +141,5 @@ class CodedVAResponseClass(BaseResponseModel):
         populated_coded_va_data['contributory_cod'] = [await ICD10FieldClass.get_icd10(cod, db) for cod in coded_va_data.get("contributory_cod", []) 
         if cod]
         
-        populated_coded_va_data['assignedVA'] = await AssignedVAFieldClass.get_structured_assignment_by_vaId(coded_va_data['assigned_va'], db)
+        populated_coded_va_data['assignedVA'] = await AssignedVAFieldClass.get_structured_assignment_by_vaId(coded_va_data['assigned_va'],coder = populated_coded_va_data.get('created_by').uuid, db = db)
         return cls(**populated_coded_va_data)

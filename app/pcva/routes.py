@@ -117,8 +117,8 @@ async def get_icd10(
             page_size = page_size, 
             include_deleted = include_deleted, 
             db = db)
-    except:
-        raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed get icd10 codes")
+    except Exception as e:
+        raise e
 
 @pcva_router.post(
         path="/create-icd10", 
@@ -156,8 +156,7 @@ async def get_assigned_va(
     page_size: Optional[int] = Query(10, alias="page_size"),
     include_deleted: Optional[str] = Query(None, alias="include_deleted"),
     va_id: Optional[str] = Query(None, alias="va_id"),
-    coder1: Optional[str] = Query(None, alias="coder1"),
-    coder2: Optional[str] = Query(None, alias="coder2"),
+    coder: Optional[str] = Query(None, alias="coder"),
     current_user: User = Depends(get_current_user),
     db: StandardDatabase = Depends(get_arangodb_session)) -> List[AssignVAResponseClass] | Dict:
 
@@ -165,36 +164,29 @@ async def get_assigned_va(
         filters = {}
         if va_id:
             filters['vaId'] = va_id
-        if coder1: 
-            filters['coder1'] = coder1
-        if coder2:
-            filters['coder2'] = coder2
+        if coder: 
+            filters['coder'] = coder
         allowPaging = False if paging is not None and paging.lower() == 'false' else True
         include_deleted = False if include_deleted is not None and include_deleted.lower() == 'false' else True
-
-        if coder1 and coder2:
-            filters["or_conditions"]= [
-                {"coder1": coder1},
-                {"coder2": coder2}
-            ]
-            filters.pop('coder1', None)
-            filters.pop('coder2', None)
         
         return await get_va_assignment_service(allowPaging, page_number, page_size, include_deleted, filters, current_user, db)    
     except:
         raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to get assigned va")
 
 
-@pcva_router.post("/assign-va", status_code=status.HTTP_201_CREATED)
+@pcva_router.post(
+        "/assign-va", 
+        status_code=status.HTTP_201_CREATED, 
+        description="vaIds should be array of vaId, new_coder (user uuid) must be there and if you're not updating, then leave it empty. coder must have a user uuid")
 async def assign_va(
     vaAssignment: AssignVARequestClass,
     user: User = Depends(get_current_user),
     db: StandardDatabase = Depends(get_arangodb_session)):
 
     try:
-        return await assign_va_service(vaAssignment, user, db)    
-    except:
-        raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to assign va")
+        return await assign_va_service(vaAssignment, User(**user), db)    
+    except Exception as e:
+        raise e
 
 @pcva_router.get("/get-coded-va", status_code=status.HTTP_200_OK)
 async def get_coded_va(
@@ -216,10 +208,7 @@ async def code_assigned_va(
     coded_va: CodeAssignedVARequestClass,
     current_user: User = Depends(get_current_user),
     db: StandardDatabase = Depends(get_arangodb_session)) -> CodedVAResponseClass | Dict:
-
-    print(coded_va)
-
-    return  await code_assigned_va_service(coded_va, current_user = User(**current_user), db = db)
-    # try:
-    # except Exception as e:
-    #     raise e
+    try:
+        return  await code_assigned_va_service(coded_va, current_user = User(**current_user), db = db)
+    except Exception as e:
+        raise e

@@ -5,6 +5,7 @@ from pydantic import BaseModel
 class AssignVARequestClass(BaseModel):
     vaIds: List[str]
     coder: Optional[str]
+    new_coder: Optional[str]
 
 class CodeAssignedVARequestClass(BaseModel):
     assigned_va: str
