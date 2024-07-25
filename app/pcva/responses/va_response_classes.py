@@ -54,7 +54,7 @@ class AssignedVAFieldClass(BaseModel):
             assignment_data = cursor.next()
         
         if len(assignment_data.items()) > 0:
-            populated_code_data = await populate_user_fields(assignment_data, ['coder1', 'coder2'], db = db)
+            populated_code_data = await populate_user_fields(assignment_data, ['coder'], db = db)
             return cls(**populated_code_data)
         return cls()
 
@@ -79,7 +79,7 @@ class AssignVAResponseClass(BaseResponseModel):
             cursor = db.aql.execute(query, bind_vars=bind_vars)
             assignment_data = cursor.next()
         
-        populated_code_data = await populate_user_fields(assignment_data, ['coder1', 'coder2'], db)
+        populated_code_data = await populate_user_fields(assignment_data, ['coder'], db)
         
         return cls(**populated_code_data)
     
@@ -98,7 +98,7 @@ class AssignVAResponseClass(BaseResponseModel):
             assignment_data = cursor.next()
         
         if len(assignment_data.items()) > 0:
-            populated_code_data = await populate_user_fields(assignment_data, ['coder1', 'coder2'], db = db)
+            populated_code_data = await populate_user_fields(assignment_data, ['coder'], db = db)
             return cls(**populated_code_data)
         return cls()
 
@@ -133,6 +133,8 @@ class CodedVAResponseClass(BaseResponseModel):
         populated_coded_va_data['intermediate1_cod'] = await ICD10FieldClass.get_icd10(coded_va_data.get("intermediate1_cod", None), db)
         
         populated_coded_va_data['intermediate2_cod'] = await ICD10FieldClass.get_icd10(coded_va_data.get("intermediate2_cod", None), db)
+        
+        populated_coded_va_data['intermediate3_cod'] = await ICD10FieldClass.get_icd10(coded_va_data.get("intermediate2_cod", None), db)
         
         populated_coded_va_data['underlying_cod'] = await ICD10FieldClass.get_icd10(coded_va_data.get("underlying_cod", None), db)
         

@@ -6,12 +6,12 @@ from fastapi import HTTPException
 from pydantic import BaseModel, EmailStr
 
 from app.shared.configs.constants import db_collections
-from app.shared.configs.models import VmanBaseModel
+from app.shared.configs.models import VManBaseModel
 from app.shared.configs.security import hash_password, is_password_strong_enough
 from app.users.models.role import Role
 
 
-class User(VmanBaseModel):
+class User(VManBaseModel):
     # id: Optional[str] = None
     name: str
     email: EmailStr
@@ -55,7 +55,7 @@ class User(VmanBaseModel):
 
 
 
-class UserToken(VmanBaseModel):
+class UserToken(VManBaseModel):
     id: Optional[str]
     user_id: str
     access_key: Optional[str] = None

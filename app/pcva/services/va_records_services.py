@@ -112,6 +112,8 @@ async def code_assigned_va_service(coded_va: CodeAssignedVARequestClass = None, 
                 in_conditions["uuid"].append(coded_va.intermediate1_cod)
             if coded_va.intermediate2_cod:
                 in_conditions["uuid"].append(coded_va.intermediate2_cod)
+            if coded_va.intermediate3_cod:
+                in_conditions["uuid"].append(coded_va.intermediate3_cod)
             if coded_va.underlying_cod:
                 in_conditions["uuid"].append(coded_va.underlying_cod)
 
@@ -135,32 +137,28 @@ async def code_assigned_va_service(coded_va: CodeAssignedVARequestClass = None, 
                 collection_name = db_collections.ASSIGNED_VA, 
                 custom_fields= {
                     "vaId": coded_va.assigned_va,
-                    "or_conditions": [
-                        {"coder1": current_user.uuid},
-                        {"coder2": current_user.uuid}
-                            
-                    ]
+                    "coder": current_user.uuid
                 }, 
                 db = db
             )
             if is_user_assigned:
                 # 5. Check if the record needs to be updated or inserted
-                existing_coded_va = await CodedVA.get_many(
-                    paging = False, 
-                    filters = {
-                        "assigned_va": coded_va.assigned_va,
-                        "created_by": current_user.uuid
-                    },
-                    db = db
-                )
+                # existing_coded_va = await CodedVA.get_many(
+                #     paging = False, 
+                #     filters = {
+                #         "assigned_va": coded_va.assigned_va,
+                #         "created_by": current_user.uuid
+                #     },
+                #     db = db
+                # )
 
-                if existing_coded_va and len(existing_coded_va) == 1:
-                    updated_va = replace_object_values(coded_va.model_dump(), existing_coded_va[0], force = True)
-                    saved_coded_va = await CodedVA(**updated_va).update(current_user.uuid, db)
-                else:
-                    coded_va_object = coded_va.model_dump()
-                    coded_va_object["created_by"] = current_user.uuid
-                    saved_coded_va = await CodedVA(**coded_va_object).save(db)
+                # if existing_coded_va and len(existing_coded_va) == 1:
+                #     updated_va = replace_object_values(coded_va.model_dump(), existing_coded_va[0], force = True)
+                #     saved_coded_va = await CodedVA(**updated_va).update(current_user.uuid, db)
+                # else:
+                coded_va_object = coded_va.model_dump()
+                coded_va_object["created_by"] = current_user.uuid
+                saved_coded_va = await CodedVA(**coded_va_object).save(db)
                 return await CodedVAResponseClass.get_structured_codedVA(coded_va = saved_coded_va, db = db)
             else:
                 raise HTTPException(status_code=400, detail="This VA was not assigned to this user")
@@ -180,5 +178,11 @@ async def get_coded_va_service(paging: bool, page_number: int = None, page_size:
     
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to get coded va: {e}")
+    
+
+async def get_concordants_va_service():
+    # 1. Get VAs that have the same va Id
+    # 2. 
+    return None
      
     
