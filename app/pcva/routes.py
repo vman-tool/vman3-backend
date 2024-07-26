@@ -15,7 +15,7 @@ from app.pcva.services.icd10_services import (
     update_icd10_categories_service, 
     update_icd10_codes
 )
-from app.pcva.services.va_records_services import assign_va_service, code_assigned_va_service, fetch_va_records, get_coded_va_service, get_va_assignment_service
+from app.pcva.services.va_records_services import assign_va_service, code_assigned_va_service, fetch_va_records, get_coded_va_service, get_concordants_va_service, get_va_assignment_service
 from app.shared.configs.arangodb_db import get_arangodb_session
 from app.users.decorators.user import get_current_user, oauth2_scheme
 from app.users.models.user import User
@@ -210,5 +210,14 @@ async def code_assigned_va(
     db: StandardDatabase = Depends(get_arangodb_session)) -> CodedVAResponseClass | Dict:
     try:
         return  await code_assigned_va_service(coded_va, current_user = User(**current_user), db = db)
+    except Exception as e:
+        raise e
+
+@pcva_router.get("/get_concordant_vas", status_code=status.HTTP_200_OK)
+async def code_assigned_va(
+    current_user: User = Depends(get_current_user),
+    db: StandardDatabase = Depends(get_arangodb_session)):
+    try:
+        return  await get_concordants_va_service(current_user, db = db)
     except Exception as e:
         raise e

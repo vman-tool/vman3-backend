@@ -89,7 +89,14 @@ async def assign_va_service(va_records: AssignVARequestClass, user: User,  db: S
 async def get_va_assignment_service(paging: bool, page_number: int = None, page_size: int = None, include_deleted: bool = None, filters: Dict = {}, user = None, db: StandardDatabase = None):
     
     try:
-        assigned_vas = await AssignedVA.get_many(paging, page_number, page_size, filters, include_deleted, db)
+        assigned_vas = await AssignedVA.get_many(
+            paging = paging, 
+            page_number = page_number, 
+            page_size = page_size, 
+            filters = filters, 
+            include_deleted = include_deleted, 
+            db = db
+        )
         
         return {
             "page_number": page_number,
@@ -178,7 +185,14 @@ async def code_assigned_va_service(coded_va: CodeAssignedVARequestClass = None, 
 
 async def get_coded_va_service(paging: bool, page_number: int = None, page_size: int = None, include_deleted: bool = None, filters: Dict = {}, user = None, db: StandardDatabase = None):
     
-    coded_vas = await CodedVA.get_many(paging, page_number, page_size, filters, include_deleted, db)
+    coded_vas = await CodedVA.get_many(
+        paging = paging, 
+        page_number = page_number, 
+        page_size = page_size, 
+        filters = filters, 
+        include_deleted = include_deleted, 
+        db = db
+    )
     try:
         
         return {
@@ -191,9 +205,46 @@ async def get_coded_va_service(paging: bool, page_number: int = None, page_size:
         raise HTTPException(status_code=500, detail=f"Failed to get coded va: {e}")
     
 
-async def get_concordants_va_service():
-    # 1. Get VAs that have the same va Id
-    # 2. 
-    return None
+async def get_concordants_va_service(user, db: StandardDatabase = None):
+    query = f"""
+        LET assigned_vas = (
+            FOR doc in {db_collections.ASSIGNED_VA}
+            FILTER doc.coder == @user_id
+            RETURN doc
+        )
+
+        LET coded_assigned_vas = (
+            FOR assigned_va in assigned_vas
+              FOR coded_va in {db_collections.CODED_VA}
+                FILTER coded_va.assigned_va == assigned_va.vaId
+                SORT coded_va.datetime DESC
+                COLLECT assigned_va_id = coded_va.assigned_va INTO grouped
+                LET latest_coded_vas = (
+                    FOR g IN grouped[*].coded_va
+                        COLLECT created_by = g.created_by INTO coder_group
+                        LET latest_record = FIRST(coder_group[* FILTER CURRENT.datetime == MAX(coder_group[*].datetime)])
+                        RETURN latest_record.g
+                )
+                RETURN latest_coded_vas
+        )
+
+        
+        FOR coded_assigned_va in coded_assigned_vas
+            RETURN coded_assigned_va[*]
+    """
+    bind_vars = {
+        "user_id": user["uuid"]
+    }
+    
+    codedVAs = await CodedVA.run_custom_query(query, bind_vars, db)
+    
+    formattedCodedVA = []
+    for codedVA_group in codedVAs:
+        codedVA_group_temp = []
+        for codedVA in codedVA_group:
+            codedVA_group_temp.append(await CodedVAResponseClass.get_structured_codedVA(codedVA, db))
+        formattedCodedVA.append(codedVA_group_temp)
+    
+    return formattedCodedVA
      
     

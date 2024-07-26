@@ -251,7 +251,11 @@ class VManBaseModel(BaseModel):
         query += " RETURN doc"
         
         return query, bind_vars
-
+    
+    @classmethod
+    async def run_custom_query(cls, query: str = None, bind_vars: Dict = None, db: StandardDatabase = None):
+        cursor = db.aql.execute(query=query, bind_vars=bind_vars)
+        return list(cursor)
 
 class ResponseUser(BaseModel):
     uuid: str
