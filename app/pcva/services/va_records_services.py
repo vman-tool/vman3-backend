@@ -10,19 +10,19 @@ from app.shared.configs.constants import db_collections
 from app.shared.utils.database_utilities import record_exists, replace_object_values
 from app.users.models.user import User
 
-async def fetch_va_records(paging: bool = True,  page_number: int = 1, page_size: int = 10, db: StandardDatabase = None):
+async def fetch_va_records(paging: bool = True,  page_number: int = 1, limit: int = 10, db: StandardDatabase = None):
     try:
         collection = db.collection(db_collections.VA_TABLE)
         query = f"FOR doc IN {collection.name} "
         bind_vars = {}
             
-        if paging and page_number and page_size:
+        if paging and page_number and limit:
         
             query += "LIMIT @offset, @size RETURN doc"
         
             bind_vars.update({
-                "offset": (page_number - 1) * page_size,
-                "size": page_size
+                "offset": (page_number - 1) * limit,
+                "size": limit
             })
         else:
             query += "RETURN doc"
@@ -34,7 +34,7 @@ async def fetch_va_records(paging: bool = True,  page_number: int = 1, page_size
         
         return {
             "page_number": page_number,
-            "page_size": page_size,
+            "limit": limit,
             "data": data
         } if paging else data
     
@@ -86,13 +86,13 @@ async def assign_va_service(va_records: AssignVARequestClass, user: User,  db: S
         raise e
 
 
-async def get_va_assignment_service(paging: bool, page_number: int = None, page_size: int = None, include_deleted: bool = None, filters: Dict = {}, user = None, db: StandardDatabase = None):
+async def get_va_assignment_service(paging: bool, page_number: int = None, limit: int = None, include_deleted: bool = None, filters: Dict = {}, user = None, db: StandardDatabase = None):
     
     try:
         assigned_vas = await AssignedVA.get_many(
             paging = paging, 
             page_number = page_number, 
-            page_size = page_size, 
+            limit = limit, 
             filters = filters, 
             include_deleted = include_deleted, 
             db = db
@@ -100,7 +100,7 @@ async def get_va_assignment_service(paging: bool, page_number: int = None, page_
         
         return {
             "page_number": page_number,
-            "page_size": page_size,
+            "limit": limit,
             "data": [await AssignVAResponseClass.get_structured_assignment(assignment=va, db = db) for va in assigned_vas]
         } if paging else [await AssignVAResponseClass.get_structured_assignment(assignment=va, db = db) for va in assigned_vas]
     
@@ -183,12 +183,12 @@ async def code_assigned_va_service(coded_va: CodeAssignedVARequestClass = None, 
         except Exception as e:
             raise e 
 
-async def get_coded_va_service(paging: bool, page_number: int = None, page_size: int = None, include_deleted: bool = None, filters: Dict = {}, user = None, db: StandardDatabase = None):
+async def get_coded_va_service(paging: bool, page_number: int = None, limit: int = None, include_deleted: bool = None, filters: Dict = {}, user = None, db: StandardDatabase = None):
     
     coded_vas = await CodedVA.get_many(
         paging = paging, 
         page_number = page_number, 
-        page_size = page_size, 
+        limit = limit, 
         filters = filters, 
         include_deleted = include_deleted, 
         db = db
@@ -197,7 +197,7 @@ async def get_coded_va_service(paging: bool, page_number: int = None, page_size:
         
         return {
             "page_number": page_number,
-            "page_size": page_size,
+            "limit": limit,
             "data": [await CodedVAResponseClass.get_structured_codedVA(coded_va=va, db = db) for va in coded_vas]
         } if paging else [await CodedVAResponseClass.get_structured_codedVA(coded_va=va, db = db) for va in coded_vas]
     

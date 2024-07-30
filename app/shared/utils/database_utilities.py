@@ -1,4 +1,4 @@
-from typing import Dict
+from typing import Any, Dict, List
 from arango.database import StandardDatabase
 
 async def record_exists(collection_name: str, uuid: str = None, id: str = None, custom_fields: Dict = {}, db: StandardDatabase = None) -> bool:
@@ -87,6 +87,7 @@ def add_query_filters(filters: Dict = None, bind_vars: Dict = None):
 
     include array of object inside or_conditions key in filters object to incorporate OR filter
     include array of object inside in_conditions key in filters object to incorporate IN filter
+    include field with object that key is in ['==', '!=', '<', '<=', '>', '>=', "$gt", "$lt", "$lte", "$eq", "$ne", "$gte"] for comparison fields
 
     Returns
     :aql_filters: A list of string filters arranges accordingly
@@ -96,13 +97,39 @@ def add_query_filters(filters: Dict = None, bind_vars: Dict = None):
         
     or_conditions = filters.pop("or_conditions", [])
     in_conditions = filters.pop("in_conditions", [])
+
+    def add_comparison_filter(field: str, value: Any, op: str):
+        aql_filters.append(f"doc.{field} {op} @{field}")
+        bind_vars[field] = value
+
+    def reassign_operation(op):
+        if op == '$gt':
+            op = '>'
+        if op == "$lt":
+            op = '<'
+        if op == "$lte":
+            op = '<='
+        if op == "$eq":
+            op = '=='
+        if op == "$ne":
+            op = '!='
+        if op == "$gte":
+            op = '>='        
+        return op
     
     for field, value in filters.items():
         if isinstance(value, list):
             or_conditions.append({field: v} for v in value)
         else:
-            aql_filters.append(f"doc.{field} == @{field}")
-            bind_vars[field] = value
+            if isinstance(value, dict):
+                for op, comp_value in value.items():
+                    if op in ['==', '!=', '<', '<=', '>', '>=', "$gt", "$lt", "$lte", "$eq", "$ne", "$gte"]:
+                        op = reassign_operation(op)
+                        add_comparison_filter(field, comp_value, op)
+                    else:
+                        raise ValueError(f"Unsupported operator: {op}")
+            else:
+                add_comparison_filter(field, value, '==')
 
     if or_conditions:
         or_clauses = []
