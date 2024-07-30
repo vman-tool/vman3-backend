@@ -11,10 +11,12 @@ charset-normalizer==3.3.2
 click==8.1.7
 dnspython==2.6.1
 email_validator==2.1.1
+environs==11.0.0
 exceptiongroup==1.2.1
 fastapi==0.111.0
 fastapi-cli==0.0.4
 fastapi-mail==1.4.1
+fastapi_cors==0.0.6
 h11==0.14.0
 httpcore==1.0.5
 httptools==0.6.1
@@ -25,6 +27,7 @@ Jinja2==3.1.4
 loguru==0.7.2
 markdown-it-py==3.0.0
 MarkupSafe==2.1.5
+marshmallow==3.21.3
 mdurl==0.1.2
 mock==5.1.0
 motor==3.4.0
