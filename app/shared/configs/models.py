@@ -254,8 +254,21 @@ class VManBaseModel(BaseModel):
     
     @classmethod
     async def run_custom_query(cls, query: str = None, bind_vars: Dict = None, db: StandardDatabase = None):
-        cursor = db.aql.execute(query=query, bind_vars=bind_vars)
-        return list(cursor)
+        """
+            This function will run a custom query and return the results.
+
+            :params query: Arango custom query
+            :params bind_vars: Bind variables for the query
+            :params db: ArangoDB database instance
+
+            RETURN
+            Database return value
+        """
+        try:
+            cursor = db.aql.execute(query=query, bind_vars=bind_vars)
+            return cursor
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=str(e))
 
 class ResponseUser(BaseModel):
     uuid: str

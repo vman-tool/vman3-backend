@@ -98,8 +98,14 @@ async def get_login_token(data, session):
     
     # Generate the JWT Token
     res = await _generate_tokens(user, session)
-    print(res)
-    
+    res["user"] = UserResponse(
+            uuid=user["uuid"],
+            id=user["_key"],
+            name=user["name"],
+            email=user["email"],
+            is_active=user["is_active"],
+            created_at=user.get("created_at")
+        ).model_dump()
     return res
 async def get_refresh_token(refresh_token: str, db):
     token_payload = get_token_payload(refresh_token, settings.SECRET_KEY, settings.JWT_ALGORITHM)
@@ -228,7 +234,8 @@ async def fetch_user_detail(pk: str, db):
     
     if user_cursor:
         user= user_cursor[0]
-        return      UserResponse(
+        return UserResponse(
+        uuid=user["uuid"],
         id=user["_key"],
         name=user["name"],
         email=user["email"],

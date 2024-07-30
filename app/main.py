@@ -4,7 +4,9 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from loguru import logger
+from decouple import config
 
 from app import routes
 from app.odk_download.services import data_download, schedulers
@@ -56,6 +58,16 @@ def create_application():
     return application
 
 app = create_application()
+
+origins = config('CORS_ALLOWED_ORIGINS', default="").split(',')
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 
