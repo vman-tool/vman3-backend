@@ -75,13 +75,16 @@ class VManBaseModel(BaseModel):
         return doc
    
     @classmethod
-    async def get_many(cls, paging: bool = None, page_number: int = None, page_size: int = None, filters: Dict[str, Any] = {}, include_deleted: bool = None, db: StandardDatabase = None):
+    async def get_many(cls, paging: bool = None, page_number: int = None, limit: int = None, filters: Dict[str, Any] = {}, include_deleted: bool = None, db: StandardDatabase = None):
         """
         Fetch records from the specified collection using dynamic filters.
 
         :param db: The ArangoDB database instance.
         :param collection_name: The name of the collection to query.
         :param filters: A dictionary of filters to apply to the query.
+            - include array of object inside or_conditions key in filters object to incorporate OR filter
+            - include array of object inside in_conditions key in filters object to incorporate IN filter
+            - include field with object that key is in ['==', '!=', '<', '<=', '>', '>=', "$gt", "$lt", "$lte", "$eq", "$ne", "$gte"] for comparison fields
         :return: A list of records matching the filters.
         """
         cls.init_collection(db)
@@ -91,9 +94,10 @@ class VManBaseModel(BaseModel):
             filters = filters,
             paging = paging, 
             page_number = page_number, 
-            page_size = page_size,
+            limit = limit,
             include_deleted = include_deleted
         )
+        print(query)
         cursor = db.aql.execute(query, bind_vars=bind_vars)
         records = list(cursor)
         if not records:
@@ -191,14 +195,14 @@ class VManBaseModel(BaseModel):
         return collection.update(doc, return_new=True)["new"]
     
     @classmethod
-    def build_query(cls, collection_name: str, filters: Dict[str, Any] = {}, paging: bool = None, page_number: Optional[int] = None, page_size: Optional[int] = None, include_deleted: bool = None):
+    def build_query(cls, collection_name: str, filters: Dict[str, Any] = {}, paging: bool = None, page_number: Optional[int] = None, limit: Optional[int] = None, include_deleted: bool = None):
         """
          Build a query from filters object and pagination values.
 
         :param collection_name: The ID of the deleted record to restore.
         :param paging: Boolean value to allow paging.
         :param page_number: Integer value for page number.
-        :param page_size: Integer value for number of records to be returned in a page.
+        :param limit: Integer value for number of records to be returned in a page.
         :param include_deleted: Boolean value to include or exclude soft deleted objects.
         :param filters: Dictionary to build conditional query. Include or_conditions objects with key, value pairs. (keys being field names).
         
@@ -240,13 +244,21 @@ class VManBaseModel(BaseModel):
         if aql_filters:
             query += " FILTER " + " AND ".join(aql_filters)
         
-        if paging and page_number is not None and page_size is not None:
-            offset = (page_number - 1) * page_size
+        if paging and page_number is not None and limit is not None:
+            offset = (page_number - 1) * limit
             query += " LIMIT @offset, @size"
             bind_vars.update({
                 "offset": offset,
-                "size": page_size
+                "size": limit
             })
+        
+        if limit is not None and not paging:
+            offset = limit
+            query += " LIMIT @offset"
+            bind_vars.update({
+                "offset": offset
+            }) 
+
         
         query += " RETURN doc"
         

@@ -107,7 +107,7 @@ async def get_login_token(data, session):
             created_at=user.get("created_at")
         ).model_dump()
     return res
-async def get_refresh_token(refresh_token: str, db):
+async def get_refresh_token(refresh_token: str, db: StandardDatabase):
     token_payload = get_token_payload(refresh_token, settings.SECRET_KEY, settings.JWT_ALGORITHM)
     if not token_payload:
         raise HTTPException(status_code=400, detail="Invalid Request.")
@@ -117,23 +117,44 @@ async def get_refresh_token(refresh_token: str, db):
     access_key = token_payload.get('a')
     user_id = str_decode(token_payload.get('sub'))
 
-    collection = db.collection(db_collections.USER_TOKENS)
-    user_token_cursor = await collection.find({
+    filters = {
         'refresh_key': refresh_key,
         'access_key': access_key,
         'user_id': user_id,
-        'expires_at': {'$gt': datetime.now().isoformat()}
-    }, limit=1).next()
-    print("User token: ", token_payload.get('a'))
+        'expires_at': {'$gte': datetime.now().isoformat()}
+    }
+    collection = db.collection(db_collections.USER_TOKENS)
+    # user_token_cursor = await collection.find(filters, limit=1)
+
+    user_token_cursor = await UserToken.get_many(
+        limit=1,
+        filters = filters, 
+        db = db
+    )
+
 
     if not user_token_cursor:
         raise HTTPException(status_code=400, detail="Invalid Request.")
 
-    user_token = user_token_cursor
+    user_token = user_token_cursor[0]
     user_token['expires_at'] = datetime.now().isoformat()
-    await collection.update(user_token)
+    # print("User token: ", user_token)
+    updated_token = await UserToken(**user_token).update(user_token['user_id'], db)
+    # await collection.update(user_token)
 
-    return _generate_tokens(user_token['user'], db)
+    user = await User.get(doc_id = updated_token.user_id, db = db)
+    print(user)
+    res = await _generate_tokens(user_token['user'], db)
+    res["user"] = UserResponse(
+            uuid=user_token['user']["uuid"],
+            id=user_token['user']["_key"],
+            name=user_token['user']["name"],
+            email=user_token['user']["email"],
+            is_active=user_token['user']["is_active"],
+            created_at=user_token['user'].get("created_at")
+        ).model_dump()
+
+    return res
 
 
 async def _generate_tokens(user, db: StandardDatabase):

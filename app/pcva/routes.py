@@ -33,12 +33,12 @@ pcva_router = APIRouter(
 async def get_va_records(
     paging: Optional[str] = Query(None, alias="paging"),
     page_number: Optional[int] = Query(1, alias="page_number"),
-    page_size: Optional[int] = Query(10, alias="page_size"),
+    limit: Optional[int] = Query(10, alias="limit"),
     db: StandardDatabase = Depends(get_arangodb_session)):
 
     try:
         allowPaging = False if paging is not None and paging.lower() == 'false' else True
-        return await fetch_va_records(allowPaging, page_number, page_size, db)
+        return await fetch_va_records(allowPaging, page_number, limit, db)
         
     except:
         raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to get va records")
@@ -51,7 +51,7 @@ async def get_va_records(
 async def get_icd10_categories(
     paging: Optional[str] = Query(None, alias="paging"),
     page_number: Optional[int] = Query(1, alias="page_number"),
-    page_size: Optional[int] = Query(10, alias="page_size"),
+    limit: Optional[int] = Query(10, alias="limit"),
     include_deleted: Optional[str] = Query(None, alias="include_deleted"),
     db: StandardDatabase = Depends(get_arangodb_session)) -> List[ICD10CategoryResponseClass] | Any:
 
@@ -61,7 +61,7 @@ async def get_icd10_categories(
         return await get_icd10_categories_service(
             paging = allowPaging, 
             page_number = page_number, 
-            page_size = page_size, 
+            limit = limit, 
             include_deleted = include_deleted, 
             db = db)
     except:
@@ -104,7 +104,7 @@ async def update_icd10_categories(
 async def get_icd10(
     paging: Optional[str] = Query(None, alias="paging"),
     page_number: Optional[int] = Query(1, alias="page_number"),
-    page_size: Optional[int] = Query(10, alias="page_size"),
+    limit: Optional[int] = Query(10, alias="limit"),
     include_deleted: Optional[str] = Query(None, alias="include_deleted"),
     db: StandardDatabase = Depends(get_arangodb_session)) -> List[ICD10ResponseClass] | Any:
 
@@ -114,7 +114,7 @@ async def get_icd10(
         return await get_icd10_codes(
             paging = allowPaging, 
             page_number = page_number, 
-            page_size = page_size, 
+            limit = limit, 
             include_deleted = include_deleted, 
             db = db)
     except Exception as e:
@@ -153,7 +153,7 @@ async def update_icd10(
 async def get_assigned_va(
     paging: Optional[str] = Query(None, alias="paging"),
     page_number: Optional[int] = Query(1, alias="page_number"),
-    page_size: Optional[int] = Query(10, alias="page_size"),
+    limit: Optional[int] = Query(10, alias="limit"),
     include_deleted: Optional[str] = Query(None, alias="include_deleted"),
     va_id: Optional[str] = Query(None, alias="va_id"),
     coder: Optional[str] = Query(None, alias="coder"),
@@ -169,7 +169,7 @@ async def get_assigned_va(
         allowPaging = False if paging is not None and paging.lower() == 'false' else True
         include_deleted = False if include_deleted is not None and include_deleted.lower() == 'false' else True
         
-        return await get_va_assignment_service(allowPaging, page_number, page_size, include_deleted, filters, current_user, db)    
+        return await get_va_assignment_service(allowPaging, page_number, limit, include_deleted, filters, current_user, db)    
     except:
         raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to get assigned va")
 
@@ -197,7 +197,7 @@ async def get_coded_va(
         return  await get_coded_va_service(
             paging=True, 
             page_number=1,
-            page_size=10,
+            limit=10,
             user = User(**current_user), 
             db = db)
     except Exception as e:
