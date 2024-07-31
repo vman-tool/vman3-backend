@@ -97,7 +97,6 @@ class VManBaseModel(BaseModel):
             limit = limit,
             include_deleted = include_deleted
         )
-        print(query)
         cursor = db.aql.execute(query, bind_vars=bind_vars)
         records = list(cursor)
         if not records:
@@ -117,7 +116,7 @@ class VManBaseModel(BaseModel):
         self.updated_at = datetime.now().isoformat()
         doc = self.model_dump()
 
-        if "id" not in doc and "_key" not in doc:
+        if ("id" in doc and not doc['id']) or ("_key" in doc and not doc['_key']) or ("id" not in doc and "_key" not in doc):
             query = f"""
                 LET doc = FIRST(FOR doc IN {self.get_collection_name()} FILTER doc.uuid == @uuid RETURN doc)
                 RETURN doc

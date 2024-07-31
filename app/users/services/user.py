@@ -138,20 +138,18 @@ async def get_refresh_token(refresh_token: str, db: StandardDatabase):
 
     user_token = user_token_cursor[0]
     user_token['expires_at'] = datetime.now().isoformat()
-    # print("User token: ", user_token)
     updated_token = await UserToken(**user_token).update(user_token['user_id'], db)
     # await collection.update(user_token)
 
-    user = await User.get(doc_id = updated_token.user_id, db = db)
-    print(user)
-    res = await _generate_tokens(user_token['user'], db)
+    user = await User.get(doc_id = updated_token['user_id'], db = db)
+    res = await _generate_tokens(user, db)
     res["user"] = UserResponse(
-            uuid=user_token['user']["uuid"],
-            id=user_token['user']["_key"],
-            name=user_token['user']["name"],
-            email=user_token['user']["email"],
-            is_active=user_token['user']["is_active"],
-            created_at=user_token['user'].get("created_at")
+            uuid=user["uuid"],
+            id=user["_key"],
+            name=user["name"],
+            email=user["email"],
+            is_active=user["is_active"],
+            created_at=user.get("created_at")
         ).model_dump()
 
     return res
@@ -236,7 +234,7 @@ async def reset_user_password(data: ResetPasswordData, db):
         raise HTTPException(status_code=400, detail="Invalid window.")
 
     user['password'] = hash_password(data.password)
-    user['updated_at'] = datetime.utcnow().isoformat()
+    user['updated_at'] = datetime.now().isoformat()
 
     collection = db.collection(db_collections.USERS)
     await collection.update(user)
