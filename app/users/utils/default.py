@@ -4,6 +4,7 @@ from decouple import config
 from fastapi import BackgroundTasks
 
 from app.shared.configs.arangodb_db import get_arangodb_session
+from app.users.models.user import User
 from app.users.schemas.user import RegisterUserRequest
 from app.users.services import user
 
@@ -21,12 +22,13 @@ async def default_account_creation( ):
             logger.error("Failed to get database session")
             return
         name = config("DEFAULT_ACCOUNT_NAME", default="admin")
-        email = config("DEFAULT_ACCOUNT_EMAIL")
-        password = config("DEFAULT_ACCOUNT_PASSWORD")
+        email = config("DEFAULT_ACCOUNT_EMAIL", default="admin@vman.net")
+        password = config("DEFAULT_ACCOUNT_PASSWORD", default="Welcome2vman#")
         user_data = RegisterUserRequest(name=name, email=email, password=password, created_by="system")
 
         # Check if email already exists
-        email_exists = db.collection('users').find({'email': user_data.email}).count() > 0
+        existing_users = await User.get_many(filters={'email': user_data.email})
+        email_exists = existing_users.count() > 0
         if email_exists:
             return
 
