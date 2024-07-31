@@ -45,7 +45,7 @@ async def create_user_account(data: RegisterUserRequest, db: StandardDatabase, b
             "created_by": data.created_by, # TODO: Change to the user id of the user creating the account
         }
     
-    return User(**user_data).save(db)
+    return await User(**user_data).save(db)
     
     
 async def activate_user_account(data: VerifyUserRequest, db, background_tasks: BackgroundTasks):
