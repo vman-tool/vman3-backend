@@ -1,6 +1,6 @@
 
 
-from typing import Optional
+from typing import Optional, Union
 
 from pydantic import BaseModel, EmailStr
 
@@ -9,10 +9,7 @@ class RegisterUserRequest(BaseModel):
     name: str
     email: str
     password: str
-
-    def add_created_by(self, created_by):
-        self.created_by = created_by
-        return self
+    created_by: Union[str, None] = None
     
     
 class VerifyUserRequest(BaseModel):
