@@ -1,7 +1,8 @@
 
 from http.client import HTTPException
+from typing import Dict, List, Optional
 from arango.database import StandardDatabase
-from fastapi import APIRouter, BackgroundTasks, Depends, Header, status
+from fastapi import APIRouter, BackgroundTasks, Depends, Header, Query, status
 from fastapi.responses import JSONResponse
 from fastapi.security import OAuth2PasswordRequestForm
 
@@ -75,5 +76,20 @@ async def fetch_user(user = Depends(get_current_user)):
 @auth_router.get("/{uuid}", status_code=status.HTTP_200_OK, response_model=UserResponse)
 async def get_user_info(uuid, session = Depends(get_arangodb_session)):
     return await user.fetch_user_detail(uuid, session)
+
+@auth_router.get("/", status_code=status.HTTP_200_OK, response_model=List[UserResponse] | Dict)
+async def get_users(
+        paging: Optional[str] = Query(None, alias="paging"),
+        page_number: Optional[int] = Query(1, alias="page_number"),
+        limit: Optional[int] = Query(10, alias="limit"), 
+        current_user = Depends(get_current_user), 
+        session = Depends(get_arangodb_session)
+    ):
+    return await user.fetch_users(
+        paging=paging, 
+        page_number=page_number, 
+        limit=limit, 
+        db=session
+    )
 
 

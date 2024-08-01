@@ -25,9 +25,7 @@ services:
     env_file:
       - .env
     volumes:
-      - vman3db:/var/lib/arangox/vman3db
-      - arango_data:/var/lib/vman3
-      - arango_apps:/var/lib/vman3-apps
+      - vman3db:/var/lib/arangodb3
     ports:
       - '8529:8529'
       # - '8002:8530'
@@ -37,6 +35,4 @@ services:
 
 volumes:
   vman3db:
-  arango_data:
-  arango_apps:
   mongo-data:
