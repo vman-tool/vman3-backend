@@ -24,11 +24,11 @@ async def default_account_creation( ):
         name = config("DEFAULT_ACCOUNT_NAME", default="admin")
         email = config("DEFAULT_ACCOUNT_EMAIL", default="admin@vman.net")
         password = config("DEFAULT_ACCOUNT_PASSWORD", default="***REMOVED***")
-        user_data = RegisterUserRequest(name=name, email=email, password=password, created_by="system")
+        user_data = RegisterUserRequest(name=name, email=email, password=password, created_by="")
 
         # Check if email already exists
-        existing_users = await User.get_many(filters={'email': user_data.email})
-        email_exists = existing_users.count() > 0
+        existing_users = await User.get_many(filters={'email': user_data.email}, db=db)
+        email_exists = len(existing_users) > 0
         if email_exists:
             return
 

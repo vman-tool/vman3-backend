@@ -4,7 +4,7 @@ import logging
 from datetime import datetime, timedelta
 
 from arango.database import StandardDatabase
-from fastapi import BackgroundTasks, HTTPException
+from fastapi import BackgroundTasks, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
 from pydantic import BaseModel
 
@@ -35,7 +35,6 @@ settings = get_settings()
 async def create_user_account(data: RegisterUserRequest, db: StandardDatabase, background_tasks: BackgroundTasks):
     if not is_password_strong_enough(data.password):
             raise HTTPException(status_code=400, detail="Please provide a strong password.")
-
     user_data = {
             "name": data.name,
             "email": data.email,
@@ -123,8 +122,6 @@ async def get_refresh_token(refresh_token: str, db: StandardDatabase):
         'user_id': user_id,
         'expires_at': {'$gte': datetime.now().isoformat()}
     }
-    collection = db.collection(db_collections.USER_TOKENS)
-    # user_token_cursor = await collection.find(filters, limit=1)
 
     user_token_cursor = await UserToken.get_many(
         limit=1,
@@ -134,12 +131,11 @@ async def get_refresh_token(refresh_token: str, db: StandardDatabase):
 
 
     if not user_token_cursor:
-        raise HTTPException(status_code=400, detail="Invalid Request.")
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Invalid Request.")
 
     user_token = user_token_cursor[0]
     user_token['expires_at'] = datetime.now().isoformat()
     updated_token = await UserToken(**user_token).update(user_token['user_id'], db)
-    # await collection.update(user_token)
 
     user = await User.get(doc_id = updated_token['user_id'], db = db)
     res = await _generate_tokens(user, db)
@@ -246,13 +242,9 @@ async def reset_user_password(data: ResetPasswordData, db):
     
     
 async def fetch_user_detail(pk: str, db):
-    collection = db.collection(db_collections.USERS)
-    cursor =  collection.find({'_key': pk}, limit=1)
-    user_cursor = [doc for doc in cursor]
+    user = await User.get(doc_uuid=pk, db=db)
 
-    
-    if user_cursor:
-        user= user_cursor[0]
+    if user:
         return UserResponse(
         uuid=user["uuid"],
         id=user["_key"],
@@ -262,6 +254,30 @@ async def fetch_user_detail(pk: str, db):
         created_at=user.get("created_at")
     )
     raise HTTPException(status_code=400, detail="User does not exist.")
+
+async def fetch_users(paging: bool= None, page_number: int = None, limit: int = None, db: StandardDatabase = None):
+    users = await User.get_many(
+        limit=limit,
+        page_number=page_number,
+        paging=paging,
+        db=db
+    )
+
+    
+    if users:
+        return {
+            "page_number": page_number,
+            "limit": limit,
+            "data": [UserResponse(
+                uuid=user["uuid"],
+                id=user["_key"],
+                name=user["name"],
+                email=user["email"],
+                is_active=user["is_active"],
+                created_at=user.get("created_at")
+                ) for user in users]
+        }
+    raise HTTPException(status_code=400, detail="Users does not exist.")
 
 # async def fetch_user_detail(pk: str, db: StandardDatabase):
 #     loop = asyncio.get_event_loop()
