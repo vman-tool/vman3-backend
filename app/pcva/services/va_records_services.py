@@ -10,34 +10,88 @@ from app.shared.configs.constants import db_collections
 from app.shared.utils.database_utilities import record_exists, replace_object_values
 from app.users.models.user import User
 
-async def fetch_va_records(paging: bool = True,  page_number: int = 1, limit: int = 10, db: StandardDatabase = None):
+async def fetch_va_records(paging: bool = True,  page_number: int = 1, limit: int = 10, include_assignment: bool = False, db: StandardDatabase = None):
+    va_table_collection = db.collection(db_collections.VA_TABLE)
+    assignment_collection_exists = db.has_collection(db_collections.ASSIGNED_VA)
+    
     try:
-        collection = db.collection(db_collections.VA_TABLE)
-        query = f"FOR doc IN {collection.name} "
-        bind_vars = {}
+        if not include_assignment or not assignment_collection_exists:
+            query = f"FOR doc IN {va_table_collection.name} "
+            bind_vars = {}
+                
+            if paging and page_number and limit:
             
-        if paging and page_number and limit:
-        
-            query += "LIMIT @offset, @size RETURN doc"
-        
-            bind_vars.update({
+                query += "LIMIT @offset, @size RETURN doc"
+            
+                bind_vars.update({
+                    "offset": (page_number - 1) * limit,
+                    "size": limit
+                })
+            else:
+                query += "RETURN doc"
+
+            cursor = db.aql.execute(query, bind_vars=bind_vars)
+
+            data = [document for document in cursor]
+            
+            
+            return {
+                "page_number": page_number,
+                "limit": limit,
+                "data": data
+            } if paging else data
+
+        else:
+            query = f"""
+                // Step 1: Get paginated va records
+                LET paginatedVa = (
+                    FOR v IN {db_collections.VA_TABLE}
+                        LIMIT @offset, @size
+                        RETURN v
+                )
+
+                // Step 2: Get the va IDs for the paginated results
+                LET vaIds = (
+                    FOR v IN paginatedVa
+                        RETURN v.__id
+                )
+
+                // Step 3: Get assignments for the va IDs
+                LET assignments = (
+                    FOR a IN {db_collections.ASSIGNED_VA}
+                        FILTER a.assined_va IN vaIds
+                        RETURN a
+                )
+
+                // Step 4: Combine the paginated va records with their assignments
+                LET vaWithAssignments = (
+                    FOR v IN paginatedVa
+                        LET vAssignments = (
+                            FOR a IN assignments
+                                FILTER a.assined_va == v.__id
+                                RETURN a
+                        )
+                        RETURN MERGE(v, {{ assignments: vAssignments }})
+                )
+
+                RETURN vaWithAssignments
+            """
+
+            bind_vars = {
                 "offset": (page_number - 1) * limit,
                 "size": limit
-            })
-        else:
-            query += "RETURN doc"
+            }
+            
 
-        cursor = db.aql.execute(query, bind_vars=bind_vars)
+            cursor = db.aql.execute(query, bind_vars=bind_vars)
 
-        data = [document for document in cursor]
-        
-        
-        return {
-            "page_number": page_number,
-            "limit": limit,
-            "data": data
-        } if paging else data
-    
+            data = [document for document in cursor]
+            
+            return {
+                "page_number": page_number,
+                "limit": limit,
+                "data": data
+            } if paging else data
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to fetch data: {e}")
     
