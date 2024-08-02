@@ -13,6 +13,7 @@ from app.users.models.user import User
 async def fetch_va_records(paging: bool = True,  page_number: int = 1, limit: int = 10, include_assignment: bool = False, db: StandardDatabase = None):
     va_table_collection = db.collection(db_collections.VA_TABLE)
     assignment_collection_exists = db.has_collection(db_collections.ASSIGNED_VA)
+    bind_vars = {}
     
     try:
         if not include_assignment or not assignment_collection_exists:
@@ -46,10 +47,17 @@ async def fetch_va_records(paging: bool = True,  page_number: int = 1, limit: in
                 // Step 1: Get paginated va records
                 LET paginatedVa = (
                     FOR v IN {db_collections.VA_TABLE}
-                        LIMIT @offset, @size
-                        RETURN v
-                )
-
+                        
+                """
+            
+            if paging and page_number and limit:
+        
+                query += """LIMIT @offset, @size RETURN v)"""
+            
+            else:
+                query += "RETURN v"
+                
+            query += f"""
                 // Step 2: Get the va IDs for the paginated results
                 LET vaIds = (
                     FOR v IN paginatedVa
@@ -59,8 +67,11 @@ async def fetch_va_records(paging: bool = True,  page_number: int = 1, limit: in
                 // Step 3: Get assignments for the va IDs
                 LET assignments = (
                     FOR a IN {db_collections.ASSIGNED_VA}
-                        FILTER a.assined_va IN vaIds
-                        RETURN a
+                        FILTER a.vaId IN vaIds AND a.is_deleted == false
+                        RETURN {{
+                            vaId: a.vaId,
+                            coder: a.coder
+                        }}
                 )
 
                 // Step 4: Combine the paginated va records with their assignments
@@ -68,7 +79,7 @@ async def fetch_va_records(paging: bool = True,  page_number: int = 1, limit: in
                     FOR v IN paginatedVa
                         LET vAssignments = (
                             FOR a IN assignments
-                                FILTER a.assined_va == v.__id
+                                FILTER a.vaId == v.__id
                                 RETURN a
                         )
                         RETURN MERGE(v, {{ assignments: vAssignments }})
@@ -77,12 +88,14 @@ async def fetch_va_records(paging: bool = True,  page_number: int = 1, limit: in
                 RETURN vaWithAssignments
             """
 
-            bind_vars = {
-                "offset": (page_number - 1) * limit,
-                "size": limit
-            }
-            
+            if paging and page_number and limit:
 
+                bind_vars.update({
+                    "offset": (page_number - 1) * limit,
+                    "size": limit
+                })
+            
+            print(query)
             cursor = db.aql.execute(query, bind_vars=bind_vars)
 
             data = [document for document in cursor]
@@ -90,8 +103,8 @@ async def fetch_va_records(paging: bool = True,  page_number: int = 1, limit: in
             return {
                 "page_number": page_number,
                 "limit": limit,
-                "data": data
-            } if paging else data
+                "data": data[0]
+            } if paging else data[0]
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to fetch data: {e}")
     
