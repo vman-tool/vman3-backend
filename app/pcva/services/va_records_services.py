@@ -74,11 +74,24 @@ async def fetch_va_records(paging: bool = True,  page_number: int = 1, limit: in
                         }}
                 )
 
+                LET formattedAssignments = (
+                    FOR a in assignments
+                        FOR user in {db_collections.USERS}
+                        FILTER user.uuid == a.coder
+                        RETURN {{
+                            vaId: a.vaId,
+                            coder: {{
+                                uuid: user.uuid,
+                                name: user.name
+                            }}
+                        }}
+                )
+
                 // Step 4: Combine the paginated va records with their assignments
                 LET vaWithAssignments = (
                     FOR v IN paginatedVa
                         LET vAssignments = (
-                            FOR a IN assignments
+                            FOR a IN formattedAssignments
                                 FILTER a.vaId == v.__id
                                 RETURN a
                         )
@@ -95,7 +108,6 @@ async def fetch_va_records(paging: bool = True,  page_number: int = 1, limit: in
                     "size": limit
                 })
             
-            print(query)
             cursor = db.aql.execute(query, bind_vars=bind_vars)
 
             data = [document for document in cursor]
