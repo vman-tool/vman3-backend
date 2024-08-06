@@ -3,16 +3,15 @@ from contextlib import asynccontextmanager
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
+from decouple import config
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from loguru import logger
-from decouple import config
 
 from app import routes
 from app.odk_download.services import data_download, schedulers
 from app.shared.configs.arangodb_db import get_arangodb_client
-from app.shared.configs.database import (close_mongo_connection,
-                                         connect_to_mongo)
+from app.shared.configs.database import close_mongo_connection, connect_to_mongo
 from app.users.utils.default import default_account_creation
 
 logger.add("./../app.log", rotation="500 MB")

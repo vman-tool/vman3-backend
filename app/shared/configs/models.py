@@ -1,14 +1,21 @@
 import uuid
 from datetime import datetime
 from http.client import HTTPException
+from typing import Any, Dict, List, Optional, Union
 
 from arango.database import StandardDatabase
 from pydantic import BaseModel, Field
-from typing import Any, Dict, List, Optional
+
 from app.shared.configs.constants import db_collections
 from app.shared.utils.database_utilities import add_query_filters, replace_object_values
 
-
+class ResponseMainModel(BaseModel):
+    data: Optional[Union[List[Any], Dict[str, Any], None]] = None
+    message: str
+    error: Optional[str] = None
+    total: Optional[int] = None
+    
+    
 class VManBaseModel(BaseModel):
     """
     This class abstracts the CRUD operations for the Vman Models that are used to interract with the database.
@@ -71,7 +78,7 @@ class VManBaseModel(BaseModel):
             cursor = db.aql.execute(query, bind_vars=bind_vars)
             doc = cursor.next()
         if not doc:
-            raise HTTPException(status_code=404, detail=f"Record not found")
+            raise HTTPException(status_code=404, detail="Record not found")
         return doc
    
     @classmethod
