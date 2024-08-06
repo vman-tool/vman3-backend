@@ -1,0 +1,38 @@
+{
+  "app_name": "VMan3",
+  "page_title": "The United Republic of Tanzania",
+  "page_sub_title": "Verbal autopsy Management Dashboard",
+  "admin_level1": "Region",
+  "admin_level2": "District",
+  "admin_level3": "Ward",
+  "admin_level4": "Village",
+  "cnn_type": 2,
+  "map_center": [-6.3, 34.8],
+  "va_tables": [
+    {
+      "id": 1,
+      "odk_form_id": "WHOVA_V1_5_3_TZV1",
+      "name": "table_name",
+      "details": "table details",
+      "intv_id": "instanceid",
+      "intv_id_name": "VA ID",
+      "intv_consent": "id10013",
+      "intv_date": "today",
+      "intv_loc_level1": "id10005r",
+      "intv_loc_level2": "id10005d",
+      "decd_gender": "id10019",
+      "decd_isadult": "isadult",
+      "decd_ischild": "ischild",
+      "decd_isneonate": "isneonatal",
+      "intvw_name": "id10010",
+      "intvw_phone": "id10010phone",
+      "intvw_sex": "id10010b",
+      "resp_gender": "id10007a",
+      "resp_name": "Id10007",
+      "resp_phone": "id10007Phone",
+      "resp_relationship": "id10008",
+      "intv_gps": "coordinates",
+      "intv_gps_acc": "accuracy"
+    }
+  ]
+}
