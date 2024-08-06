@@ -3,25 +3,26 @@ from typing import List, Optional
 
 from arango.database import StandardDatabase
 
-from app.records.responses.data import map_to_data_response
 from app.shared.configs.constants import db_collections
 from app.shared.configs.models import ResponseMainModel
 
 
-async def fetch_va_records(paging: bool = True, page_number: int = 1, limit: int = 10, start_date: Optional[date] = None, end_date: Optional[date] = None, locations: Optional[List[str]] = None, db: StandardDatabase = None) -> ResponseMainModel:
+async def fetch_va_map_records(paging: bool = True, page_number: int = 1, limit: int = 10, start_date: Optional[date] = None, end_date: Optional[date] = None, locations: Optional[List[str]] = None, db: StandardDatabase = None) -> ResponseMainModel:
     try:
         collection = db.collection(db_collections.VA_TABLE)  # Use the actual collection name here
-        query = f"FOR doc IN {collection.name} "
+        query = f"""
+            FOR doc IN {collection.name}
+            FILTER doc.coordinates != null AND LENGTH(doc.coordinates) == 3
+        """
         bind_vars = {}
         filters = []
-        print(query)
 
         if start_date:
-            filters.append("doc.id10012 >= @start_date")
+            filters.append("doc.today >= @start_date")
             bind_vars["start_date"] = str(start_date)
-        
+
         if end_date:
-            filters.append("doc.id10012 <= @end_date")
+            filters.append("doc.today <= @end_date")
             bind_vars["end_date"] = str(end_date)
 
         if locations:
@@ -29,19 +30,29 @@ async def fetch_va_records(paging: bool = True, page_number: int = 1, limit: int
             bind_vars["locations"] = locations
 
         if filters:
-            query += "FILTER " + " AND ".join(filters) + " "
+            query += " AND " + " AND ".join(filters) + " "
 
-        if paging and page_number and limit:
-            query += "LIMIT @offset, @size "
-            bind_vars.update({
-                "offset": (page_number - 1) * limit,
-                "size": limit
-            })
+        # if paging and page_number and limit:
+        #     query += "LIMIT @offset, @size "
+        #     bind_vars.update({
+        #         "offset": (page_number - 1) * limit,
+        #         "size": limit
+        #     })
 
-        query += "RETURN doc"
+        query += """
+            RETURN {
+                id: doc._key,
+                location: doc.id10005r,
+                coordinates: doc.coordinates,
+                district: doc.id10005d,
+                date: doc.id10012,
+                interviewer: doc.id10007,
+                deviceid: doc.deviceid
+            }
+        """
 
         cursor = db.aql.execute(query, bind_vars=bind_vars)
-        data = [map_to_data_response(document) for document in cursor]
+        data = [document for document in cursor]
 
         # Fetch total count of documents
         count_query = f"RETURN LENGTH({collection.name})"
@@ -61,4 +72,3 @@ async def fetch_va_records(paging: bool = True, page_number: int = 1, limit: int
             error=str(e),
             total=None
         )
-
