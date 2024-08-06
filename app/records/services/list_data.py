@@ -17,11 +17,11 @@ async def fetch_va_records(paging: bool = True, page_number: int = 1, limit: int
         print(query)
 
         if start_date:
-            filters.append("doc.interviewDay >= @start_date")
+            filters.append("doc.id10012 >= @start_date")
             bind_vars["start_date"] = str(start_date)
         
         if end_date:
-            filters.append("doc.interviewDay <= @end_date")
+            filters.append("doc.id10012 <= @end_date")
             bind_vars["end_date"] = str(end_date)
 
         if locations:

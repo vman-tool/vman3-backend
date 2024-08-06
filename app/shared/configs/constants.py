@@ -24,7 +24,7 @@ collections_with_indexes = {
     db_collections.VA_TABLE: [
         {"fields": ["id10005r"], "unique": False, "type": "persistent", "name": "idx_region"},
         {"fields": ["id10012"], "unique": False, "type": "persistent", "name": "idx_date"},
-        {"fields": ["id10013"], "unique": False, "type": "persistent", "name": "idx_submission"},
+        {"fields": ["today"], "unique": False, "type": "persistent", "name": "idx_submission"},
         # {"fields": ["age_group"], "unique": False, "type": "persistent", "name": "idx_age_group"},
         {"fields": ["id10007"], "unique": False, "type": "persistent", "name": "idx_interviewer"}
     ],
