@@ -78,12 +78,13 @@ def replace_object_values(new_dict: Dict, old_dict: Dict, force: bool = False):
         print(f"Error occurred while replacing values: {str(e)}")
         return None
     
-def add_query_filters(filters: Dict = None, bind_vars: Dict = None):
+def add_query_filters(filters: Dict = None, bind_vars: Dict = None, document_name: str = 'doc'):
     """
     This function creates a string of query filters for ArangoDB as well as bind variables
 
     :param filters: Input dictionary of fields and their values (Use actual names of collection fields)
     :param bind_vars: Input dictionary to hold bind variables, input yours to update the already available values
+    :param document_name: Input string of the doc variable eg: FOR v in documents, in this case v is the input, by default doc is used
 
     include array of object inside or_conditions key in filters object to incorporate OR filter
     include array of object inside in_conditions key in filters object to incorporate IN filter
@@ -99,7 +100,7 @@ def add_query_filters(filters: Dict = None, bind_vars: Dict = None):
     in_conditions = filters.pop("in_conditions", [])
 
     def add_comparison_filter(field: str, value: Any, op: str):
-        aql_filters.append(f"doc.{field} {op} @{field}")
+        aql_filters.append(f"{document_name}.{field} {op} @{field}")
         bind_vars[field] = value
 
     def reassign_operation(op):
@@ -137,7 +138,7 @@ def add_query_filters(filters: Dict = None, bind_vars: Dict = None):
             sub_conditions = []
             for sub_field, sub_value in condition_set.items():
                 bind_var_key = f"{sub_field}_or_{i}"
-                sub_conditions.append(f"doc.{sub_field} == @{bind_var_key}")
+                sub_conditions.append(f"{document_name}.{sub_field} == @{bind_var_key}")
                 bind_vars[bind_var_key] = sub_value
             or_clauses.append(" AND ".join(sub_conditions))
         aql_filters.append(f"({' OR '.join(or_clauses)})")
@@ -146,7 +147,7 @@ def add_query_filters(filters: Dict = None, bind_vars: Dict = None):
         in_clauses = []
         for field, values in in_conditions.items():
             bind_var_key = f"{field}_in_values"
-            in_clauses.append(f"doc.{field} IN @{bind_var_key}")
+            in_clauses.append(f"{document_name}.{field} IN @{bind_var_key}")
             bind_vars[bind_var_key] = values
         aql_filters.append(" AND ".join(in_clauses))
     
