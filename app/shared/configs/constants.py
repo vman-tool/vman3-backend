@@ -1,4 +1,3 @@
-from enum import Enum
 
 
 class db_collections():
@@ -13,3 +12,29 @@ class db_collections():
     ICD10: str = 'icd10'
     ASSIGNED_VA: str = 'assigned_va'
     CODED_VA: str = 'coded_va'
+    DOWNLOAD_TRACKER: str   ='"download_tracker"'
+    DOWNLOAD_PROCESS_TRACKER: str   ='download_process_tracker'
+    
+    
+    
+collections_with_indexes = {
+    # db_collections.VA_TABLE: [
+    #    {"fields": ["id10005r"], "unique": False, "type": "persistent", "name": "idx_region"}
+    # ],
+    db_collections.VA_TABLE: [
+        {"fields": ["id10005r"], "unique": False, "type": "persistent", "name": "idx_region"},
+        {"fields": ["id10012"], "unique": False, "type": "persistent", "name": "idx_date"},
+        {"fields": ["today"], "unique": False, "type": "persistent", "name": "idx_submission"},
+        # {"fields": ["age_group"], "unique": False, "type": "persistent", "name": "idx_age_group"},
+        {"fields": ["id10007"], "unique": False, "type": "persistent", "name": "idx_interviewer"}
+    ],
+    db_collections.USERS: [],
+    db_collections.USER_TOKENS: [],
+    db_collections.USER_ROLES: [],
+    db_collections.ICD10_CATEGORY: [],
+    db_collections.ICD10: [],
+    db_collections.ASSIGNED_VA: [],
+    db_collections.CODED_VA: [],
+    db_collections.DOWNLOAD_TRACKER: [],
+    db_collections.DOWNLOAD_PROCESS_TRACKER: []
+}
