@@ -169,11 +169,11 @@ async def get_assigned_va(
         if coder: 
             filters['coder'] = coder
         allowPaging = False if paging is not None and paging.lower() == 'false' else True
-        include_deleted = False if include_deleted is not None and include_deleted.lower() == 'false' else True
+        include_deleted = True if include_deleted is not None and include_deleted.lower() == 'true' else False
         
         return await get_va_assignment_service(allowPaging, page_number, limit, include_deleted, filters, current_user, db)    
-    except:
-        raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to get assigned va")
+    except Exception as e:
+        raise e
 
 
 @pcva_router.post(
