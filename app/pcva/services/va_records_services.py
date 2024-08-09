@@ -9,7 +9,7 @@ from app.pcva.responses.va_response_classes import AssignVAResponseClass, CodedV
 from app.shared.configs.constants import db_collections
 from app.shared.utils.database_utilities import add_query_filters, record_exists, replace_object_values
 from app.users.models.user import User
-from app.records.responses.data import map_to_data_response
+from app.pcva.utilities.va_records_utils import format_va_record
 
 async def fetch_va_records(paging: bool = True,  page_number: int = 1, limit: int = 10, include_assignment: bool = False, db: StandardDatabase = None):
     va_table_collection = db.collection(db_collections.VA_TABLE)
@@ -34,7 +34,7 @@ async def fetch_va_records(paging: bool = True,  page_number: int = 1, limit: in
 
             cursor = db.aql.execute(query, bind_vars=bind_vars)
 
-            data = [document for document in cursor]
+            data = [format_va_record(document) for document in cursor]
             
             
             return {
@@ -99,7 +99,8 @@ async def fetch_va_records(paging: bool = True,  page_number: int = 1, limit: in
                         RETURN MERGE(v, {{ assignments: vAssignments }})
                 )
 
-                RETURN vaWithAssignments
+                FOR va IN vaWithAssignments
+                    RETURN va
             """
 
             if paging and page_number and limit:
@@ -110,14 +111,14 @@ async def fetch_va_records(paging: bool = True,  page_number: int = 1, limit: in
                 })
             
             cursor = db.aql.execute(query, bind_vars=bind_vars)
+            data = [format_va_record(document) for document in cursor]
 
-            data = [document for document in cursor]
             
             return {
                 "page_number": page_number,
                 "limit": limit,
-                "data": data[0]
-            } if paging else data[0]
+                "data": data
+            } if paging else data
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to fetch data: {e}")
     
@@ -243,7 +244,7 @@ async def get_va_assignment_service(paging: bool, page_number: int = None, limit
         assigned_vas = await AssignedVA.run_custom_query(query=query, bind_vars=bind_vars, db=db)
         assignments = []
         for assignment in assigned_vas:
-            assignment["vaId"] = map_to_data_response(assignment["vaId"])
+            assignment["vaId"] = format_va_record(assignment["vaId"])
             assignments.append(await AssignVAResponseClass.get_structured_assignment(assignment=assignment, db = db))
         return {
             "page_number": page_number,
