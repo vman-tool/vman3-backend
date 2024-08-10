@@ -12,7 +12,7 @@ class db_collections():
     ICD10: str = 'icd10'
     ASSIGNED_VA: str = 'assigned_va'
     CODED_VA: str = 'coded_va'
-    DOWNLOAD_TRACKER: str   ='"download_tracker"'
+    DOWNLOAD_TRACKER: str   ='download_tracker'
     DOWNLOAD_PROCESS_TRACKER: str   ='download_process_tracker'
     SYSTEM_CONFIGS: str = 'system_configs'
     
