@@ -7,37 +7,118 @@ from app.pcva.models.models import ICD10, AssignedVA, CodedVA
 from app.pcva.requests.va_request_classes import AssignVARequestClass, CodeAssignedVARequestClass
 from app.pcva.responses.va_response_classes import AssignVAResponseClass, CodedVAResponseClass
 from app.shared.configs.constants import db_collections
-from app.shared.utils.database_utilities import record_exists, replace_object_values
+from app.shared.utils.database_utilities import add_query_filters, record_exists, replace_object_values
 from app.users.models.user import User
+from app.pcva.utilities.va_records_utils import format_va_record
 
-async def fetch_va_records(paging: bool = True,  page_number: int = 1, limit: int = 10, db: StandardDatabase = None):
-    try:
-        collection = db.collection(db_collections.VA_TABLE)
-        query = f"FOR doc IN {collection.name} "
-        bind_vars = {}
-            
-        if paging and page_number and limit:
-        
-            query += "LIMIT @offset, @size RETURN doc"
-        
-            bind_vars.update({
-                "offset": (page_number - 1) * limit,
-                "size": limit
-            })
-        else:
-            query += "RETURN doc"
-
-        cursor = db.aql.execute(query, bind_vars=bind_vars)
-
-        data = [document for document in cursor]
-        
-        
-        return {
-            "page_number": page_number,
-            "limit": limit,
-            "data": data
-        } if paging else data
+async def fetch_va_records(paging: bool = True,  page_number: int = 1, limit: int = 10, include_assignment: bool = False, db: StandardDatabase = None):
+    va_table_collection = db.collection(db_collections.VA_TABLE)
+    assignment_collection_exists = db.has_collection(db_collections.ASSIGNED_VA)
+    bind_vars = {}
     
+    try:
+        if not include_assignment or not assignment_collection_exists:
+            query = f"FOR doc IN {va_table_collection.name} "
+            bind_vars = {}
+                
+            if paging and page_number and limit:
+            
+                query += "LIMIT @offset, @size RETURN doc"
+            
+                bind_vars.update({
+                    "offset": (page_number - 1) * limit,
+                    "size": limit
+                })
+            else:
+                query += "RETURN doc"
+
+            cursor = db.aql.execute(query, bind_vars=bind_vars)
+
+            data = [format_va_record(document) for document in cursor]
+            
+            
+            return {
+                "page_number": page_number,
+                "limit": limit,
+                "data": data
+            } if paging else data
+
+        else:
+            query = f"""
+                // Step 1: Get paginated va records
+                LET paginatedVa = (
+                    FOR v IN {db_collections.VA_TABLE}
+                        
+                """
+            
+            if paging and page_number and limit:
+        
+                query += """LIMIT @offset, @size RETURN v)"""
+            
+            else:
+                query += "RETURN v"
+                
+            query += f"""
+                // Step 2: Get the va IDs for the paginated results
+                LET vaIds = (
+                    FOR v IN paginatedVa
+                        RETURN v.__id
+                )
+
+                // Step 3: Get assignments for the va IDs
+                LET assignments = (
+                    FOR a IN {db_collections.ASSIGNED_VA}
+                        FILTER a.vaId IN vaIds AND a.is_deleted == false
+                        RETURN {{
+                            vaId: a.vaId,
+                            coder: a.coder
+                        }}
+                )
+
+                LET formattedAssignments = (
+                    FOR a in assignments
+                        FOR user in {db_collections.USERS}
+                        FILTER user.uuid == a.coder
+                        RETURN {{
+                            vaId: a.vaId,
+                            coder: {{
+                                uuid: user.uuid,
+                                name: user.name
+                            }}
+                        }}
+                )
+
+                // Step 4: Combine the paginated va records with their assignments
+                LET vaWithAssignments = (
+                    FOR v IN paginatedVa
+                        LET vAssignments = (
+                            FOR a IN formattedAssignments
+                                FILTER a.vaId == v.__id
+                                RETURN a
+                        )
+                        RETURN MERGE(v, {{ assignments: vAssignments }})
+                )
+
+                FOR va IN vaWithAssignments
+                    RETURN va
+            """
+
+            if paging and page_number and limit:
+
+                bind_vars.update({
+                    "offset": (page_number - 1) * limit,
+                    "size": limit
+                })
+            
+            cursor = db.aql.execute(query, bind_vars=bind_vars)
+            data = [format_va_record(document) for document in cursor]
+
+            
+            return {
+                "page_number": page_number,
+                "limit": limit,
+                "data": data
+            } if paging else data
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to fetch data: {e}")
     
@@ -89,20 +170,87 @@ async def assign_va_service(va_records: AssignVARequestClass, user: User,  db: S
 async def get_va_assignment_service(paging: bool, page_number: int = None, limit: int = None, include_deleted: bool = None, filters: Dict = {}, user = None, db: StandardDatabase = None):
     
     try:
-        assigned_vas = await AssignedVA.get_many(
-            paging = paging, 
-            page_number = page_number, 
-            limit = limit, 
-            filters = filters, 
-            include_deleted = include_deleted, 
-            db = db
-        )
+        # assigned_vas = await AssignedVA.get_many(
+        #     paging = paging, 
+        #     page_number = page_number, 
+        #     limit = limit, 
+        #     filters = filters, 
+        #     include_deleted = include_deleted, 
+        #     db = db
+        # )
+
+        filters.update({
+            "is_deleted": include_deleted 
+        })
+
+        bind_vars = {}
+
+        filters_list, vars = add_query_filters(filters, {}, 'a')
+
+        bind_vars.update(vars)
+
+        filters_string = ""
+
+        if filters_list:
+            filters_string += " FILTER " + " AND ".join(filters_list)
+        query = f"""
+                // Step 1: Get paginated va assignments
+                LET paginatedVaAssignments = (
+                    FOR a IN {db_collections.ASSIGNED_VA}
+                    {filters_string}   
+                """
+            
+        if paging and page_number and limit:
+    
+            query += """LIMIT @offset, @size RETURN a)"""
         
+        else:
+            query += "RETURN a)"
+            
+        query += f"""
+            LET vaIds = (
+                FOR v IN paginatedVaAssignments
+                    RETURN v.vaId
+            )
+
+            LET vas = (
+                FOR v IN {db_collections.VA_TABLE}
+                    FILTER v.__id IN vaIds
+                    RETURN v
+            )
+
+            LET assignmentsWithVa = (
+                FOR a IN paginatedVaAssignments
+                    LET assignedVas = (
+                        FOR v IN vas
+                            FILTER v.__id == a.vaId
+                            RETURN v
+                    )
+                    RETURN MERGE(a, {{ vaId: assignedVas[0] }})
+            )
+
+            FOR assignment IN assignmentsWithVa
+                RETURN assignment
+        """
+        
+
+        if paging and page_number and limit:
+
+            bind_vars.update({
+                "offset": (page_number - 1) * limit,
+                "size": limit
+            })
+        
+        assigned_vas = await AssignedVA.run_custom_query(query=query, bind_vars=bind_vars, db=db)
+        assignments = []
+        for assignment in assigned_vas:
+            assignment["vaId"] = format_va_record(assignment["vaId"])
+            assignments.append(await AssignVAResponseClass.get_structured_assignment(assignment=assignment, db = db))
         return {
             "page_number": page_number,
             "limit": limit,
-            "data": [await AssignVAResponseClass.get_structured_assignment(assignment=va, db = db) for va in assigned_vas]
-        } if paging else [await AssignVAResponseClass.get_structured_assignment(assignment=va, db = db) for va in assigned_vas]
+            "data": assignments
+        } if paging else assignments
     
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to get assigned va: {e}")

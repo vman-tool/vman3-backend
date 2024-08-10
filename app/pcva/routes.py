@@ -34,14 +34,16 @@ async def get_va_records(
     paging: Optional[str] = Query(None, alias="paging"),
     page_number: Optional[int] = Query(1, alias="page_number"),
     limit: Optional[int] = Query(10, alias="limit"),
+    include_assignment: Optional[str] = Query(None, alias="include_assignment"),
     db: StandardDatabase = Depends(get_arangodb_session)):
 
     try:
         allowPaging = False if paging is not None and paging.lower() == 'false' else True
-        return await fetch_va_records(allowPaging, page_number, limit, db)
+        include_assignment = False if include_assignment is not None and include_assignment.lower() == 'false' else True
+        return await fetch_va_records(allowPaging, page_number, limit, include_assignment, db)
         
-    except:
-        raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to get va records")
+    except Exception as e:
+        raise e
 
 
 @pcva_router.get(
@@ -167,11 +169,11 @@ async def get_assigned_va(
         if coder: 
             filters['coder'] = coder
         allowPaging = False if paging is not None and paging.lower() == 'false' else True
-        include_deleted = False if include_deleted is not None and include_deleted.lower() == 'false' else True
+        include_deleted = True if include_deleted is not None and include_deleted.lower() == 'true' else False
         
         return await get_va_assignment_service(allowPaging, page_number, limit, include_deleted, filters, current_user, db)    
-    except:
-        raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to get assigned va")
+    except Exception as e:
+        raise e
 
 
 @pcva_router.post(

@@ -1,11 +1,11 @@
-from typing import List, Optional
+from typing import List, Optional, Union
 from pydantic import BaseModel
 
 
 class AssignVARequestClass(BaseModel):
     vaIds: List[str]
     coder: Optional[str]
-    new_coder: Optional[str]
+    new_coder: Union[str, None] = None 
 
 class CodeAssignedVARequestClass(BaseModel):
     assigned_va: str
