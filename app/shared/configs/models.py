@@ -271,7 +271,7 @@ class VManBaseModel(BaseModel):
         return query, bind_vars
     
     @classmethod
-    async def run_custom_query(cls, query: str = None, bind_vars: Dict = None, db: StandardDatabase = None):
+    async def run_custom_query(cls, query: str = None, bind_vars: Dict = None,count: bool = True, db: StandardDatabase = None):
         """
             This function will run a custom query and return the results.
 
@@ -283,10 +283,10 @@ class VManBaseModel(BaseModel):
             Database return value
         """
         try:
-            cursor = db.aql.execute(query=query, bind_vars=bind_vars)
+            cursor = db.aql.execute(query=query, bind_vars=bind_vars, count=count)
             return cursor
         except Exception as e:
-            raise HTTPException(status_code=500, detail=str(e))
+            raise e
 
 class ResponseUser(BaseModel):
     uuid: str
