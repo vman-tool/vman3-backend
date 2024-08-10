@@ -1,8 +1,10 @@
 
 
-from fastapi import APIRouter, BackgroundTasks, HTTPException, status
+from arango.database import StandardDatabase
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 
 from app.odk_download.services import data_download
+from app.shared.configs.arangodb_db import get_arangodb_session
 
 odk_router = APIRouter(
     prefix="/odk",
@@ -36,9 +38,10 @@ async def fetch_and_store_data(
 async def fetch_odk_data_with_async(background_tasks: BackgroundTasks,  start_date: str = None, 
     end_date: str = None,
     skip: int = 0,
-    top: int = 10000):
+    top: int = 10000,      db: StandardDatabase = Depends(get_arangodb_session)):
     try:
-        await data_download.fetch_odk_data_with_async(       start_date= start_date,
+        await data_download.fetch_odk_data_with_async( db=db,
+                                                      start_date= start_date,
     end_date=end_date,
     skip=skip,
     top=top)
