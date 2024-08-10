@@ -4,7 +4,7 @@ from arango import ArangoClient
 from arango.database import StandardDatabase
 from decouple import config
 
-from app.shared.configs.constants import db_collections
+from app.shared.configs.constants import collections_with_indexes
 
 
 class ArangoDBClient:
@@ -26,8 +26,8 @@ class ArangoDBClient:
         
         # Connect to the specified database
         self.db = self.client.db(self.db_name, username=self.username, password=self.password)
-        await create_collections(self.db, [db_collections.VA_TABLE, db_collections.DOWNLOAD_TRACKER, db_collections.DOWNLOAD_PROCESS_TRACKER,db_collections.USERS])
-        # await create_collections_and_indexes(self.db, collections_with_indexes)  
+    async def create_collections(self):
+        await create_collections_and_indexes(self.db, collections_with_indexes)  
     async def insert_many(self, collection_name:str, documents: list[dict]):
         collection = self.db.collection(collection_name)
         result = collection.insert_many(documents)
@@ -55,11 +55,7 @@ class ArangoDBClient:
             print(e)
             raise e
 
-# Function to create collections if they do not exist
-async def create_collections(db, collections):
-    for collection_name in collections:
-        if not db.has_collection(collection_name):
-            db.create_collection(collection_name)
+
     
     
 async def create_collections_and_indexes(db: StandardDatabase, collections_with_indexes: dict):
@@ -70,8 +66,6 @@ async def create_collections_and_indexes(db: StandardDatabase, collections_with_
         collection = db.collection(collection_name)
         
         for index in indexes:
-            
-
             try:
                 existing_indexes = collection.indexes()
                 existing_index = next((idx for idx in existing_indexes if idx['fields'] == index['fields']), None)
@@ -80,17 +74,27 @@ async def create_collections_and_indexes(db: StandardDatabase, collections_with_
                     # Check if the existing index properties match the desired ones
                     index_type_match = existing_index['type'] == index['type']
                     unique_match = existing_index['unique'] == index.get('unique', False)
-                    name_match = existing_index['name'] == index.get('name', None)
+                    name_match = existing_index.get('name', None) == index.get('name', None)
 
                     if not (index_type_match and unique_match and name_match):
+                        # Properties do not match, drop and recreate the index
                         collection.delete_index(existing_index['id'])
-                        print(f"Dropped existing index: {existing_index['id']}")
+                        print(f"Dropped existing index: {existing_index['id']} due to property mismatch")
+
+                        # Create the new index with updated properties
+                        if index['type'] == 'hash':
+                            collection.add_hash_index(fields=index['fields'], unique=index.get('unique', False), name=index.get('name', None))
+                        elif index['type'] == 'skiplist':
+                            collection.add_skiplist_index(fields=index['fields'], unique=index.get('unique', False), name=index.get('name', None))
+                        elif index['type'] == 'persistent':
+                            collection.add_persistent_index(fields=index['fields'], unique=index.get('unique', False), name=index.get('name', None))
+
+                        print(f"Created updated index: {index['name']} with fields: {index['fields']}")
                     else:
-                        print(f"Index already exists with the same properties: {existing_index['name']}")
-
                         continue
-
-                    # Create the new index
+                        # print(f"Index already exists with matching properties: {existing_index['name']} with fields: {existing_index['fields']}")
+                else:
+                    # Index does not exist, create it
                     if index['type'] == 'hash':
                         collection.add_hash_index(fields=index['fields'], unique=index.get('unique', False), name=index.get('name', None))
                     elif index['type'] == 'skiplist':
@@ -98,7 +102,7 @@ async def create_collections_and_indexes(db: StandardDatabase, collections_with_
                     elif index['type'] == 'persistent':
                         collection.add_persistent_index(fields=index['fields'], unique=index.get('unique', False), name=index.get('name', None))
 
-                    print(f"Created index: {index}")
+                    print(f"Created new index: {index['name']} with fields: {index['fields']}")
 
             except Exception as e:
                 print(f"Error processing index {index}: {e}")
