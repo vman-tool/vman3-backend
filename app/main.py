@@ -10,8 +10,9 @@ from loguru import logger
 
 from app import routes
 from app.odk_download.services import data_download, schedulers
-from app.shared.configs.arangodb_db import get_arangodb_client
-from app.shared.configs.database import close_mongo_connection, connect_to_mongo
+from app.shared.configs.arangodb_db import ArangoDBClient, get_arangodb_client
+from app.shared.configs.database import (close_mongo_connection,
+                                         connect_to_mongo)
 from app.users.utils.default import default_account_creation
 
 logger.add("./../app.log", rotation="500 MB")
@@ -33,6 +34,7 @@ async def lifespan(app: FastAPI):
     
     # Initialize ArangoDB connection
     arango_client= await get_arangodb_client()
+    await ArangoDBClient.create_collections(arango_client)
     app.state.arango_client = arango_client
     await default_account_creation()
     

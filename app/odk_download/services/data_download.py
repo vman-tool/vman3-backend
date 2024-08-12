@@ -1,20 +1,13 @@
 import time
-from datetime import datetime
 from json import loads
 from typing import List
 
 import pandas as pd
+from arango.database import StandardDatabase
 from fastapi import Depends, HTTPException
 from loguru import logger
 
-from app.odk_download.services.data_tracker import (
-    get_last_processed_timestamp,
-    log_chunk_remove,
-    log_chunk_start,
-    log_chunk_update,
-    log_error,
-    update_last_processed_timestamp,
-)
+from app.settings.services.odk_configs import fetch_odk_config
 from app.shared.configs.arangodb_db import ArangoDBClient, get_arangodb_client
 from app.shared.configs.constants import db_collections
 from app.shared.configs.database import form_submissions_collection
@@ -26,7 +19,8 @@ async def fetch_odk_data_with_async(
     end_date: str = None,
     skip: int = 0,
     top: int = 3000,
-    resend: bool = False # resend flag to resend data
+    resend: bool = False, # resend flag to resend data
+    db: StandardDatabase =None
 ):   
     try:
         log_message = "\nFetching data from ODK Central"
@@ -35,8 +29,11 @@ async def fetch_odk_data_with_async(
         logger.info(f"{log_message}\n")
 
         start_time = time.time()
+        # load setting from db
+        config = await fetch_odk_config(db)
+        print(config)
         
-        async with ODKClientAsync() as odk_client:
+        async with ODKClientAsync(config) as odk_client:
             try:
                 
                 data_for_count = await odk_client.getFormSubmissions(top= 1 if resend is False else top,skip= None if resend is False else skip)

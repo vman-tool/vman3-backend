@@ -12,8 +12,9 @@ class db_collections():
     ICD10: str = 'icd10'
     ASSIGNED_VA: str = 'assigned_va'
     CODED_VA: str = 'coded_va'
-    DOWNLOAD_TRACKER: str   ='"download_tracker"'
+    DOWNLOAD_TRACKER: str   ='download_tracker'
     DOWNLOAD_PROCESS_TRACKER: str   ='download_process_tracker'
+    SYSTEM_CONFIGS: str = 'system_configs'
     
     
     
@@ -36,5 +37,6 @@ collections_with_indexes = {
     db_collections.ASSIGNED_VA: [],
     db_collections.CODED_VA: [],
     db_collections.DOWNLOAD_TRACKER: [],
-    db_collections.DOWNLOAD_PROCESS_TRACKER: []
+    db_collections.DOWNLOAD_PROCESS_TRACKER: [],
+    db_collections.SYSTEM_CONFIGS: []
 }
