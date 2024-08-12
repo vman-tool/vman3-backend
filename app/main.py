@@ -60,7 +60,7 @@ def create_application():
 
 app = create_application()
 
-origins = config('CORS_ALLOWED_ORIGINS', default="").split(',')
+origins = config('CORS_ALLOWED_ORIGINS', default="*").split(',')
 
 app.add_middleware(
     CORSMiddleware,

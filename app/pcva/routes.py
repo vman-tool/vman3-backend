@@ -1,4 +1,4 @@
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union
 from fastapi import APIRouter, HTTPException, Query
 from arango.database import StandardDatabase
 from fastapi import APIRouter, Depends, status
@@ -55,7 +55,7 @@ async def get_icd10_categories(
     page_number: Optional[int] = Query(1, alias="page_number"),
     limit: Optional[int] = Query(10, alias="limit"),
     include_deleted: Optional[str] = Query(None, alias="include_deleted"),
-    db: StandardDatabase = Depends(get_arangodb_session)) -> List[ICD10CategoryResponseClass] | Any:
+    db: StandardDatabase = Depends(get_arangodb_session)) -> Union[List[ICD10CategoryResponseClass], Any]:
 
     try:
         allowPaging = False if paging is not None and paging.lower() == 'false' else True
@@ -108,7 +108,7 @@ async def get_icd10(
     page_number: Optional[int] = Query(1, alias="page_number"),
     limit: Optional[int] = Query(10, alias="limit"),
     include_deleted: Optional[str] = Query(None, alias="include_deleted"),
-    db: StandardDatabase = Depends(get_arangodb_session)) -> List[ICD10ResponseClass] | Any:
+    db: StandardDatabase = Depends(get_arangodb_session)) -> Union[List[ICD10ResponseClass], Any]:
 
     try:
         allowPaging = False if paging is not None and paging.lower() == 'false' else True
@@ -160,7 +160,7 @@ async def get_assigned_va(
     va_id: Optional[str] = Query(None, alias="va_id"),
     coder: Optional[str] = Query(None, alias="coder"),
     current_user: User = Depends(get_current_user),
-    db: StandardDatabase = Depends(get_arangodb_session)) -> List[AssignVAResponseClass] | Dict:
+    db: StandardDatabase = Depends(get_arangodb_session)) -> Union[List[AssignVAResponseClass],Dict]:
 
     try:
         filters = {}
@@ -193,7 +193,7 @@ async def assign_va(
 @pcva_router.get("/get-coded-va", status_code=status.HTTP_200_OK)
 async def get_coded_va(
     current_user: User = Depends(get_current_user),
-    db: StandardDatabase = Depends(get_arangodb_session)) -> List[CodedVAResponseClass] | Dict:
+    db: StandardDatabase = Depends(get_arangodb_session)) -> Union[List[CodedVAResponseClass],Dict]:
 
     try:
         return  await get_coded_va_service(
@@ -209,7 +209,7 @@ async def get_coded_va(
 async def code_assigned_va(
     coded_va: CodeAssignedVARequestClass,
     current_user: User = Depends(get_current_user),
-    db: StandardDatabase = Depends(get_arangodb_session)) -> CodedVAResponseClass | Dict:
+    db: StandardDatabase = Depends(get_arangodb_session)) -> Union[CodedVAResponseClass,Dict]:
     try:
         return  await code_assigned_va_service(coded_va, current_user = User(**current_user), db = db)
     except Exception as e:
