@@ -11,8 +11,8 @@ class ArangoDBClient:
     def __init__(self):
         self.client = ArangoClient(hosts=config("ARANGODB_URL", default="http://localhost:8529"))
         self.db_name = config("DB_NAME", default="vman3")
-        self.username = "root"
-        self.password = config("ARANGO_ROOT_PASSWORD")
+        self.username = config("ARANGO_ROOT_USER", default="root")
+        self.password = config("ARANGO_ROOT_PASSWORD", default="password")
         self.db = None
 
     async def connect(self):
