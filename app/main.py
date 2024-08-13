@@ -51,8 +51,8 @@ def create_application():
     application = FastAPI(
         title="vman3",
         version="1.0.0",
-        docs_url="/api/docs",
-        openapi_url="/api/openapi.json",
+        docs_url="/api/v1/docs",
+        openapi_url="/api/v1/openapi.json",
         lifespan=lifespan
     )
     routes.main_route(application)
