@@ -57,6 +57,11 @@ ODK_PASSWORD=""
 ```bash
 
 cp settings.json.example settings.json
+```
+# command copy the content of env_sample.example to .env
+
+```
+cp .env_sample .env
     
 ```
 
