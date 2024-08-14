@@ -10,7 +10,11 @@ This is the API for the Vman3 project. It is built using FastAPI and MongoDB.
 - Git/ Git Flow
 
 ## Setup Instructions
+```
+Run 'git clone https://github.com/vman-tool/vman3' to copy the project local then,
+Run 'cd vman3 ' to change to the project directory,
 
+```
 ### 1. Create and Activate a Virtual Environment
 
 Create a virtual environment to manage your project dependencies.
