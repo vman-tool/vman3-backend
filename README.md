@@ -1,4 +1,4 @@
-# Vman3 API
+# VMan3 API
 
 This is the API for the Vman3 project. It is built using FastAPI and MongoDB.
 
