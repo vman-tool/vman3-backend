@@ -47,16 +47,22 @@ async def fetch_odk_data_with_async(
             try:
                 data_for_count = await odk_client.getFormSubmissions(top= 1 if resend is False else top,skip= None if resend is False else skip, order_by='__system/submissionDate', order_direction='asc')
                 total_data_count = data_for_count["@odata.count"]
-                logger.info(f"{total_data_count} total to be downloaded")
             except Exception as e:
                 raise HTTPException(status_code=500, detail=str(e))
 
-            if total_data_count <= available_data_count:
+            if total_data_count == available_data_count:
                 logger.info(f"\nVman is up to date.")
                 return {"status": "Vman is up to date"}
             
+            if available_data_count < total_data_count and start_date:
+                start_date = None
+                available_data_count = 0
+            
             if total_data_count > available_data_count:
                 total_data_count = total_data_count - available_data_count
+
+            
+            logger.info(f"{total_data_count} total to be downloaded")
             
             num_iterations = (total_data_count // top) + (1 if total_data_count % top != 0 else 0)
             records_saved = 0

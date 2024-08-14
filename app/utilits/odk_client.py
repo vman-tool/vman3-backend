@@ -112,10 +112,10 @@ class ODKClientAsync:
             filter += f'&$filter=__system/submissionDate ge {start_date} and __system/submissionDate le {end_date}'
 
         if len(start_date) > 0 and len(end_date) == 0:
-            filter = f'&$filter=__system/submissionDate gt {start_date}'
+            filter = f'&$filter=__system/submissionDate ge {start_date}'
         
         if len(end_date) > 0 and len(start_date) == 0:
-            filter = f'&$filter=__system/submissionDate lt {end_date}'
+            filter = f'&$filter=__system/submissionDate le {end_date}'
         
         if order_by and self.is_sort_allowed:
             if order_direction not in ("asc", "desc"):
