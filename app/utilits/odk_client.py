@@ -15,6 +15,7 @@ class ODKClientAsync:
         self.odk_username = config.username
         self.odk_password = config.password
         self.odk_form_id = config.form_id
+        self.is_sort_allowed = config.is_sort_allowed
 
     async def __aenter__(self):
         self.client = httpx.AsyncClient()
@@ -94,7 +95,7 @@ class ODKClientAsync:
                             json.dump(session_data, file)
         return session_data
     
-    async def getFormSubmissions(self, start_date=None, end_date=None, skip=None, top=None):
+    async def getFormSubmissions(self, start_date=None, end_date=None, skip: int = None, top: int = None, order_by: str = None, order_direction: str = 'asc'):
         headers = {
             "Content-Type": 'application/json',
             "X-Extended-Metadata": "true"
@@ -106,20 +107,24 @@ class ODKClientAsync:
         start_date = start_date if start_date else ""
         end_date = end_date if end_date else ""
 
-        date_filter = ""
+        filter = ""
         if len(start_date) > 0 and len(end_date) > 0:
-            date_filter += f'&$filter=__system/submissionDate ge {start_date} and __system/submissionDate le {end_date}'
+            filter += f'&$filter=__system/submissionDate ge {start_date} and __system/submissionDate le {end_date}'
 
         if len(start_date) > 0 and len(end_date) == 0:
-            date_filter = f'&$filter=__system/submissionDate gt {start_date}'
+            filter = f'&$filter=__system/submissionDate gt {start_date}'
         
         if len(end_date) > 0 and len(start_date) == 0:
-            date_filter = f'&$filter=__system/submissionDate lt {end_date}'
+            filter = f'&$filter=__system/submissionDate lt {end_date}'
         
-        url = f"{self.odk_base_url}/{self.odk_api_version}/projects/{self.odk_default_project_id}/forms/{self.odk_form_id}.svc/Submissions?$count=true{pagination_string}{date_filter}"
+        if order_by and self.is_sort_allowed:
+            if order_direction not in ("asc", "desc"):
+                order_direction = "asc"
+            filter += f'&$orderby={order_by} {order_direction}'
+        
+        url = f"{self.odk_base_url}/{self.odk_api_version}/projects/{self.odk_default_project_id}/forms/{self.odk_form_id}.svc/Submissions?$count=true{pagination_string}{filter}"
         
         response = await self.send_request('get', url, headers=headers)
-        print(response.json())
         if response.status_code in {200, 201}:
             return response.json()
         else:
