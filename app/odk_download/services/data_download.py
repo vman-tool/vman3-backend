@@ -29,26 +29,44 @@ async def fetch_odk_data_with_async(
         logger.info(f"{log_message}\n")
 
         start_time = time.time()
+
+        available_data_count = 0
+        latest_record = {}
         # load setting from db
         config = await fetch_odk_config(db)
-        print(config)
         
+        # Load odk records and get the latest date to query if none then query all the data
+        if not start_date:
+            latest_record = await get_latest_data_downloaded_date(db)
+        
+        if latest_record:
+            start_date = latest_record.get('latest_date', None)
+            available_data_count = latest_record.get('total_records', 0)
+        
+        print(start_date)
+            
         async with ODKClientAsync(config) as odk_client:
             try:
-                
-                data_for_count = await odk_client.getFormSubmissions(top= 1 if resend is False else top,skip= None if resend is False else skip)
+                data_for_count = await odk_client.getFormSubmissions(top= 1 if resend is False else top,skip= None if resend is False else skip, order_by='__system/submissionDate', order_direction='asc')
                 total_data_count = data_for_count["@odata.count"]
                 logger.info(f"{total_data_count} total to be downloaded")
             except Exception as e:
                 raise HTTPException(status_code=500, detail=str(e))
 
+            if total_data_count <= available_data_count:
+                logger.info(f"\nVman is up to date.")
+                return {"status": "Vman is up to date"}
+            
+            if total_data_count > available_data_count:
+                total_data_count = total_data_count - available_data_count
+            
             num_iterations = (total_data_count // top) + (1 if total_data_count % top != 0 else 0)
             records_saved = 0
             last_progress = 0
 
-            async def fetch_data_chunk(skip, top):
+            async def fetch_data_chunk(skip, top, start_date, end_date):
                 try:
-                    data = await odk_client.getFormSubmissions(top=top, skip=skip)
+                    data = await odk_client.getFormSubmissions(top=top, skip=skip, start_date=start_date, end_date=end_date, order_by='__system/submissionDate', order_direction='asc')
                     if isinstance(data, str):
                         logger.error(f"Error fetching data: {data}")
                         raise HTTPException(status_code=500, detail=data)
@@ -84,12 +102,13 @@ async def fetch_odk_data_with_async(
             for i in range(num_iterations):
                 chunk_skip = skip + i * top
                 chunk_top = top
-                chunk__id = f"{start_date or 'null'}-{end_date or 'null'}-{chunk_skip}-{chunk_top}"
+                # chunk__id = f"{start_date or 'null'}-{end_date or 'null'}-{chunk_skip}-{chunk_top}"
 
                 try:
-                    data_chunk = await fetch_data_chunk(chunk_skip, chunk_top)
+                    data_chunk = await fetch_data_chunk(chunk_skip, chunk_top, start_date, end_date)
                     if data_chunk:
                         await insert_all_data(data_chunk)
+                    pass
                 except Exception as e:
                     raise HTTPException(status_code=500, detail=str(e))
 
@@ -124,7 +143,23 @@ async def insert_to_arangodb(data: dict):
     except Exception as e:
         print(e)
         raise e
+    
+async def get_latest_data_downloaded_date(db: StandardDatabase = None):
+    query = f"""
+                LET totalCount = LENGTH(FOR doc IN {db_collections.VA_TABLE} RETURN 1)
 
+                
+                LET latestRecord = (
+                        FOR doc IN {db_collections.VA_TABLE}
+                            SORT doc.submissiondate DESC
+                            LIMIT 1
+                            RETURN MERGE({{latest_date: doc.submissiondate}}, {{ total_records: totalCount }})
+                    )[0]
+
+                RETURN latestRecord
+            """
+
+    return db.aql.execute(query=query).next()
 
 
 
