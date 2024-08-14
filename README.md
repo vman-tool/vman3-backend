@@ -65,7 +65,17 @@ cp .env_sample .env
     
 ```
 
-### 5. Running the Application
+### 5. Running the arangodb database  with Docker Compose
+
+
+After ensuring the above configurations, build and run the Docker containers:
+
+```bash
+docker compose up arango-db -d
+
+```
+
+### 6. Running the Application
 
 Run the following command to start the FastAPI application:
 
@@ -78,15 +88,7 @@ localhost:8000`.
 
 
 
-
-
-
-
-### 6. Running the Application with Docker Compose
-
-
-
-
+### 7. Running the Application with Docker Compose
 
 
 After ensuring the above configurations, build and run the Docker containers:
