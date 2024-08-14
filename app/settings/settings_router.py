@@ -16,6 +16,8 @@ settings_router = APIRouter(
     prefix="/settings",
     tags=["Settings"],
     responses={404: {"description": "Not found"}},
+    # dependencies=[Depends(oauth2_scheme), Depends(get_current_user)]
+
 )
 
 
@@ -39,4 +41,14 @@ configData: OdkConfigModel,
   
     response = await add_configs_settings( configData,db=db)
     return response
+
+
+@settings_router.get("/system_configs", status_code=status.HTTP_200_OK, response_model=ResponseMainModel)
+async def get_download_status(
+
+    db: StandardDatabase = Depends(get_arangodb_session)):
+
+    response = await fetch_configs_settings( db=db)
+    return response
+
 

@@ -12,6 +12,7 @@ from app.shared.configs.arangodb_db import ArangoDBClient, get_arangodb_client
 from app.shared.configs.constants import db_collections
 from app.shared.configs.database import form_submissions_collection
 from app.utilits.odk_client import ODKClientAsync
+from app.utilits.websocket_manager import WebSocketManager
 
 
 async def fetch_odk_data_with_async(
@@ -20,9 +21,11 @@ async def fetch_odk_data_with_async(
     skip: int = 0,
     top: int = 3000,
     resend: bool = False, # resend flag to resend data
-    db: StandardDatabase =None
+    db: StandardDatabase =None,
+   
 ):   
     try:
+        websocket_manager: WebSocketManager = WebSocketManager()
         log_message = "\nFetching data from ODK Central"
         if start_date or end_date:
             log_message += f" between {start_date} and {end_date}"
@@ -77,6 +80,9 @@ async def fetch_odk_data_with_async(
                         if int(progress) != last_progress:
                             last_progress = int(progress)
                             elapsed_time = time.time() - start_time
+                            # send progress to websocket
+                            if websocket_manager:
+                                await websocket_manager.broadcast(f"Progress: {progress:.0f}%")
                             print(f"\rDownloading: [{'=' * int(progress // 2)}{' ' * (50 - int(progress // 2))}] {progress:.0f}% - Elapsed time: {elapsed_time:.2f}s", end='', flush=True)
                 except Exception as e:
                     raise HTTPException(status_code=500, detail=str(e))
@@ -104,6 +110,9 @@ async def fetch_odk_data_with_async(
                 logger.info(f"\nSuccessfully inserted {records_saved} records while records were {total_data_count} - Total elapsed time: {total_elapsed_time:.2f}s")
                 return {"status": "Data inserted with issues", "elapsed_time": total_elapsed_time}
     except Exception as e:
+        if websocket_manager:
+            await websocket_manager.broadcast(f"Error: {str(e)}")
+            
         raise HTTPException(status_code=500, detail=str(e))
 
 
