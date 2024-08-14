@@ -73,10 +73,10 @@ app.add_middleware(
 )
 
 
-force_https_redirect = config("FORCE_HTTPS_REDIRECT", default=False, cast=bool)
+# force_https_redirect = config("FORCE_HTTPS_REDIRECT", default=False, cast=bool)
 
-if force_https_redirect:
-    app.add_middleware(HTTPSRedirectMiddleware)
+# if force_https_redirect:
+#     app.add_middleware(HTTPSRedirectMiddleware)
 
 
 
