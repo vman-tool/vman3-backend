@@ -1,0 +1,42 @@
+
+
+from arango.database import StandardDatabase
+from fastapi import APIRouter, Depends, status
+
+from app.settings.models.odk_configs import OdkConfigModel
+from app.settings.services.odk_configs import (add_configs_settings,
+                                               fetch_configs_settings)
+from app.shared.configs.arangodb_db import get_arangodb_session
+from app.shared.configs.models import ResponseMainModel
+
+# from sqlalchemy.orm import Session
+
+
+settings_router = APIRouter(
+    prefix="/settings",
+    tags=["Settings"],
+    responses={404: {"description": "Not found"}},
+)
+
+
+
+     
+@settings_router.get("/system_configs", status_code=status.HTTP_200_OK, response_model=ResponseMainModel)
+async def get_configs_settings(
+
+    db: StandardDatabase = Depends(get_arangodb_session)):
+
+    response = await fetch_configs_settings( db=db)
+    return response
+
+
+@settings_router.post("/system_configs", status_code=status.HTTP_200_OK, response_model=ResponseMainModel)
+async def save_configs_settings(
+configData: OdkConfigModel,
+    db: StandardDatabase = Depends(get_arangodb_session)):
+    print(configData)
+
+  
+    response = await add_configs_settings( configData,db=db)
+    return response
+

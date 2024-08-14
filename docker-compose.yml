@@ -20,5 +20,19 @@ services:
     volumes:
       - mongo-data:/data/db
 
+  arango-db:
+    image: arangodb/arangodb
+    env_file:
+      - .env
+    volumes:
+      - vman3db:/var/lib/arangodb3
+    ports:
+      - '8529:8529'
+      # - '8002:8530'
+    command:
+      - arangod
+      - --server.endpoint=tcp://0.0.0.0:8529
+
 volumes:
+  vman3db:
   mongo-data:
