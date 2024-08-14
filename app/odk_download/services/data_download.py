@@ -42,8 +42,6 @@ async def fetch_odk_data_with_async(
         if latest_record:
             start_date = latest_record.get('latest_date', None)
             available_data_count = latest_record.get('total_records', 0)
-        
-        print(start_date)
             
         async with ODKClientAsync(config) as odk_client:
             try:
