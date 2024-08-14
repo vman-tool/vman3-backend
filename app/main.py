@@ -6,6 +6,8 @@ from apscheduler.triggers.interval import IntervalTrigger
 from decouple import config
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.middleware.httpsredirect import HTTPSRedirectMiddleware
+from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from loguru import logger
 
 from app import routes
@@ -51,8 +53,8 @@ def create_application():
     application = FastAPI(
         title="vman3",
         version="1.0.0",
-        docs_url="/api/docs",
-        openapi_url="/api/openapi.json",
+        docs_url="/api/v1/docs",
+        openapi_url="/api/v1/openapi.json",
         lifespan=lifespan
     )
     routes.main_route(application)
@@ -69,6 +71,12 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+# force_https_redirect = config("FORCE_HTTPS_REDIRECT", default=False, cast=bool)
+
+# if force_https_redirect:
+#     app.add_middleware(HTTPSRedirectMiddleware)
 
 
 
