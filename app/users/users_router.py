@@ -24,7 +24,7 @@ auth_router = APIRouter(
     prefix="/users",
     tags=["Users"],
     responses={404: {"description": "Not found"}},
-    # dependencies=[Depends(oauth2_scheme), Depends(get_current_user)]
+    dependencies=[Depends(oauth2_scheme), Depends(get_current_user)]
 )
 
 guest_router = APIRouter(
@@ -77,7 +77,7 @@ async def fetch_user(user = Depends(get_current_user)):
 async def get_user_info(uuid, session = Depends(get_arangodb_session)):
     return await user.fetch_user_detail(uuid, session)
 
-@auth_router.get("/", status_code=status.HTTP_200_OK, response_model=List[UserResponse] | Dict)
+@auth_router.get("", status_code=status.HTTP_200_OK, response_model=List[UserResponse] | Dict)
 async def get_users(
         paging: Optional[str] = Query(None, alias="paging"),
         page_number: Optional[int] = Query(1, alias="page_number"),
