@@ -1,10 +1,12 @@
 
 
 from arango.database import StandardDatabase
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
+from fastapi import (APIRouter, BackgroundTasks, Depends, HTTPException,
+                     WebSocket, WebSocketDisconnect, status)
 
 from app.odk_download.services import data_download
 from app.shared.configs.arangodb_db import get_arangodb_session
+from app.utilits import websocket_manager
 
 odk_router = APIRouter(
     prefix="/odk",
@@ -56,3 +58,14 @@ async def retry_failed_chunks_endpoint():
         return {"status": "Retries initiated for failed chunks"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))     
+    
+    
+    
+@odk_router.websocket("/ws/progress")
+async def websocket_endpoint(websocket: WebSocket):
+    await websocket_manager.connect(websocket)
+    try:
+        while True:
+            await websocket.receive_text()  # Keep the connection open
+    except WebSocketDisconnect:
+        websocket_manager.disconnect(websocket)
