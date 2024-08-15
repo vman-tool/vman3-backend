@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import AsyncGenerator
 
 from arango import ArangoClient
@@ -33,30 +34,117 @@ class ArangoDBClient:
         result = collection.insert_many(documents)
         return result
     
-    async def replace_one(self, collection_name:str, document:dict):
-        try:
-            aql_query = """
-            UPSERT { __id: @key }
-            INSERT @document
-            UPDATE @document IN @@collection
-            OPTIONS { exclusive: true }
-            // LET opType = IS_NULL(OLD) ? "insert" : "update"
-           // RETURN { _key: NEW._key, type: opType }
-            """
-            bind_vars = {
-                '@collection': collection_name,
-                'key': document['__id'],
-                'document': document
-            }
-            cursor = self.db.aql.execute(aql_query, bind_vars=bind_vars)
-            result = [doc for doc in cursor]
-            return result
-        except Exception as e:
-            print(e)
-            raise e
+    # async def replace_one(self, collection_name:str, document:dict):
+    #     try:
+    #         aql_query = """
+    #         UPSERT { _key: @key }
+    #         INSERT @document
+    #         UPDATE @document IN @@collection
+    #         OPTIONS { exclusive: true }
+    #         // LET opType = IS_NULL(OLD) ? "insert" : "update"
+    #        // RETURN { _key: NEW._key, type: opType }
+    #         """
+    #         bind_vars = {
+    #             '@collection': collection_name,
+    #             'key': document['__id'],
+    #             'document': document
+    #         }
+    #         cursor = self.db.aql.execute(aql_query, bind_vars=bind_vars)
+    #         result = [doc for doc in cursor]
+    #         return result
+    #     except Exception as e:
+    #         print(e)
+    #         raise e
+async def replace_one(self, collection_name: str, document: dict):
+    try:
+        # Ensure the key is a string
+        document['_key'] = str(document['__id'])
+        
+        # Convert datetime fields to ISO 8601 strings, and ensure numeric fields are numbers
+        for key, value in document.items():
+            if isinstance(value, datetime):
+                document[key] = value.isoformat()
+            elif isinstance(value, str) and value.isdigit():
+                document[key] = int(value)
 
+        aql_query = """
+        UPSERT { _key: @key }
+        INSERT @document
+        UPDATE @document IN @@collection
+        OPTIONS { exclusive: true }
+        """
+        
+        bind_vars = {
+            '@collection': collection_name,
+            'key': document['_key'],
+            'document': document
+        }
+        
+        cursor = await self.db.aql.execute(aql_query, bind_vars=bind_vars)
+        result = [doc for doc in cursor]
+        return result
+    
+    except Exception as e:
+        print(f"Error during replace_one: {e}")
+        raise e
 
     
+   
+   
+       # async def replace_one(self, collection_name:str, document:dict):
+    #     try:
+    #         aql_query = """
+    #         UPSERT { _key: @key }
+    #         INSERT @document
+    #         UPDATE @document IN @@collection
+    #         OPTIONS { exclusive: true }
+    #         // LET opType = IS_NULL(OLD) ? "insert" : "update"
+    #        // RETURN { _key: NEW._key, type: opType }
+    #         """
+    #         bind_vars = {
+    #             '@collection': collection_name,
+    #             'key': document['__id'],
+    #             'document': document
+    #         }
+    #         cursor = self.db.aql.execute(aql_query, bind_vars=bind_vars)
+    #         result = [doc for doc in cursor]
+    #         return result
+    #     except Exception as e:
+    #         print(e)
+    #         raise e
+    # async def replace_one(self, collection_name: str, document: dict):
+    #     try:
+    #         # Ensure the key is a string
+    #         document['_key'] = str(document['__id'])
+            
+    #         # Convert datetime fields to ISO 8601 strings, and ensure numeric fields are numbers
+    #         for key, value in document.items():
+    #             if isinstance(value, datetime):
+    #                 document[key] = value.isoformat()
+    #             elif isinstance(value, str) and value.isdigit():
+    #                 document[key] = int(value)
+
+    #         aql_query = """
+    #         UPSERT { _key: @key }
+    #         INSERT @document
+    #         UPDATE @document IN @@collection
+    #         OPTIONS { exclusive: true }
+    #         """
+            
+    #         bind_vars = {
+    #             '@collection': collection_name,
+    #             'key': document['_key'],
+    #             'document': document
+    #         }
+            
+    #         cursor =  self.db.aql.execute(aql_query, bind_vars=bind_vars)
+    #         result = [doc for doc in cursor]
+    #         return result
+        
+    #     except Exception as e:
+    #         print(f"Error during replace_one: {e}")
+    #         raise e
+   
     
 async def create_collections_and_indexes(db: StandardDatabase, collections_with_indexes: dict):
     for collection_name, indexes in collections_with_indexes.items():

@@ -119,7 +119,7 @@ class ODKClientAsync:
         url = f"{self.odk_base_url}/{self.odk_api_version}/projects/{self.odk_default_project_id}/forms/{self.odk_form_id}.svc/Submissions?$count=true{pagination_string}{date_filter}"
         
         response = await self.send_request('get', url, headers=headers)
-        print(response.json())
+        # print(response.json())
         if response.status_code in {200, 201}:
             return response.json()
         else:
@@ -162,10 +162,3 @@ class ODKClientAsync:
         flatten(y)
         return out
 
-# Example usage:
-# async def main():
-#     async with ODKClientAsync() as client:
-#         submissions = await client.getFormSubmissions()
-#         print(submissions)
-# 
-# asyncio.run(main())

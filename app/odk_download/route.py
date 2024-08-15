@@ -1,12 +1,10 @@
 
 
 from arango.database import StandardDatabase
-from fastapi import (APIRouter, BackgroundTasks, Depends, HTTPException,
-                     WebSocket, WebSocketDisconnect, status)
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 
-from app.odk_download.services import data_download
+from app.odk_download.services import data_download, data_download_old
 from app.shared.configs.arangodb_db import get_arangodb_session
-from app.utilits import websocket_manager
 
 odk_router = APIRouter(
     prefix="/odk",
@@ -34,13 +32,35 @@ async def fetch_and_store_data(
     return res
     
     
-
+@odk_router.post("/fetch_endpoint_with_async_old", status_code=status.HTTP_201_CREATED)
+async def fetch_odk_data(background_tasks: BackgroundTasks,  start_date: str = None, 
+    end_date: str = None,
+    skip: int = 0,
+    top: int = 3000,      db: StandardDatabase = Depends(get_arangodb_session)):
+    try:
+        await data_download_old.fetch_odk_data_with_async_old(
+                db=db,
+                start_date=start_date,
+                end_date=end_date,
+                skip=skip,
+                top=top)
+        # background_tasks.add_task(
+        #         data_download_old.fetch_odk_data_with_async_old,
+        #         db=db,
+        #         start_date=start_date,
+        #         end_date=end_date,
+        #         skip=skip,
+        #         top=top
+        #     )
+        return {"status": "Data fetched sucessfuly"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 @odk_router.post("/fetch_endpoint_with_async", status_code=status.HTTP_201_CREATED)
 async def fetch_odk_data_with_async(background_tasks: BackgroundTasks,  start_date: str = None, 
     end_date: str = None,
     skip: int = 0,
-    top: int = 10000,      db: StandardDatabase = Depends(get_arangodb_session)):
+    top: int = 3000,      db: StandardDatabase = Depends(get_arangodb_session)):
     try:
         await data_download.fetch_odk_data_with_async( db=db,
                                                       start_date= start_date,
@@ -61,11 +81,3 @@ async def retry_failed_chunks_endpoint():
     
     
     
-@odk_router.websocket("/ws/progress")
-async def websocket_endpoint(websocket: WebSocket):
-    await websocket_manager.connect(websocket)
-    try:
-        while True:
-            await websocket.receive_text()  # Keep the connection open
-    except WebSocketDisconnect:
-        websocket_manager.disconnect(websocket)
