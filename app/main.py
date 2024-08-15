@@ -52,7 +52,7 @@ def create_application():
     application = FastAPI(
         title="vman3",
         version="1.0.0",
-        docs_url="vman/api/v1/docs",
+        docs_url="/vman/api/v1/docs",
         openapi_url="/api/v1/openapi.json",
         lifespan=lifespan
     )
@@ -71,17 +71,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-@app.websocket("vman/api/v1/ws/progress")
-async def websocket_endpoints(websocket: WebSocket):
-    await websocket.accept()
-    try:
-        while True:
-            data = await websocket.receive_text()
-            await websocket.send_text(f"Message received: {data}")
-    except WebSocketDisconnect:
-        print("Client disconnected")
+
         
-@app.get("vman/api/v1")
+@app.get("/vman/api/v1")
 async def get():
     return {
         "message": "Welcome to the vman3 API",
@@ -90,7 +82,7 @@ async def get():
 
 
 
-@app.websocket("vman/api/v1/ws/download_progress")
+@app.websocket("/vman/api/v1/ws/download_progress")
 async def websocket_download_progress(websocket: WebSocket):
     await websocket__manager.connect(websocket)
     try:
