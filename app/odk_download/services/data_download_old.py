@@ -159,7 +159,8 @@ async def save_to_arangodb(db: ArangoDBClient = Depends(get_arangodb_client)):
 
 # testing  arangodb
 async def insert_to_arangodb(data: dict):
-    pass
+    print(data)
+
     try:
         db:ArangoDBClient = await get_arangodb_client()
         await db.replace_one(collection_name=db_collections.VA_TABLE  , document=data)
