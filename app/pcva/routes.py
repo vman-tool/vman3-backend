@@ -16,7 +16,7 @@ from app.pcva.services.icd10_services import (
     update_icd10_codes
 )
 from app.pcva.services.va_records_services import assign_va_service, code_assigned_va_service, fetch_va_records, get_coded_va_service, get_concordants_va_service, get_va_assignment_service
-from app.shared.configs.arangodb_db import get_arangodb_session
+from app.shared.configs.arangodb import get_arangodb_session
 from app.users.decorators.user import get_current_user, oauth2_scheme
 from app.users.models.user import User
 

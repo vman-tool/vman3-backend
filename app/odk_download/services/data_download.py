@@ -8,7 +8,7 @@ from fastapi import HTTPException
 from loguru import logger
 
 from app.settings.services.odk_configs import fetch_odk_config
-from app.shared.configs.arangodb_db import ArangoDBClient, get_arangodb_client
+from app.shared.configs.arangodb import ArangoDBClient, get_arangodb_client
 from app.shared.configs.constants import db_collections
 from app.utilits.odk_client import ODKClientAsync
 from app.utilits.websocket_manager import WebSocketManager
