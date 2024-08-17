@@ -11,7 +11,7 @@ from app.odk_download.services.data_tracker import (
     get_last_processed_timestamp, log_chunk_remove, log_chunk_start,
     log_chunk_update, log_error, update_last_processed_timestamp)
 from app.settings.services.odk_configs import fetch_odk_config
-from app.shared.configs.arangodb_db import ArangoDBClient, get_arangodb_client
+from app.shared.configs.arangodb import ArangoDBClient, get_arangodb_client
 from app.shared.configs.constants import db_collections
 from app.shared.configs.database import form_submissions_collection
 from app.utilits.odk_client import ODKClientAsync

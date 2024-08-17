@@ -11,7 +11,7 @@ from loguru import logger
 
 from app import routes
 from app.odk_download.services import data_download, schedulers
-from app.shared.configs.arangodb_db import ArangoDBClient, get_arangodb_client
+from app.shared.configs.arangodb import ArangoDBClient, get_arangodb_client
 from app.shared.configs.database import (close_mongo_connection,
                                          connect_to_mongo)
 from app.users.utils.default import default_account_creation

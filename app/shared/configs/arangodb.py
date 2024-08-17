@@ -10,10 +10,10 @@ from app.shared.configs.constants import collections_with_indexes
 
 class ArangoDBClient:
     def __init__(self):
-        self.client = ArangoClient(hosts=config("ARANGODB_URL", default="http://localhost:8529"))
+        self.client = ArangoClient(hosts=config("DB_URL", default="http://localhost:8529"))
         self.db_name = config("DB_NAME", default="vman3")
-        self.username = config("ARANGO_ROOT_USER", default="root")
-        self.password = config("ARANGO_ROOT_PASSWORD", default="password")
+        self.username = config("DB_ROOT_USER", default="root")
+        self.password = config("ARANGO_ROOT_PASSWORD", default="welcome2vman")
         self.db = None
 
     async def connect(self):
@@ -55,38 +55,38 @@ class ArangoDBClient:
     #     except Exception as e:
     #         print(e)
     #         raise e
-async def replace_one(self, collection_name: str, document: dict):
-    try:
-        # Ensure the key is a string
-        document['_key'] = str(document['__id'])
-        
-        # Convert datetime fields to ISO 8601 strings, and ensure numeric fields are numbers
-        for key, value in document.items():
-            if isinstance(value, datetime):
-                document[key] = value.isoformat()
-            elif isinstance(value, str) and value.isdigit():
-                document[key] = int(value)
+    async def replace_one(self, collection_name: str, document: dict):
+        try:
+            # Ensure the key is a string
+            document['_key'] = str(document['__id'])
+            
+            # Convert datetime fields to ISO 8601 strings, and ensure numeric fields are numbers
+            for key, value in document.items():
+                if isinstance(value, datetime):
+                    document[key] = value.isoformat()
+                elif isinstance(value, str) and value.isdigit():
+                    document[key] = int(value)
 
-        aql_query = """
-        UPSERT { _key: @key }
-        INSERT @document
-        UPDATE @document IN @@collection
-        OPTIONS { exclusive: true }
-        """
+            aql_query = """
+            UPSERT { _key: @key }
+            INSERT @document
+            UPDATE @document IN @@collection
+            OPTIONS { exclusive: true }
+            """
+            
+            bind_vars = {
+                '@collection': collection_name,
+                'key': document['_key'],
+                'document': document
+            }
+            
+            cursor = self.db.aql.execute(aql_query, bind_vars=bind_vars)
+            result = [doc for doc in cursor]
+            return result
         
-        bind_vars = {
-            '@collection': collection_name,
-            'key': document['_key'],
-            'document': document
-        }
-        
-        cursor = await self.db.aql.execute(aql_query, bind_vars=bind_vars)
-        result = [doc for doc in cursor]
-        return result
-    
-    except Exception as e:
-        print(f"Error during replace_one: {e}")
-        raise e
+        except Exception as e:
+            print(f"Error during replace_one: {e}")
+            raise e
 
     
    

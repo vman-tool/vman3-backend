@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, status
 from app.settings.models.odk_configs import OdkConfigModel
 from app.settings.services.odk_configs import (add_configs_settings,
                                                fetch_configs_settings)
-from app.shared.configs.arangodb_db import get_arangodb_session
+from app.shared.configs.arangodb import get_arangodb_session
 from app.shared.configs.models import ResponseMainModel
 
 # from sqlalchemy.orm import Session
