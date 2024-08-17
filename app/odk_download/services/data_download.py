@@ -1,6 +1,6 @@
 import time
 from json import loads
-from typing import List
+from typing import Dict, List
 
 import pandas as pd
 from arango.database import StandardDatabase
@@ -12,6 +12,7 @@ from app.shared.configs.arangodb_db import ArangoDBClient, get_arangodb_client
 from app.shared.configs.constants import db_collections
 from app.shared.configs.database import form_submissions_collection
 from app.utilits.odk_client import ODKClientAsync
+from app.utilits.websocket_manager import WebSocketManager
 
 
 async def fetch_odk_data_with_async(
@@ -19,10 +20,13 @@ async def fetch_odk_data_with_async(
     end_date: str = None,
     skip: int = 0,
     top: int = 3000,
+    force_update: bool = False, # resend flag to resend data
     resend: bool = False, # resend flag to resend data
-    db: StandardDatabase =None
+    db: StandardDatabase =None,
+   
 ):   
     try:
+        websocket_manager: WebSocketManager = WebSocketManager()
         log_message = "\nFetching data from ODK Central"
         if start_date or end_date:
             log_message += f" between {start_date} and {end_date}"
@@ -30,33 +34,37 @@ async def fetch_odk_data_with_async(
 
         start_time = time.time()
 
-        available_data_count = 0
-        latest_record = {}
+        available_data_count: int = 0
+        records_margins: Dict = None
         # load setting from db
         config = await fetch_odk_config(db)
         
         # Load odk records and get the latest date to query if none then query all the data
-        if not start_date:
-            latest_record = await get_latest_data_downloaded_date(db)
+        if not start_date and not end_date and not force_update:
+            records_margins = await get_margin_dates_and_records_count(db)
         
-        if latest_record:
-            start_date = latest_record.get('latest_date', None)
-            available_data_count = latest_record.get('total_records', 0)
+        if records_margins:
+            end_date = records_margins.get('earliest_date', None)
+            start_date = records_margins.get('latest_date', None)
+            available_data_count = records_margins.get('total_records', 0)
             
         async with ODKClientAsync(config) as odk_client:
             try:
                 data_for_count = await odk_client.getFormSubmissions(top= 1 if resend is False else top,skip= None if resend is False else skip, order_by='__system/submissionDate', order_direction='asc')
                 total_data_count = data_for_count["@odata.count"]
+                server_latest_submisson_date = data_for_count['value'][0]['__system']['submissionDate']
             except Exception as e:
                 raise HTTPException(status_code=500, detail=str(e))
 
-            if total_data_count == available_data_count:
+            if total_data_count == available_data_count and start_date == server_latest_submisson_date:
                 logger.info(f"\nVman is up to date.")
                 return {"status": "Vman is up to date"}
             
-            if available_data_count < total_data_count and start_date:
-                start_date = None
-                available_data_count = 0
+            if available_data_count > 0 :
+                if available_data_count < total_data_count and start_date == server_latest_submisson_date:
+                    start_date = None
+                elif available_data_count < total_data_count and start_date != server_latest_submisson_date:
+                    end_date = None  
             
             if total_data_count > available_data_count:
                 total_data_count = total_data_count - available_data_count
@@ -99,6 +107,9 @@ async def fetch_odk_data_with_async(
                         if int(progress) != last_progress:
                             last_progress = int(progress)
                             elapsed_time = time.time() - start_time
+                            # send progress to websocket
+                            if websocket_manager:
+                                await websocket_manager.broadcast(f"Progress: {progress:.0f}%")
                             print(f"\rDownloading: [{'=' * int(progress // 2)}{' ' * (50 - int(progress // 2))}] {progress:.0f}% - Elapsed time: {elapsed_time:.2f}s", end='', flush=True)
                 except Exception as e:
                     raise HTTPException(status_code=500, detail=str(e))
@@ -127,6 +138,9 @@ async def fetch_odk_data_with_async(
                 logger.info(f"\nSuccessfully inserted {records_saved} records while records were {total_data_count} - Total elapsed time: {total_elapsed_time:.2f}s")
                 return {"status": "Data inserted with issues", "elapsed_time": total_elapsed_time}
     except Exception as e:
+        if websocket_manager:
+            await websocket_manager.broadcast(f"Error: {str(e)}")
+            
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -148,7 +162,7 @@ async def insert_to_arangodb(data: dict):
         print(e)
         raise e
     
-async def get_latest_data_downloaded_date(db: StandardDatabase = None):
+async def get_margin_dates_and_records_count(db: StandardDatabase = None):
     query = f"""
                 LET totalCount = LENGTH(FOR doc IN {db_collections.VA_TABLE} RETURN 1)
 
@@ -159,8 +173,15 @@ async def get_latest_data_downloaded_date(db: StandardDatabase = None):
                             LIMIT 1
                             RETURN MERGE({{latest_date: doc.submissiondate}}, {{ total_records: totalCount }})
                     )[0]
+                
+                LET earliestRecord = (
+                        FOR doc IN {db_collections.VA_TABLE}
+                            SORT doc.submissiondate ASC
+                            LIMIT 1
+                            RETURN MERGE({{earliest_date: doc.submissiondate}}, latestRecord)
+                    )[0]
 
-                RETURN latestRecord
+                RETURN earliestRecord
             """
 
     return db.aql.execute(query=query).next()

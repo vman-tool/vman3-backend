@@ -10,7 +10,7 @@ class OdkConfigModel(BaseModel):
     username: str
     password: str
     api_version: Optional[str] = 'v1'
-    is_sort_allowed: Union[bool, None] = None
+    is_sort_allowed: Union[bool, None] = False
 
     # @validator('form_id', 'project_id', 'username', 'password')
     # def not_empty(cls, v):
