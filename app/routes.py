@@ -1,4 +1,5 @@
 from fastapi import APIRouter
+
 from app.odk_download import route
 from app.pcva import routes
 from app.records import records_router
@@ -11,7 +12,7 @@ def main_route(application):
     application.include_router(create_main_router()) 
 
 def create_main_router():
-    main_router = APIRouter(prefix="/api/v1")
+    main_router = APIRouter(prefix="/vman/api/v1")
 
     # Add routers to the main_router
     main_router.include_router(route.odk_router)

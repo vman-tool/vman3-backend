@@ -167,10 +167,3 @@ class ODKClientAsync:
         flatten(y)
         return out
 
-# Example usage:
-# async def main():
-#     async with ODKClientAsync() as client:
-#         submissions = await client.getFormSubmissions()
-#         print(submissions)
-# 
-# asyncio.run(main())
