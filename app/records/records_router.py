@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, Query, status
 from app.records.services.list_data import fetch_va_records
 from app.records.services.map_data import fetch_va_map_records
 from app.records.services.regions_data import get_unique_regions
-from app.shared.configs.arangodb_db import get_arangodb_session
+from app.shared.configs.arangodb import get_arangodb_session
 from app.shared.configs.models import ResponseMainModel
 from app.users.decorators.user import get_current_user, oauth2_scheme
 
