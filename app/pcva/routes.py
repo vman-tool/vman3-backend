@@ -19,6 +19,7 @@ from app.pcva.services.va_records_services import assign_va_service, code_assign
 from app.shared.configs.arangodb_db import get_arangodb_session
 from app.users.decorators.user import get_current_user, oauth2_scheme
 from app.users.models.user import User
+from app.shared.configs.models import ResponseMainModel
 
 
 pcva_router = APIRouter(
@@ -29,13 +30,13 @@ pcva_router = APIRouter(
 )
 
 
-@pcva_router.get("/", status_code=status.HTTP_200_OK)
+@pcva_router.get("", status_code=status.HTTP_200_OK)
 async def get_va_records(
     paging: Optional[str] = Query(None, alias="paging"),
     page_number: Optional[int] = Query(1, alias="page_number"),
     limit: Optional[int] = Query(10, alias="limit"),
     include_assignment: Optional[str] = Query(None, alias="include_assignment"),
-    db: StandardDatabase = Depends(get_arangodb_session)):
+    db: StandardDatabase = Depends(get_arangodb_session)) -> Union[List[ResponseMainModel], Any]:
 
     try:
         allowPaging = False if paging is not None and paging.lower() == 'false' else True
@@ -160,7 +161,7 @@ async def get_assigned_va(
     va_id: Optional[str] = Query(None, alias="va_id"),
     coder: Optional[str] = Query(None, alias="coder"),
     current_user: User = Depends(get_current_user),
-    db: StandardDatabase = Depends(get_arangodb_session)) -> Union[List[AssignVAResponseClass],Dict]:
+    db: StandardDatabase = Depends(get_arangodb_session)) -> Union[List[AssignVAResponseClass], Dict]:
 
     try:
         filters = {}

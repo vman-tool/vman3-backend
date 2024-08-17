@@ -1,4 +1,5 @@
 from contextlib import asynccontextmanager
+import os
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
@@ -6,7 +7,7 @@ from apscheduler.triggers.interval import IntervalTrigger
 from decouple import config
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse
+from fastapi.responses import FileResponse, HTMLResponse
 from loguru import logger
 
 from app import routes
