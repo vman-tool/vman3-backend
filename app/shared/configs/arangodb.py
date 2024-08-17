@@ -29,9 +29,9 @@ class ArangoDBClient:
         # Check if the database exists and create it if not
         if self.db_name not in sys_db.databases():
             sys_db.create_database(self.db_name)
-        
+        if self.db is None:
         # Connect to the specified database
-        self.db = self.client.db(self.db_name, username=self.username, password=self.password)
+            self.db = self.client.db(self.db_name, username=self.username, password=self.password)
 
     async def create_collections(self):
         # This method remains synchronous, so we run it in a thread pool
@@ -52,8 +52,9 @@ class ArangoDBClient:
     async def replace_one(self, collection_name: str, document: dict):
         # Wrap the synchronous replace_one in a thread pool
         return await run_in_threadpool(self._replace_one_sync, collection_name, document)
-
-    def _replace_one_sync(self, collection_name: str, document: dict):
+    
+    # Replace one document in the specified collection ##TODOS ## IT ONLY FOR FORM SUBMISSIONS DATA 
+    async def _replace_one_sync(self, collection_name: str, document: dict):
         try:
             aql_query = """
             UPSERT { __id: @id }
