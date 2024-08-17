@@ -23,8 +23,6 @@ scheduler = AsyncIOScheduler()
 async def lifespan(app: FastAPI):
     # Application startup logic
     logger.info("Application startup")
-    logger.info("Visit http://localhost:8080/vman/api/v1/docs for the API documentation (Swagger UI)")
-    logger.info("Visit http://localhost:8080/vman/api/v1 for the main API")
     scheduler.add_job(schedulers. scheduled_failed_chucks_retry, IntervalTrigger(minutes=60*3))
     scheduler.add_job(data_download. fetch_odk_data_with_async, CronTrigger(hour=18, minute=0))
     scheduler.start()
@@ -32,8 +30,6 @@ async def lifespan(app: FastAPI):
     # Initialize MongoDB connection
     await connect_to_mongo()
 
-
-    
     # Initialize ArangoDB connection
     arango_client= await get_arangodb_client()
     await ArangoDBClient.create_collections(arango_client)
