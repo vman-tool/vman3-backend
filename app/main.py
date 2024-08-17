@@ -6,11 +6,12 @@ from apscheduler.triggers.interval import IntervalTrigger
 from decouple import config
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import HTMLResponse
 from loguru import logger
 
 from app import routes
 from app.odk_download.services import data_download, schedulers
-from app.shared.configs.arangodb_db import ArangoDBClient, get_arangodb_client
+from app.shared.configs.arangodb import ArangoDBClient, get_arangodb_client
 from app.shared.configs.database import (close_mongo_connection,
                                          connect_to_mongo)
 from app.users.utils.default import default_account_creation
@@ -22,8 +23,6 @@ scheduler = AsyncIOScheduler()
 async def lifespan(app: FastAPI):
     # Application startup logic
     logger.info("Application startup")
-    logger.info("Visit http://localhost:8080/vman/api/v1/docs for the API documentation (Swagger UI)")
-    logger.info("Visit http://localhost:8080/vman/api/v1 for the main API")
     scheduler.add_job(schedulers. scheduled_failed_chucks_retry, IntervalTrigger(minutes=60*3))
     scheduler.add_job(data_download. fetch_odk_data_with_async, CronTrigger(hour=18, minute=0))
     scheduler.start()
@@ -31,8 +30,6 @@ async def lifespan(app: FastAPI):
     # Initialize MongoDB connection
     await connect_to_mongo()
 
-
-    
     # Initialize ArangoDB connection
     arango_client= await get_arangodb_client()
     await ArangoDBClient.create_collections(arango_client)
@@ -73,12 +70,36 @@ app.add_middleware(
 )
 
         
-@app.get("/vman/api/v1")
+@app.get("/vman/api/v1", response_class=HTMLResponse)
+@app.get("/vman", response_class=HTMLResponse)
+@app.get("/", response_class=HTMLResponse)
+@app.get("/vman/api", response_class=HTMLResponse)
 async def get():
-    return {
-        "message": "Welcome to the vman3 API",
-        "documentation": " http://localhost:8080/api/v1/docs",
-    }
+    """
+    Welcome to the vman3 API
+    """
+    return HTMLResponse("""
+        <!DOCTYPE html>
+        <html>
+            <head>
+                <meta charset="utf-8">
+                <meta http-equiv="X-UA-Compatible" content="IE=edge">
+                <title></title>
+                <meta name="description" content="">
+                <meta name="viewport" content="width=device-width, initial-scale=1">
+                <link rel="stylesheet" href="">
+                <style>
+                    .text-center {
+                        text-align: center;
+                    }        
+                </style>
+            </head>
+            <body>
+                <h1 class="text-center">Welcome to the VMan API</h1>
+                <p class="text-center">To view documentation click to <a href="/vman/api/v1/docs">here</a> and enjoy</p>
+            </body>
+        </html>
+    """)
 
 
 

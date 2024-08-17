@@ -6,7 +6,7 @@ from fastapi import (APIRouter, BackgroundTasks, Depends, HTTPException, Query,
                      status)
 
 from app.odk_download.services import data_download
-from app.shared.configs.arangodb_db import get_arangodb_session
+from app.shared.configs.arangodb import get_arangodb_session
 
 odk_router = APIRouter(
     prefix="/odk",
