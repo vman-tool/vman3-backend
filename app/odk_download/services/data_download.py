@@ -1,3 +1,4 @@
+import json
 import time
 from json import loads
 from typing import Dict, List
@@ -11,7 +12,6 @@ from app.settings.services.odk_configs import fetch_odk_config
 from app.shared.configs.arangodb import ArangoDBClient, get_arangodb_client
 from app.shared.configs.constants import db_collections
 from app.utilits.odk_client import ODKClientAsync
-from app.utilits.websocket_manager import WebSocketManager
 
 
 async def fetch_odk_data_with_async(
@@ -24,7 +24,7 @@ async def fetch_odk_data_with_async(
     db: StandardDatabase = None,
 ):   
     try:
-        websocket_manager: WebSocketManager = WebSocketManager()
+        from app.main import websocket__manager
         log_message = "\nFetching data from ODK Central"
         if start_date or end_date:
             log_message += f" between {start_date} and {end_date}"
@@ -67,7 +67,14 @@ async def fetch_odk_data_with_async(
                 total_data_count = total_data_count - available_data_count
 
             logger.info(f"{total_data_count} total to be downloaded")
-            
+            if websocket__manager:
+                        # await websocket__manager.broadcast(f"Progress: {progress:.0f}%")
+                        progress_data = {
+                            "total_records": total_data_count,
+                            "progress": 0,
+                            "elapsed_time": 0
+                        }
+                        await websocket__manager.broadcast(json.dumps(progress_data))
             num_iterations = (total_data_count // top) + (1 if total_data_count % top != 0 else 0)
             records_saved = 0
             last_progress = 0
@@ -83,14 +90,16 @@ async def fetch_odk_data_with_async(
                     
                     df.columns = df.columns.str.lower()
                     df = df.dropna(axis=1, how='all')
+
+                    
                     
                     return loads(df.to_json(orient='records'))
                 except Exception as e:
                     raise HTTPException(status_code=500, detail=str(e))
-
             async def insert_all_data(data: List[dict]):
-                nonlocal records_saved, last_progress
+                nonlocal records_saved, last_progress, start_time
                 try:
+                    elapsed_time = 0  # Initialize elapsed_time to a default value
                     for item in data:
                         await insert_data_to_arangodb(item)
                         records_saved += 1
@@ -98,12 +107,40 @@ async def fetch_odk_data_with_async(
                         progress = (records_saved / total_data_count) * 100
                         if int(progress) != last_progress:
                             last_progress = int(progress)
-                            elapsed_time = time.time() - start_time
-                            if websocket_manager:
-                                await websocket_manager.broadcast(f"Progress: {progress:.0f}%")
+                            elapsed_time = time.time() - start_time  # Update elapsed_time based on current time
+                            
+                            if websocket__manager:
+                                # await websocket__manager.broadcast(f"Progress: {progress:.0f}%")
+                                progress_data = {
+                                    "total_records": total_data_count,
+                                    "progress": progress,
+                                    "elapsed_time": elapsed_time
+                                }
+                                await websocket__manager.broadcast(json.dumps(progress_data))
                             print(f"\rDownloading: [{'=' * int(progress // 2)}{' ' * (50 - int(progress // 2))}] {progress:.0f}% - Elapsed time: {elapsed_time:.2f}s", end='', flush=True)
                 except Exception as e:
                     raise HTTPException(status_code=500, detail=str(e))
+            # async def insert_all_data(data: List[dict]):
+            #     nonlocal records_saved, last_progress
+            #     try:
+            #         for item in data:
+            #             await insert_data_to_arangodb(item)
+            #             records_saved += 1
+
+            #             progress = (records_saved / total_data_count) * 100
+            #             if int(progress) != last_progress:
+            #                 last_progress = int(progress)
+            #                 elapsed_time = time.time() - start_time
+            #             if websocket_manager:
+            #                 progress_data = {
+            #                     "total_records": total_data_count,
+            #                     "progress": progress,
+            #                     "elapsed_time": elapsed_time
+            #                 }
+            #                 await websocket_manager.broadcast(json.dumps(progress_data))
+            #                 print(f"\rDownloading: [{'=' * int(progress // 2)}{' ' * (50 - int(progress // 2))}] {progress:.0f}% - Elapsed time: {elapsed_time:.2f}s", end='', flush=True)
+            #     except Exception as e:
+            #         raise HTTPException(status_code=500, detail=str(e))
 
             for i in range(num_iterations):
                 chunk_skip = skip + i * top
@@ -127,8 +164,8 @@ async def fetch_odk_data_with_async(
                 logger.info(f"\nSuccessfully inserted {records_saved} records while records were {total_data_count} - Total elapsed time: {total_elapsed_time:.2f}s")
                 return {"status": "Data inserted with issues", "elapsed_time": total_elapsed_time}
     except Exception as e:
-        if websocket_manager:
-            await websocket_manager.broadcast(f"Error: {str(e)}")
+        if websocket__manager:
+            await websocket__manager.broadcast(f"Error: {str(e)}")
             
         raise HTTPException(status_code=500, detail=str(e))
 

@@ -1,8 +1,12 @@
+from types import SimpleNamespace
+
 from arango.database import StandardDatabase
+from fastapi import HTTPException, status
 
 from app.settings.models.odk_configs import OdkConfigModel
 from app.shared.configs.constants import db_collections
 from app.shared.configs.models import ResponseMainModel
+from app.utilits.odk_client import ODKClientAsync
 
 
 async def fetch_odk_config(db: StandardDatabase) -> OdkConfigModel:
@@ -36,35 +40,43 @@ async def fetch_configs_settings(db: StandardDatabase = None):
         )
 
 async def add_configs_settings(configData: OdkConfigModel, db: StandardDatabase = None) -> ResponseMainModel:
-    try:
-        data={
-            '_key': 'odk_config',  # Unique key to ensure only one config exists
-        **configData.model_dump()
-        }
-        
-        doc= db.collection(db_collections.SYSTEM_CONFIGS).insert(data, overwrite=True)
-        print(doc)
-        # db:ArangoDBClient = await get_arangodb_client()
-   
-        # doc= await db.replace_one(db_collections.SYSTEM_CONFIGS, document={
-        #     '_key':'1', # for reasons that  we will only have one config
-        #     '__id':'1',
-        #     'url': configData.url,
-        #     'username': configData.username,
-        #     'password': configData.password,
-        #     'formId': configData.formId
-        # })
     
+    try:
+
+        data = {
+            '_key': 'odk_config',  # Unique key to ensure only one config exists
+            **configData.model_dump()
+        }
+
+        # Convert data_dict to an object
+        data_simpleSpace = SimpleNamespace(**data)
+
+        async with ODKClientAsync(data_simpleSpace) as odk_client:
+            
+            # try:    
+                data_for_count = await odk_client.getFormSubmissions(top=1, order_by='__system/submissionDate', order_direction='asc')
+                if not data_for_count:
+                    raise ValueError("Failed to save config", "Invalid ODK configuration")
+                    
+                    
+                        
+            # except Exception:
+            #             raise ValueError("Failed to save config", "Invalid ODK configuration")
+                    
+        print(data_for_count, 'data_for_count')
+        if not data_for_count:
+            raise ValueError("Failed to save config", "Invalid ODK configuration")
+        
+        db.collection(db_collections.SYSTEM_CONFIGS).insert(data, overwrite=True)
+
         return ResponseMainModel(
-            data={"config_id": ''},
-            message="Config saved successfully",
-            # total=total_records
+            data={"config_id": 'odk_config'},
+            message="Config saved successfully"
         )
 
     except Exception as e:
-        return ResponseMainModel(
-            data=None,
-            message="Failed to fetch records",
-            error=str(e),
-            total=None
+
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,  # Or another appropriate status code
+            detail=str(e)
         )

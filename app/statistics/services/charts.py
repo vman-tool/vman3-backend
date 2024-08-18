@@ -7,7 +7,6 @@ from app.shared.configs.constants import db_collections
 from app.shared.configs.models import ResponseMainModel
 
 
-
 async def fetch_charts_statistics(paging: bool = True, page_number: int = 1, limit: int = 10, start_date: Optional[date] = None, end_date: Optional[date] = None, locations: Optional[List[str]] = None, db: StandardDatabase = None) -> ResponseMainModel:
     try:
         collection = db.collection(db_collections.VA_TABLE)   # Use the actual collection name here
@@ -15,11 +14,11 @@ async def fetch_charts_statistics(paging: bool = True, page_number: int = 1, lim
         filters = []
 
         if start_date:
-            filters.append("DATE_TIMESTAMP(doc.id10012) >= @start_date")
+            filters.append("DATE_TIMESTAMP(doc.today) >= @start_date")
             bind_vars["start_date"] = str(start_date)
 
         if end_date:
-            filters.append("DATE_TIMESTAMP(doc.id10012) <= @end_date")
+            filters.append("DATE_TIMESTAMP(doc.today) <= @end_date")
             bind_vars["end_date"] = str(end_date)
 
         if locations:
@@ -32,7 +31,7 @@ async def fetch_charts_statistics(paging: bool = True, page_number: int = 1, lim
             LET monthlySubmissions = (
               FOR doc IN {collection.name}
               {filter_query}
-              COLLECT month = DATE_MONTH(DATE_TIMESTAMP(doc.id10012)), year = DATE_YEAR(DATE_TIMESTAMP(doc.id10012)) INTO grouped
+              COLLECT month = DATE_MONTH(DATE_TIMESTAMP(doc.today)), year = DATE_YEAR(DATE_TIMESTAMP(doc.today)) INTO grouped
               LET count = LENGTH(grouped)
               SORT year, month
               RETURN {{ month, year, count }}
