@@ -8,6 +8,7 @@ from app.settings.services.odk_configs import (add_configs_settings,
                                                fetch_configs_settings)
 from app.shared.configs.arangodb import get_arangodb_session
 from app.shared.configs.models import ResponseMainModel
+from app.users.decorators.user import get_current_user, oauth2_scheme
 
 # from sqlalchemy.orm import Session
 
@@ -16,7 +17,7 @@ settings_router = APIRouter(
     prefix="/settings",
     tags=["Settings"],
     responses={404: {"description": "Not found"}},
-    # dependencies=[Depends(oauth2_scheme), Depends(get_current_user)]
+    dependencies=[Depends(oauth2_scheme), Depends(get_current_user)]
 
 )
 

@@ -11,9 +11,7 @@ from loguru import logger
 
 from app import routes
 from app.odk_download.services import data_download, schedulers
-from app.shared.configs.arangodb import ArangoDBClient, get_arangodb_client
-from app.shared.configs.database import (close_mongo_connection,
-                                         connect_to_mongo)
+from app.shared.middlewares.error_handlers import register_error_handlers
 from app.users.utils.default import default_account_creation
 from app.utilits import websocket_manager
 
@@ -23,17 +21,13 @@ scheduler = AsyncIOScheduler()
 async def lifespan(app: FastAPI):
     # Application startup logic
     logger.info("Application startup")
+    logger.info("Visit http://localhost:8080/vman/api/v1/docs for the API documentation (Swagger UI)")
+    logger.info("Visit http://localhost:8080/vman/api/v1 for the main API")
+
     scheduler.add_job(schedulers. scheduled_failed_chucks_retry, IntervalTrigger(minutes=60*3))
     scheduler.add_job(data_download. fetch_odk_data_with_async, CronTrigger(hour=18, minute=0))
     scheduler.start()
 
-    # Initialize MongoDB connection
-    await connect_to_mongo()
-
-    # Initialize ArangoDB connection
-    arango_client= await get_arangodb_client()
-    await ArangoDBClient.create_collections(arango_client)
-    app.state.arango_client = arango_client
     await default_account_creation()
     
     try:
@@ -41,9 +35,8 @@ async def lifespan(app: FastAPI):
     finally:
         # Application shutdown logic
         logger.info("Application shutdown")
+        scheduler.shutdown()
         
-        # Close MongoDB connection
-        await close_mongo_connection()
 
 def create_application():
     application = FastAPI(
@@ -54,22 +47,25 @@ def create_application():
         lifespan=lifespan
     )
     routes.main_route(application)
+  
     return application
 
 app = create_application()
+register_error_handlers(app)
 websocket__manager = websocket_manager.WebSocketManager()
 
 origins = config('CORS_ALLOWED_ORIGINS', default="*").split(',')
-
 app.add_middleware(
     CORSMiddleware,
+    
     allow_origins=origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-        
+
+ 
 @app.get("/vman/api/v1", response_class=HTMLResponse)
 @app.get("/vman", response_class=HTMLResponse)
 @app.get("/", response_class=HTMLResponse)
@@ -103,7 +99,7 @@ async def get():
 
 
 
-@app.websocket("/vman/api/v1/ws/download_progress")
+@app.websocket("/ws")
 async def websocket_download_progress(websocket: WebSocket):
     await websocket__manager.connect(websocket)
     try:

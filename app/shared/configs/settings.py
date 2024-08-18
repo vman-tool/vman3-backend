@@ -1,9 +1,7 @@
-import os
 from functools import lru_cache
 from pathlib import Path
-from urllib.parse import quote_plus
-from decouple import config
 
+from decouple import config
 from dotenv import load_dotenv
 from pydantic_settings import BaseSettings
 
@@ -14,20 +12,13 @@ load_dotenv(dotenv_path=env_path)
 class Settings(BaseSettings):
 
     # App
-    APP_NAME:  str = config("APP_NAME", default="FastAPI")
+    APP_NAME:  str = config("APP_NAME", default="VMan")
     DEBUG: bool = config("DEBUG", default=False, cast=bool)
     
     # FrontEnd Application
-    FRONTEND_HOST: str = config("FRONTEND_HOST", "http://localhost:4200")
+    FRONTEND_HOST: str = config("FRONTEND_HOST", "https://vman3.vatools.net")
 
-    # MySql Database Config
-    MYSQL_HOST: str = config("MYSQL_HOST", default='localhost')
-    MYSQL_USER: str = config("MYSQL_USER", default='root')
-    MYSQL_PASS: str = config("MYSQL_PASSWORD", default='secret')
-    MYSQL_PORT: int = config("MYSQL_PORT", default=3306, cast=int)
-    MYSQL_DB: str = config("MYSQL_DB", 'fastapi')
-    DATABASE_URI: str = f"mysql+pymysql://{MYSQL_USER}:%s@{MYSQL_HOST}:{MYSQL_PORT}/{MYSQL_DB}" % quote_plus(MYSQL_PASS)
-
+  
     # JWT Secret Key
     JWT_SECRET: str = config("JWT_SECRET", "649fb93ef34e4fdf4187709c84d643dd61ce730d91856418fdcf563f895ea40f")
     JWT_ALGORITHM: str = config("ACCESS_TOKEN_ALGORITHM", "HS256")
