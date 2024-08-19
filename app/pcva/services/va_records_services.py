@@ -10,16 +10,40 @@ from app.shared.configs.constants import db_collections
 from app.shared.utils.database_utilities import add_query_filters, record_exists, replace_object_values
 from app.users.models.user import User
 from app.pcva.utilities.va_records_utils import format_va_record
+from app.shared.configs.models import Pager, ResponseMainModel
 
-async def fetch_va_records(paging: bool = True,  page_number: int = 1, limit: int = 10, include_assignment: bool = False, db: StandardDatabase = None):
+async def fetch_va_records(paging: bool = True,  page_number: int = 1, limit: int = 10, include_assignment: bool = False, filters: Dict = {}, db: StandardDatabase = None) -> ResponseMainModel:
     va_table_collection = db.collection(db_collections.VA_TABLE)
     assignment_collection_exists = db.has_collection(db_collections.ASSIGNED_VA)
     bind_vars = {}
+
+    total_count_query = f"RETURN LENGTH({db_collections.VA_TABLE})"
+    total_count_cursor = db.aql.execute(total_count_query)
+    total_count = total_count_cursor.next() 
+
+    if total_count is None or total_count == 0:
+        return ResponseMainModel(
+            data=[],
+            total_count=0,
+            page_number=page_number,
+            limit=limit
+        )
+
+    filters_list, vars = add_query_filters(filters, {}, 'a')
+
+    bind_vars.update(vars)
+
+    filters_string: str = None
+
+    if filters_list:
+        filters_string += " FILTER " + " AND ".join(filters_list)
     
     try:
         if not include_assignment or not assignment_collection_exists:
             query = f"FOR doc IN {va_table_collection.name} "
-            bind_vars = {}
+
+            if filters_string:
+                query += f"{filters_string}  "
                 
             if paging and page_number and limit:
             
@@ -36,12 +60,7 @@ async def fetch_va_records(paging: bool = True,  page_number: int = 1, limit: in
 
             data = [format_va_record(document) for document in cursor]
             
-            
-            return {
-                "page_number": page_number,
-                "limit": limit,
-                "data": data
-            } if paging else data
+            return ResponseMainModel(data=data, messages="Records fetched successfully!", total=total_count)
 
         else:
             query = f"""
@@ -50,6 +69,9 @@ async def fetch_va_records(paging: bool = True,  page_number: int = 1, limit: in
                     FOR v IN {db_collections.VA_TABLE}
                         
                 """
+            
+            if filters_string:
+                query += f"{filters_string}  "
             
             if paging and page_number and limit:
         
@@ -113,12 +135,8 @@ async def fetch_va_records(paging: bool = True,  page_number: int = 1, limit: in
             cursor = db.aql.execute(query, bind_vars=bind_vars)
             data = [format_va_record(document) for document in cursor]
 
-            
-            return {
-                "page_number": page_number,
-                "limit": limit,
-                "data": data
-            } if paging else data
+            return ResponseMainModel(data=data, message="Records fetched successfully!", total = total_count, pager=Pager(page=page_number, limit=limit))
+    
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to fetch data: {e}")
     
@@ -208,6 +226,12 @@ async def get_va_assignment_service(paging: bool, page_number: int = None, limit
             query += "RETURN a)"
             
         query += f"""
+            LET totalCount = LENGTH(
+                FOR a IN {db_collections.ASSIGNED_VA}
+                {filters_string}
+                RETURN 1
+            )
+
             LET vaIds = (
                 FOR v IN paginatedVaAssignments
                     RETURN v.vaId
@@ -229,8 +253,13 @@ async def get_va_assignment_service(paging: bool, page_number: int = None, limit
                     RETURN MERGE(a, {{ vaId: assignedVas[0] }})
             )
 
-            FOR assignment IN assignmentsWithVa
-                RETURN assignment
+            // FOR assignment IN assignmentsWithVa
+            //     RETURN assignment
+
+            RETURN {{
+                totalCount: totalCount, 
+                assignments: assignmentsWithVa
+            }}
         """
         
 
@@ -241,16 +270,17 @@ async def get_va_assignment_service(paging: bool, page_number: int = None, limit
                 "size": limit
             })
         
-        assigned_vas = await AssignedVA.run_custom_query(query=query, bind_vars=bind_vars, db=db)
+
+
+
+        query_result = await AssignedVA.run_custom_query(query=query, bind_vars=bind_vars, db=db)
+        assigned_vas = query_result.next()
         assignments = []
-        for assignment in assigned_vas:
+        for assignment in assigned_vas['assignments']:
             assignment["vaId"] = format_va_record(assignment["vaId"])
             assignments.append(await AssignVAResponseClass.get_structured_assignment(assignment=assignment, db = db))
-        return {
-            "page_number": page_number,
-            "limit": limit,
-            "data": assignments
-        } if paging else assignments
+        
+        return ResponseMainModel(data=assignments, message="Assignments fetched successfully!", total = assigned_vas['totalCount'], pager=Pager(page=page_number, limit=limit))
     
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to get assigned va: {e}")

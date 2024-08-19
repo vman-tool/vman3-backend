@@ -150,7 +150,7 @@ async def fetch_odk_data_with_async_old(
 
 async def save_to_arangodb(db: ArangoDBClient = Depends(get_arangodb_client)):
     
-    await db.collection('form_submissions').insert_many(form_submissions_collection.find())
+    await db.collection(db_collections.VA_TABLE).insert_many(form_submissions_collection.find())
     pass
 
 
