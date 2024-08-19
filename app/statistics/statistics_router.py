@@ -5,7 +5,7 @@ from typing import List, Optional
 from arango.database import StandardDatabase
 from fastapi import APIRouter, Depends, Query, status
 
-from app.shared.configs.arangodb_db import get_arangodb_session
+from app.shared.configs.arangodb import get_arangodb_session
 from app.shared.configs.models import ResponseMainModel
 from app.statistics.services.charts import fetch_charts_statistics
 from app.statistics.services.submissions import fetch_submissions_statistics
