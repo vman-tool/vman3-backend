@@ -2,6 +2,7 @@ from fastapi import APIRouter
 
 from app.odk_download import route
 from app.pcva import routes
+from app.ccva import ccva_routes
 from app.records import records_router
 from app.settings import settings_router
 from app.statistics import statistics_router
@@ -23,5 +24,7 @@ def create_main_router():
     main_router.include_router(records_router.data_router)
     main_router.include_router(statistics_router.statistics_router)
     main_router.include_router(settings_router.settings_router)
+    main_router.include_router(ccva_routes.ccva_router)
+    
 
     return main_router
