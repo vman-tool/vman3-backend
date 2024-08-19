@@ -7,7 +7,7 @@ from fastapi.responses import JSONResponse
 from fastapi.security import OAuth2PasswordRequestForm
 
 # from sqlalchemy.orm import Session
-from app.shared.configs.arangodb_db import ArangoDBClient, get_arangodb_session
+from app.shared.configs.arangodb import ArangoDBClient, get_arangodb_session
 from app.users.decorators.user import get_current_user, oauth2_scheme
 from app.users.responses.user import LoginResponse, UserResponse
 from app.users.schemas.user import (EmailRequest, RegisterUserRequest,

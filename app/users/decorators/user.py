@@ -5,7 +5,7 @@ from functools import wraps
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 
-from app.shared.configs.arangodb_db import get_arangodb_session
+from app.shared.configs.arangodb import get_arangodb_session
 from app.shared.configs.security import get_token_user
 from app.users.schemas.user import RegisterUserRequest
 

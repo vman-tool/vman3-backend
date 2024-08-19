@@ -11,7 +11,7 @@ from app.odk_download.services.data_tracker import (
     get_last_processed_timestamp, log_chunk_remove, log_chunk_start,
     log_chunk_update, log_error, update_last_processed_timestamp)
 from app.settings.services.odk_configs import fetch_odk_config
-from app.shared.configs.arangodb_db import ArangoDBClient, get_arangodb_client
+from app.shared.configs.arangodb import ArangoDBClient, get_arangodb_client
 from app.shared.configs.constants import db_collections
 from app.shared.configs.database import form_submissions_collection
 from app.utilits.odk_client import ODKClientAsync
@@ -150,7 +150,7 @@ async def fetch_odk_data_with_async_old(
 
 async def save_to_arangodb(db: ArangoDBClient = Depends(get_arangodb_client)):
     
-    await db.collection('form_submissions').insert_many(form_submissions_collection.find())
+    await db.collection(db_collections.VA_TABLE).insert_many(form_submissions_collection.find())
     pass
 
 
@@ -159,7 +159,8 @@ async def save_to_arangodb(db: ArangoDBClient = Depends(get_arangodb_client)):
 
 # testing  arangodb
 async def insert_to_arangodb(data: dict):
-    pass
+    print(data)
+
     try:
         db:ArangoDBClient = await get_arangodb_client()
         await db.replace_one(collection_name=db_collections.VA_TABLE  , document=data)
