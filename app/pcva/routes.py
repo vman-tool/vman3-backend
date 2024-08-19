@@ -45,7 +45,7 @@ async def get_va_records(
         filters = {}
         if va_id is not None:
             filters = {
-                "__id": va_id
+                "instanceid": va_id
             }
         return await fetch_va_records(paging = allowPaging, page_number = page_number, limit = limit, include_assignment = include_assignment, filters=filters, db=db)
         
