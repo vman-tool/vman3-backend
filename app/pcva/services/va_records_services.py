@@ -12,7 +12,7 @@ from app.users.models.user import User
 from app.pcva.utilities.va_records_utils import format_va_record
 from app.shared.configs.models import Pager, ResponseMainModel
 
-async def fetch_va_records(paging: bool = True,  page_number: int = 1, limit: int = 10, include_assignment: bool = False, filters: Dict = {}, db: StandardDatabase = None) -> ResponseMainModel:
+async def fetch_va_records(paging: bool = True,  page_number: int = 1, limit: int = 10, include_assignment: bool = False, filters: Dict = {}, format_records:bool = True, db: StandardDatabase = None) -> ResponseMainModel:
     va_table_collection = db.collection(db_collections.VA_TABLE)
     assignment_collection_exists = db.has_collection(db_collections.ASSIGNED_VA)
     bind_vars = {}
@@ -33,7 +33,7 @@ async def fetch_va_records(paging: bool = True,  page_number: int = 1, limit: in
 
     bind_vars.update(vars)
 
-    filters_string: str = None
+    filters_string: str = ""
 
     if filters_list:
         filters_string += " FILTER " + " AND ".join(filters_list)
@@ -58,7 +58,10 @@ async def fetch_va_records(paging: bool = True,  page_number: int = 1, limit: in
 
             cursor = db.aql.execute(query, bind_vars=bind_vars)
 
-            data = [format_va_record(document) for document in cursor]
+            if format_records:
+                data = [format_va_record(document) for document in cursor]
+            else:
+                data = [document for document in cursor]
             
             return ResponseMainModel(data=data, messages="Records fetched successfully!", total=total_count)
 
@@ -133,7 +136,11 @@ async def fetch_va_records(paging: bool = True,  page_number: int = 1, limit: in
                 })
             
             cursor = db.aql.execute(query, bind_vars=bind_vars)
-            data = [format_va_record(document) for document in cursor]
+            
+            if format_records:
+                data = [format_va_record(document) for document in cursor]
+            else:
+                data = [document for document in cursor]
 
             return ResponseMainModel(data=data, message="Records fetched successfully!", total = total_count, pager=Pager(page=page_number, limit=limit))
     

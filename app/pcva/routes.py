@@ -36,6 +36,7 @@ async def get_va_records(
     page_number: Optional[int] = Query(1, alias="page_number"),
     limit: Optional[int] = Query(10, alias="limit"),
     include_assignment: Optional[str] = Query(None, alias="include_assignment"),
+    format_records: Optional[bool] = Query(True, alias="format_records"),
     va_id: Optional[str] = Query(None, alias="va_id"),
     db: StandardDatabase = Depends(get_arangodb_session)) -> ResponseMainModel:
 
@@ -47,7 +48,7 @@ async def get_va_records(
             filters = {
                 "instanceid": va_id
             }
-        return await fetch_va_records(paging = allowPaging, page_number = page_number, limit = limit, include_assignment = include_assignment, filters=filters, db=db)
+        return await fetch_va_records(paging = allowPaging, page_number = page_number, limit = limit, include_assignment = include_assignment, filters=filters, format_records=format_records, db=db)
         
     except Exception as e:
         raise e
