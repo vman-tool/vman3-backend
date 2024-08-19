@@ -11,7 +11,7 @@ from fastapi.responses import FileResponse, HTMLResponse
 from loguru import logger
 
 from app import routes
-from app.odk_download.services import data_download, schedulers
+from app.odk.services import data_download, schedulers
 from app.shared.configs.arangodb import ArangoDBClient, get_arangodb_client
 from app.shared.configs.database import (close_mongo_connection,
                                          connect_to_mongo)
