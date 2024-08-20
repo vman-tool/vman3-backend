@@ -28,8 +28,15 @@ async def fetch_va_records(paging: bool = True,  page_number: int = 1, limit: in
             page_number=page_number,
             limit=limit
         )
+    
 
-    filters_list, vars = add_query_filters(filters, {}, 'a')
+
+    if not include_assignment or not assignment_collection_exists:
+        records_name = 'doc'
+    else:
+        records_name = 'v'
+    
+    filters_list, vars = add_query_filters(filters, {}, records_name)
 
     bind_vars.update(vars)
 

@@ -10,8 +10,11 @@ from loguru import logger
 from app.settings.services.odk_configs import fetch_odk_config
 from app.shared.configs.arangodb import ArangoDBClient, get_arangodb_client
 from app.shared.configs.constants import db_collections
-from app.utilits.odk_client import ODKClientAsync
+from app.odk.utils.odk_client import ODKClientAsync
 from app.utilits.websocket_manager import WebSocketManager
+from app.shared.configs.models import ResponseMainModel
+
+from app.odk.utils.data_transform import odk_questions_formatter, filter_non_questions
 
 
 async def fetch_odk_data_with_async(
@@ -132,6 +135,22 @@ async def fetch_odk_data_with_async(
             
         raise HTTPException(status_code=500, detail=str(e))
 
+
+async def fetch_form_questions(db: StandardDatabase):
+    try:
+        config = await fetch_odk_config(db)
+        async with ODKClientAsync(config) as odk_client:
+            questions = await odk_client.getFormQuestions()
+            fields = await odk_client.getFormFields()
+
+            formated_questions = odk_questions_formatter(questions)
+            all_questions_fields = filter_non_questions(fields)
+            return ResponseMainModel(data={
+                'questions': formated_questions,
+                'fields': all_questions_fields
+            }, message="Questions fetched successfully")
+    except Exception as e:
+        raise e
 
 async def insert_data_to_arangodb(data: dict):
 
