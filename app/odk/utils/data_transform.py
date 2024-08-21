@@ -96,7 +96,7 @@ def odk_questions_formatter(odk_questions):
         id_values = question.get('@id', '')
         if id_values:
             question_id = id_values.split(":")[0].split("-")
-            question_id = "_".join(question_id).lower()
+            question_id = "_".join(question_id)
             id_splits[question_id] = question.get('value')
 
     return id_splits
@@ -115,3 +115,41 @@ def filter_non_questions(fields):
         fields
     ))
     return questions
+
+
+def assign_questions_options(field, questions):
+    """
+        Assign options to the optionated questions from ODK formatted questionnare
+        :param field: ODK question field {path: label}
+        :param questions: Dictionary of questions 
+        {
+            "path": "/sample/path",
+            "name": "path",
+            "type": "string",
+            "binary": null,
+            "selectMultiple": null
+        }
+
+        :return questions with options
+    """
+    options = [
+        {
+            "path": option,
+            "value": option.split('/')[len(option.split('/')) - 1],
+            "label": questions[option]
+        }
+        for option in questions.keys()
+        if field['path'] in option
+        and not option.endswith(field['path'])
+        and len(option.split(field['path'])[1].split("/")) == 2
+    ]
+    label = [
+        questions[key]
+        for key in questions.keys() 
+        if key.endswith(field['path'])
+    ]
+    return {
+        **field,
+        "label": label,
+        "options": options
+    }
