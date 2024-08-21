@@ -5,12 +5,13 @@ from fastapi import HTTPException
 
 from app.pcva.models.pcva_models import ICD10, AssignedVA, CodedVA
 from app.pcva.requests.va_request_classes import AssignVARequestClass, CodeAssignedVARequestClass
-from app.pcva.responses.va_response_classes import AssignVAResponseClass, CodedVAResponseClass
+from app.pcva.responses.va_response_classes import AssignVAResponseClass, CodedVAResponseClass, VAQuestionResponseClass
 from app.shared.configs.constants import db_collections
 from app.shared.utils.database_utilities import add_query_filters, record_exists, replace_object_values
 from app.users.models.user import User
 from app.pcva.utilities.va_records_utils import format_va_record
 from app.shared.configs.models import Pager, ResponseMainModel
+from app.odk.models.questions_models import VA_Question
 
 async def fetch_va_records(paging: bool = True,  page_number: int = 1, limit: int = 10, include_assignment: bool = False, filters: Dict = {}, format_records:bool = True, db: StandardDatabase = None) -> ResponseMainModel:
     va_table_collection = db.collection(db_collections.VA_TABLE)
@@ -438,5 +439,12 @@ async def get_concordants_va_service(user, db: StandardDatabase = None):
         formattedCodedVA.append(codedVA_group_temp)
     
     return formattedCodedVA
-     
+
+async def get_form_questions_service(filters: Dict = None, db: StandardDatabase = None):
+    questions = await VA_Question.get_many(paging=False, filters=filters, db=db)
+
+    questions = [VAQuestionResponseClass(**question).model_dump() for question in questions]
+    questions = { question['name']: question for question in questions} if len(questions) else []
     
+     
+    return ResponseMainModel(data=questions, message="Questions fetched successfully", total=len(questions))

@@ -15,7 +15,7 @@ from app.pcva.services.icd10_services import (
     update_icd10_categories_service, 
     update_icd10_codes
 )
-from app.pcva.services.va_records_services import assign_va_service, code_assigned_va_service, fetch_va_records, get_coded_va_service, get_concordants_va_service, get_va_assignment_service
+from app.pcva.services.va_records_services import assign_va_service, code_assigned_va_service, fetch_va_records, get_coded_va_service, get_concordants_va_service, get_form_questions_service, get_va_assignment_service
 from app.shared.configs.arangodb import get_arangodb_session
 from app.users.decorators.user import get_current_user, oauth2_scheme
 from app.users.models.user import User
@@ -231,3 +231,21 @@ async def code_assigned_va(
         return  await get_concordants_va_service(current_user, db = db)
     except Exception as e:
         raise e
+    
+
+@pcva_router.get("/form_questions", status_code=status.HTTP_200_OK)
+async def get_form_questions(
+    questions_keys: Optional[str] = Query(None, alias="question_id", description="If you need many, separate questons keys by comma, DOnt specify to get all the questions"),
+    current_user: User = Depends(get_arangodb_session),
+    db: StandardDatabase = Depends(get_arangodb_session)
+) -> ResponseMainModel:
+    try:
+        fields_to_be_queried = {"name": questions_keys.split(',')}
+        filters = {
+            "in_conditions": fields_to_be_queried
+        } if questions_keys else {}
+
+        return await get_form_questions_service(filters=filters, db=db)
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
