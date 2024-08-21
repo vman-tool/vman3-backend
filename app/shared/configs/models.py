@@ -15,6 +15,7 @@ T = TypeVar('T')
 class Pager(BaseModel):
     page: Union[int, None] = None
     limit: Union[int, None] = None
+
 class ResponseMainModel(BaseModel):
     data: Optional[Union[Union[List[Any], List[T]], Union[Dict[str, Any],Dict[str, T]], None]] = None
     message: str
@@ -57,18 +58,26 @@ class VManBaseModel(BaseModel):
             if not any(index['fields'] == ['uuid'] for index in indexes):
                 collection.add_hash_index(fields=['uuid'], unique=True)
 
-    async def save(self, db: StandardDatabase):
+    async def save(self, db: StandardDatabase, unique_field: str = None):
         """
         This method saved the data and returns the new saved data.
-        
+        :param db: Standard database object
+        :param unique_field: This is the field to be checked as unique and be used as a reference for data update or new insert
         """
         self.init_collection(db)
         collection = db.collection(self.get_collection_name())
         self.uuid = str(uuid.uuid4())
         self.created_at = datetime.now().isoformat()
         doc = self.model_dump()
-        # doc['_key'] = str(doc.pop('id', None))
-        return collection.insert(doc, return_new=True)["new"]
+
+        existing_doc = await self.get_many(filters = {unique_field: doc.get(unique_field)}, db=db) if unique_field else None
+
+        if existing_doc:
+            doc["_key"] = existing_doc[0]["_key"]
+            new_doc = collection.update(doc, return_new=True)
+        else:
+            new_doc = collection.insert(doc, return_new=True)
+        return new_doc
 
     @classmethod
     async def get(cls, doc_id: str = None, doc_uuid: str = None, db: StandardDatabase = None):

@@ -15,6 +15,7 @@ from app.utilits.websocket_manager import WebSocketManager
 from app.shared.configs.models import ResponseMainModel
 
 from app.odk.utils.data_transform import assign_questions_options, odk_questions_formatter, filter_non_questions
+from app.odk.models.questions_models import VA_Question
 
 
 async def fetch_odk_data_with_async(
@@ -145,13 +146,24 @@ async def fetch_form_questions(db: StandardDatabase):
 
             formated_questions = odk_questions_formatter(questions)
             all_questions_fields = filter_non_questions(fields)
-            questions_with_options = [
-                assign_questions_options(field, formated_questions)
-                for field in all_questions_fields
-            ]
-            return ResponseMainModel(data={
-                'questions_with_options': questions_with_options
-            }, message="Questions fetched successfully", total=len(questions_with_options))
+            # questions_with_options = { 
+            #     question['name']: question 
+            #     for question in 
+            #     [
+            #         assign_questions_options(field, formated_questions)
+            #         for field in all_questions_fields
+            #     ]
+            # }
+            count = 0
+            for question in [
+                    assign_questions_options(field, formated_questions)
+                    for field in all_questions_fields
+                ]:
+                await VA_Question(**question).save(db, "name")
+                count += 1
+
+
+            return ResponseMainModel(data=[], message="Questions fetched successfully", total=count)
     except Exception as e:
         raise e
 

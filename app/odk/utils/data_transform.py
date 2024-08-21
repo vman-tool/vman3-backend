@@ -134,7 +134,7 @@ def assign_questions_options(field, questions):
     """
     options = [
         {
-            "path": option,
+            "path": option ,
             "value": option.split('/')[len(option.split('/')) - 1],
             "label": questions[option]
         }
@@ -148,8 +148,13 @@ def assign_questions_options(field, questions):
         for key in questions.keys() 
         if key.endswith(field['path'])
     ]
+    label = label[0] if len(label) > 0 else ""
+    if type(label) != str and type(label) == dict:
+        label = label.get('#text', "")
     return {
         **field,
+        "path": field['path'].lower(),
+        "name": field['name'].lower(),
         "label": label,
         "options": options
     }
