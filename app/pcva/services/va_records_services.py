@@ -3,7 +3,7 @@ from arango import ArangoError
 from arango.database import StandardDatabase
 from fastapi import HTTPException
 
-from app.pcva.models.models import ICD10, AssignedVA, CodedVA
+from app.pcva.models.pcva_models import ICD10, AssignedVA, CodedVA
 from app.pcva.requests.va_request_classes import AssignVARequestClass, CodeAssignedVARequestClass
 from app.pcva.responses.va_response_classes import AssignVAResponseClass, CodedVAResponseClass
 from app.shared.configs.constants import db_collections
