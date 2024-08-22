@@ -1,7 +1,7 @@
 from loguru import logger
 
-from app.odk_download.services.data_download import fetch_odk_data_with_async
-from app.odk_download.services.data_tracker import get_incomplete_chunks
+from app.odk.services.data_download import fetch_odk_data_with_async
+from app.odk.services.data_tracker import get_incomplete_chunks
 
 
 async def scheduled_failed_chucks_retry():

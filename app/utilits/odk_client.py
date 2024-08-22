@@ -4,12 +4,12 @@ from datetime import datetime
 
 import httpx
 
-from app.settings.models.odk_configs import OdkConfigModel
+from app.settings.models.settings import OdkConfigModel
 
 
 class ODKClientAsync:
     def __init__(self, config: OdkConfigModel):
-        self.odk_default_project_id = config.project_id
+        self.odk_default_project_id = config.project_id 
         self.odk_base_url = config.url
         self.odk_api_version = config.api_version
         self.odk_username = config.username
