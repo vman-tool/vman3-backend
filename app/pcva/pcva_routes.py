@@ -240,7 +240,9 @@ async def get_form_questions(
     db: StandardDatabase = Depends(get_arangodb_session)
 ) -> ResponseMainModel:
     try:
-        fields_to_be_queried = {"name": questions_keys.split(',')}
+        fields_to_be_queried = {"name": questions_keys.split(',')} if questions_keys else []
+        
+        
         filters = {
             "in_conditions": fields_to_be_queried
         } if questions_keys else {}
