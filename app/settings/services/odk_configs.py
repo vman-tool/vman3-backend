@@ -20,7 +20,6 @@ async def fetch_odk_config(db: StandardDatabase) -> OdkConfigModel:
 async def fetch_configs_settings(db: StandardDatabase = None):
     try:
         config_data= await fetch_odk_config(db)
-        print(config_data)
         return ResponseMainModel(
             data=config_data.model_dump(),
             message="Config fetched successfully",

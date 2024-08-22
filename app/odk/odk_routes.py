@@ -7,6 +7,8 @@ from fastapi import (APIRouter, BackgroundTasks, Depends, HTTPException, Query,
 
 from app.odk.services import data_download
 from app.shared.configs.arangodb import get_arangodb_session
+from app.shared.configs.models import ResponseMainModel
+from app.users.models.user import User
 
 odk_router = APIRouter(
     prefix="/odk",
@@ -61,6 +63,16 @@ async def fetch_odk_data_with_async_endpoint(
         # Add this wrapped task to background tasks
         background_tasks.add_task(start_fetch)
         return {"status": "Data fetch initiated"}
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@odk_router.post("/fetch_form_questions", status_code=status.HTTP_200_OK)
+async def get_form_questions(
+    db: StandardDatabase = Depends(get_arangodb_session)
+) -> ResponseMainModel:
+    try:
+        return await data_download.fetch_form_questions(db=db)
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
