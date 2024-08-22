@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 from http.client import HTTPException
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional, TypeVar, Union
 
 from arango.database import StandardDatabase
 from pydantic import BaseModel, Field
@@ -9,11 +9,18 @@ from pydantic import BaseModel, Field
 from app.shared.configs.constants import db_collections
 from app.shared.utils.database_utilities import add_query_filters, replace_object_values
 
+
+T = TypeVar('T')
+
+class Pager(BaseModel):
+    page: Union[int, None] = None
+    limit: Union[int, None] = None
 class ResponseMainModel(BaseModel):
-    data: Optional[Union[List[Any], Dict[str, Any], None]] = None
+    data: Optional[Union[Union[List[Any], List[T]], Union[Dict[str, Any],Dict[str, T]], None]] = None
     message: str
     error: Optional[str] = None
     total: Optional[int] = None
+    pager: Optional[Pager]= None
     
     
 class VManBaseModel(BaseModel):

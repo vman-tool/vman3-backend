@@ -16,6 +16,9 @@ class DataResponse(BaseModel):
 
 
 def format_va_record(raw_data: dict) -> DataResponse:
+    assignments = None
+    if 'assignments' in raw_data:
+        assignments = raw_data['assignments']
     return DataResponse(
         id=raw_data.get("_key", ""),
         vaId=raw_data.get("__id", ""),
@@ -24,5 +27,5 @@ def format_va_record(raw_data: dict) -> DataResponse:
         interviewDay=raw_data.get("today", ""),
         interviewerName=raw_data.get("id10007", ""),
         instanceid=raw_data.get("instanceid", ""),
-        assignments=raw_data.get("assignments", "")
+        assignments=assignments
     )

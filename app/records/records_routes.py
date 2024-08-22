@@ -24,24 +24,24 @@ data_router = APIRouter(
 
 
 
-@data_router.get("/s",status_code=status.HTTP_200_OK, response_model=ResponseMainModel)
-async def get_va_recordss(
-    paging: Optional[str] = Query(None, alias="paging"),
-    page_number: Optional[int] = Query(1, alias="page_number"),
-    limit: Optional[int] = Query(10, alias="limit"),
-    db: StandardDatabase = Depends(get_arangodb_session)):
+# @data_router.get("/s",status_code=status.HTTP_200_OK, response_model=ResponseMainModel)
+# async def get_va_recordss(
+#     paging: Optional[str] = Query(None, alias="paging"),
+#     page_number: Optional[int] = Query(1, alias="page_number"),
+#     limit: Optional[int] = Query(10, alias="limit"),
+#     db: StandardDatabase = Depends(get_arangodb_session)):
 
-    try:
-        allow_paging = False if paging is not None and paging.lower() == 'false' else True
-        return await fetch_va_records(allow_paging, page_number, limit, db)
+#     try:
+#         allow_paging = False if paging is not None and paging.lower() == 'false' else True
+#         return await fetch_va_records(allow_paging, page_number, limit, db)
 
-    except Exception as e:
-        return ResponseMainModel(
-            data=None,
-            message="Failed to fetch records",
-            error=str(e),
-            total=None
-        )
+#     except Exception as e:
+#         return ResponseMainModel(
+#             data=None,
+#             message="Failed to fetch records",
+#             error=str(e),
+#             total=None
+#         )
         
         
 @data_router.get("/", status_code=status.HTTP_200_OK, response_model=ResponseMainModel)

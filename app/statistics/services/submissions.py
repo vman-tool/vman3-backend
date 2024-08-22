@@ -17,11 +17,11 @@ async def fetch_submissions_statistics(paging: bool = True, page_number: int = 1
         filters = []
 
         if start_date:
-            filters.append("doc.id10012 >= @start_date")
+            filters.append("doc.today >= @start_date")
             bind_vars["start_date"] = str(start_date)
 
         if end_date:
-            filters.append("doc.id10012 <= @end_date")
+            filters.append("doc.today <= @end_date")
             bind_vars["end_date"] = str(end_date)
 
         if locations:
@@ -34,10 +34,10 @@ async def fetch_submissions_statistics(paging: bool = True, page_number: int = 1
         query += """
             COLLECT region = doc.id10005r, district = doc.id10005d INTO grouped
             LET count = LENGTH(grouped)
-            LET lastSubmission = MAX(grouped[*].doc.id10012)
-            LET adults = SUM(grouped[*].doc.isadult)
-            LET children = SUM(grouped[*].doc.ischild)
-            LET neonates = SUM(grouped[*].doc.isneonatal)
+            LET lastSubmission = MAX(grouped[*].doc.today)
+            LET adults = SUM(grouped[*].doc.id00001)
+            LET children = SUM(grouped[*].doc.isadult)
+            LET neonates = SUM(grouped[*].doc.id00003)
             LET male = LENGTH(
               FOR sub IN grouped[*].doc
               FILTER sub.id10010b == "male"
