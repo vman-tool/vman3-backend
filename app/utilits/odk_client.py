@@ -4,7 +4,7 @@ from datetime import datetime
 
 import httpx
 
-from app.settings.models.odk_configs import OdkConfigModel
+from app.settings.models.settings import OdkConfigModel
 
 
 class ODKClientAsync:

@@ -45,7 +45,7 @@ async def fetch_odk_data_with_async(
             start_date = records_margins.get('latest_date', None)
             available_data_count = records_margins.get('total_records', 0)
             
-        async with ODKClientAsync(config) as odk_client:
+        async with ODKClientAsync(config.odk_api_configs) as odk_client:
             try:
                 data_for_count = await odk_client.getFormSubmissions(top= 1 if resend is False else top,skip= None if resend is False else skip, order_by='__system/submissionDate', order_direction='asc')
                 total_data_count = data_for_count["@odata.count"]

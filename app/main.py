@@ -1,8 +1,6 @@
 from contextlib import asynccontextmanager
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
-from apscheduler.triggers.cron import CronTrigger
-from apscheduler.triggers.interval import IntervalTrigger
 from decouple import config
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
@@ -10,7 +8,6 @@ from fastapi.responses import HTMLResponse
 from loguru import logger
 
 from app import routes
-from app.odk_download.services import data_download, schedulers
 from app.shared.middlewares.error_handlers import register_error_handlers
 from app.users.utils.default import default_account_creation
 from app.utilits import websocket_manager
@@ -24,8 +21,8 @@ async def lifespan(app: FastAPI):
     logger.info("Visit http://localhost:8080/vman/api/v1/docs for the API documentation (Swagger UI)")
     logger.info("Visit http://localhost:8080/vman/api/v1 for the main API")
 
-    scheduler.add_job(schedulers. scheduled_failed_chucks_retry, IntervalTrigger(minutes=60*3))
-    scheduler.add_job(data_download. fetch_odk_data_with_async, CronTrigger(hour=18, minute=0))
+    # scheduler.add_job(schedulers. scheduled_failed_chucks_retry, IntervalTrigger(minutes=60*3))
+    # scheduler.add_job(data_download. fetch_odk_data_with_async, CronTrigger(hour=18, minute=0))
     scheduler.start()
 
     await default_account_creation()
