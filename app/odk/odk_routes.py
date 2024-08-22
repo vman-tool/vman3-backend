@@ -10,7 +10,7 @@ from app.shared.configs.arangodb import get_arangodb_session
 
 odk_router = APIRouter(
     prefix="/odk",
-    tags=["odk"],
+    tags=["ODK"],
     responses={404: {"description": "Not found"}},
 )
 
