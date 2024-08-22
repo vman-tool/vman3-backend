@@ -141,7 +141,7 @@ def assign_questions_options(field, questions):
         for option in questions.keys()
         if field['path'] in option
         and not option.endswith(field['path'])
-        and len(option.split(field['path'])[1].split("/")) == 2
+        and len(option.split(field['path'])[1].split("/")) == 2 and option.split(field['path'])[1].split("/")[0] == ""
     ]
     label = [
         questions[key]
