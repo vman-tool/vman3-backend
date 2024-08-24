@@ -3,16 +3,17 @@ from arango import ArangoError
 from arango.database import StandardDatabase
 from fastapi import HTTPException
 
-from app.pcva.models.models import ICD10, AssignedVA, CodedVA
+from app.pcva.models.pcva_models import ICD10, AssignedVA, CodedVA
 from app.pcva.requests.va_request_classes import AssignVARequestClass, CodeAssignedVARequestClass
-from app.pcva.responses.va_response_classes import AssignVAResponseClass, CodedVAResponseClass
+from app.pcva.responses.va_response_classes import AssignVAResponseClass, CodedVAResponseClass, VAQuestionResponseClass
 from app.shared.configs.constants import db_collections
 from app.shared.utils.database_utilities import add_query_filters, record_exists, replace_object_values
 from app.users.models.user import User
 from app.pcva.utilities.va_records_utils import format_va_record
 from app.shared.configs.models import Pager, ResponseMainModel
+from app.odk.models.questions_models import VA_Question
 
-async def fetch_va_records(paging: bool = True,  page_number: int = 1, limit: int = 10, include_assignment: bool = False, filters: Dict = {}, db: StandardDatabase = None) -> ResponseMainModel:
+async def fetch_va_records(paging: bool = True,  page_number: int = 1, limit: int = 10, include_assignment: bool = False, filters: Dict = {}, format_records:bool = True, db: StandardDatabase = None) -> ResponseMainModel:
     va_table_collection = db.collection(db_collections.VA_TABLE)
     assignment_collection_exists = db.has_collection(db_collections.ASSIGNED_VA)
     bind_vars = {}
@@ -28,12 +29,19 @@ async def fetch_va_records(paging: bool = True,  page_number: int = 1, limit: in
             page_number=page_number,
             limit=limit
         )
+    
 
-    filters_list, vars = add_query_filters(filters, {}, 'a')
+
+    if not include_assignment or not assignment_collection_exists:
+        records_name = 'doc'
+    else:
+        records_name = 'v'
+    
+    filters_list, vars = add_query_filters(filters, {}, records_name)
 
     bind_vars.update(vars)
 
-    filters_string: str = None
+    filters_string: str = ""
 
     if filters_list:
         filters_string += " FILTER " + " AND ".join(filters_list)
@@ -58,7 +66,10 @@ async def fetch_va_records(paging: bool = True,  page_number: int = 1, limit: in
 
             cursor = db.aql.execute(query, bind_vars=bind_vars)
 
-            data = [format_va_record(document) for document in cursor]
+            if format_records:
+                data = [format_va_record(document) for document in cursor]
+            else:
+                data = [document for document in cursor]
             
             return ResponseMainModel(data=data, messages="Records fetched successfully!", total=total_count)
 
@@ -133,7 +144,11 @@ async def fetch_va_records(paging: bool = True,  page_number: int = 1, limit: in
                 })
             
             cursor = db.aql.execute(query, bind_vars=bind_vars)
-            data = [format_va_record(document) for document in cursor]
+            
+            if format_records:
+                data = [format_va_record(document) for document in cursor]
+            else:
+                data = [document for document in cursor]
 
             return ResponseMainModel(data=data, message="Records fetched successfully!", total = total_count, pager=Pager(page=page_number, limit=limit))
     
@@ -424,5 +439,12 @@ async def get_concordants_va_service(user, db: StandardDatabase = None):
         formattedCodedVA.append(codedVA_group_temp)
     
     return formattedCodedVA
-     
+
+async def get_form_questions_service(filters: Dict = None, db: StandardDatabase = None):
+    questions = await VA_Question.get_many(paging=False, filters=filters, db=db)
+
+    questions = [VAQuestionResponseClass(**question).model_dump() for question in questions]
+    questions = { question['name']: question for question in questions} if len(questions) else []
     
+     
+    return ResponseMainModel(data=questions, message="Questions fetched successfully", total=len(questions))

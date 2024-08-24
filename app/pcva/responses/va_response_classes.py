@@ -161,3 +161,18 @@ class CodedVAResponseClass(BaseResponseModel):
         
         populated_coded_va_data['assignedVA'] = await AssignedVAFieldClass.get_structured_assignment_by_vaId(coded_va_data['assigned_va'],coder = populated_coded_va_data.get('created_by').uuid, db = db)
         return cls(**populated_coded_va_data)
+    
+
+class Option(BaseModel):
+    path: str
+    value: str
+    label: str
+
+class VAQuestionResponseClass(BaseModel):
+    path: str
+    name: str
+    type: str
+    binary: Optional[bool] = None
+    selectMultiple: Optional[bool] = None
+    label: str
+    options: Optional[List[Option]] = None
