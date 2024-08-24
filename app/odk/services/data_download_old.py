@@ -14,7 +14,7 @@ from app.settings.services.odk_configs import fetch_odk_config
 from app.shared.configs.arangodb import ArangoDBClient, get_arangodb_client
 from app.shared.configs.constants import db_collections
 from app.shared.configs.database import form_submissions_collection
-from app.utilits.odk_client import ODKClientAsync
+from app.odk.utils.odk_client import ODKClientAsync
 
 
 async def fetch_odk_data_with_async_old(

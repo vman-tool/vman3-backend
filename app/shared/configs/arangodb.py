@@ -52,7 +52,6 @@ class ArangoDBClient:
     async def replace_one(self, collection_name: str, document: dict):
         # Wrap the synchronous replace_one in a thread pool
         return await run_in_threadpool(self._replace_one_sync, collection_name, document)
-
     def _replace_one_sync(self, collection_name: str, document: dict):
         try:
             aql_query = """

@@ -4,6 +4,7 @@ from datetime import datetime
 
 import httpx
 
+from app.odk.utils.data_transform import flattenTranslations, xml_to_json
 from app.settings.models.settings import OdkConfigModel
 
 
@@ -130,40 +131,37 @@ class ODKClientAsync:
         else:
             # Raise an exception with the response text as the error message
             raise Exception(f"Failed to fetch form submissions: {response.text}")
+
+
+
+
+    async def getFormQuestions(self):  
+        
+        headers = {
+            "Content-Type":'application/json'
+        }
+        
+        url = f'{self.odk_base_url}/{self.odk_api_version}/projects/{self.odk_default_project_id}/forms/{self.odk_form_id}.xml'
+        
+        response = await self.send_request('get', url, headers=headers)
+        
+        if response.status_code in { 200, 201}:
+            json_data = xml_to_json(response.text)
+            questions = json_data['h:html']['h:head']['model']['itext']['translation']
+            fields = questions['text'] if 'text' in questions else flattenTranslations(questions, 'text')
             
-    def flatten_json(self, y):
-        out = {}
+            return fields
+        else:
+            return json.loads(response.text)
 
-        def flatten(x, name=''):
-            if isinstance(x, dict):
-                for a in x:
-                    flatten(x[a], name + a + '_')
-            elif isinstance(x, list):
-                for i, a in enumerate(x):
-                    flatten(a, name + str(i) + '_')
-            else:
-                out[name[:-1]] = x
-
-        flatten(y)
-        return out
-    
-    def flatten_preserve_array_json(self, y):
-        out = {}
-
-        def flatten(x, name=''):
-            if isinstance(x, dict):
-                for a in x:
-                    flatten(x[a], name + a + '_')
-            elif isinstance(x, list):
-                for i, a in enumerate(x):
-                    if isinstance(a, dict):
-                        for k, v in self.flatten_preserve_array_json(a).items():
-                            out[name + str(i) + '_' + k] = v
-                    else:
-                        out[name + str(i)] = a
-            else:
-                out[name[:-1]] = x
-
-        flatten(y)
-        return out
+    async def getFormFields(self):
+        headers = {
+            "Content-Type":'application/json'
+        }
+        
+        url = f'{self.odk_base_url}/{self.odk_api_version}/projects/{self.odk_default_project_id}/forms/{self.odk_form_id}/fields?odata=true'
+        
+        response = await self.send_request('get', url, headers=headers)
+        
+        return json.loads(response.text)
 
