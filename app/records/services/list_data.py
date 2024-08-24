@@ -5,6 +5,7 @@ from arango import ArangoError
 from arango.database import StandardDatabase
 
 from app.records.responses.data import map_to_data_response
+from app.settings.services.odk_configs import fetch_odk_config
 from app.shared.configs.constants import db_collections
 from app.shared.configs.models import ResponseMainModel
 from app.shared.middlewares.exceptions import BadRequestException
@@ -12,6 +13,10 @@ from app.shared.middlewares.exceptions import BadRequestException
 
 async def fetch_va_records(paging: bool = True, page_number: int = 1, limit: int = 10, start_date: Optional[date] = None, end_date: Optional[date] = None, locations: Optional[List[str]] = None, db: StandardDatabase = None) -> ResponseMainModel:
     try:
+        config = await fetch_odk_config(db)
+        region_field = config.field_mapping.location_level1
+
+        today_field = config.field_mapping.date
         collection = db.collection(db_collections.VA_TABLE)  # Use the actual collection name here
         query = f"FOR doc IN {collection.name} "
         bind_vars = {}
@@ -19,15 +24,15 @@ async def fetch_va_records(paging: bool = True, page_number: int = 1, limit: int
         print(query)
 
         if start_date:
-            filters.append("doc.id10012 >= @start_date")
+            filters.append(f"doc.{today_field} >= @start_date")
             bind_vars["start_date"] = str(start_date)
         
         if end_date:
-            filters.append("doc.id10012 <= @end_date")
+            filters.append(f"doc.{today_field} <= @end_date")
             bind_vars["end_date"] = str(end_date)
 
         if locations:
-            filters.append("doc.id10005r IN @locations")
+            filters.append(f"doc.{region_field} IN @locations")
             bind_vars["locations"] = locations
 
         if filters:
@@ -41,9 +46,9 @@ async def fetch_va_records(paging: bool = True, page_number: int = 1, limit: int
             })
 
         query += "RETURN doc"
-
+        # print(query)
         cursor = db.aql.execute(query, bind_vars=bind_vars)
-        data = [map_to_data_response(document) for document in cursor]
+        data = [map_to_data_response(config,document) for document in cursor]
 
         # Fetch total count of documents
         count_query = f"RETURN LENGTH({collection.name})"
@@ -56,8 +61,10 @@ async def fetch_va_records(paging: bool = True, page_number: int = 1, limit: int
             total=total_records
         )
     except ArangoError as e:
+        print(e)
         raise BadRequestException("Failed to fetched records",str(e))
     except Exception as e:
+        print(e)
         raise BadRequestException(f"Failed to fetch records: {str(e)}",str(e))
     
     

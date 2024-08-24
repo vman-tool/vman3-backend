@@ -8,10 +8,17 @@ from arango.database import StandardDatabase
 from fastapi import HTTPException
 from loguru import logger
 
+from app.odk.models.questions_models import VA_Question
+from app.odk.utils.data_transform import (
+    assign_questions_options,
+    filter_non_questions,
+    odk_questions_formatter,
+)
+from app.odk.utils.odk_client import ODKClientAsync
 from app.settings.services.odk_configs import fetch_odk_config
 from app.shared.configs.arangodb import ArangoDBClient, get_arangodb_client
 from app.shared.configs.constants import db_collections
-from app.utilits.odk_client import ODKClientAsync
+from app.shared.configs.models import ResponseMainModel
 
 
 async def fetch_odk_data_with_async(
@@ -169,6 +176,36 @@ async def fetch_odk_data_with_async(
             
         raise HTTPException(status_code=500, detail=str(e))
 
+
+async def fetch_form_questions(db: StandardDatabase):
+    try:
+        config = await fetch_odk_config(db)
+        async with ODKClientAsync(config) as odk_client:
+            questions = await odk_client.getFormQuestions()
+            fields = await odk_client.getFormFields()
+
+            formated_questions = odk_questions_formatter(questions)
+            all_questions_fields = filter_non_questions(fields)
+            # questions_with_options = { 
+            #     question['name']: question 
+            #     for question in 
+            #     [
+            #         assign_questions_options(field, formated_questions)
+            #         for field in all_questions_fields
+            #     ]
+            # }
+            count = 0
+            for question in [
+                    assign_questions_options(field, formated_questions)
+                    for field in all_questions_fields
+                ]:
+                await VA_Question(**question).save(db, "name")
+                count += 1
+
+
+            return ResponseMainModel(data=[], message="Questions fetched successfully", total=count)
+    except Exception as e:
+        raise e
 
 async def insert_data_to_arangodb(data: dict):
 

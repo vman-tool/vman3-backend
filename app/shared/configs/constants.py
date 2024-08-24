@@ -5,6 +5,7 @@ class db_collections():
     Constants class for NoSQL database Collections. Use this class to call your collection
     """
     VA_TABLE: str = 'form_submissions'
+    VA_QUESTIONS: str = 'form_questions'
     USERS: str = 'users'
     USER_TOKENS: str = 'user_tokens'
     USER_ROLES: str = 'role'
@@ -38,5 +39,6 @@ collections_with_indexes = {
     db_collections.CODED_VA: [],
     db_collections.DOWNLOAD_TRACKER: [],
     db_collections.DOWNLOAD_PROCESS_TRACKER: [],
-    db_collections.SYSTEM_CONFIGS: []
+    db_collections.SYSTEM_CONFIGS: [],
+    db_collections.VA_QUESTIONS: []
 }
