@@ -65,11 +65,11 @@ class AssignVAResponseClass(BaseResponseModel):
     uuid: str
     coder: Optional[ResponseUser]
     vaId: Any = None
-
     
     @classmethod
     async def get_structured_assignment(cls, assignment_uuid = None, assignment = None, db: StandardDatabase = None):
         assignment_data = assignment
+        
         if not assignment_data:
             query = f"""
             FOR assignment IN {db_collections.ASSIGNED_VA}
@@ -79,10 +79,28 @@ class AssignVAResponseClass(BaseResponseModel):
             bind_vars = {'assignment_uuid': assignment_uuid}
             cursor = db.aql.execute(query, bind_vars=bind_vars)
             assignment_data = cursor.next()
-        
         populated_code_data = await populate_user_fields(assignment_data, ['coder'], db)
+
         
         return cls(**populated_code_data)
+    
+    @classmethod
+    async def populate_va(cls, vaId = None, db: StandardDatabase = None):
+        
+        va_data = {}
+        if vaId:
+            query = f"""
+            FOR va IN {db_collections.VA_TABLE}
+                FILTER va.__id == @vaId
+                RETURN va
+            """
+            bind_vars = {'vaId': vaId}
+            cursor = db.aql.execute(query, bind_vars=bind_vars)
+            va_data = cursor.next()
+        
+        if len(va_data.items()) > 0:
+            return cls(**va_data)
+        return cls()
     
     @classmethod
     async def get_structured_assignment_by_vaId(cls, vaId = None, db: StandardDatabase = None):
@@ -143,3 +161,18 @@ class CodedVAResponseClass(BaseResponseModel):
         
         populated_coded_va_data['assignedVA'] = await AssignedVAFieldClass.get_structured_assignment_by_vaId(coded_va_data['assigned_va'],coder = populated_coded_va_data.get('created_by').uuid, db = db)
         return cls(**populated_coded_va_data)
+    
+
+class Option(BaseModel):
+    path: str
+    value: str
+    label: str
+
+class VAQuestionResponseClass(BaseModel):
+    path: str
+    name: str
+    type: str
+    binary: Optional[bool] = None
+    selectMultiple: Optional[bool] = None
+    label: str
+    options: Optional[List[Option]] = None

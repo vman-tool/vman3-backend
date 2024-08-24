@@ -5,21 +5,22 @@ from fastapi.background import BackgroundTasks
 from fastapi_mail import ConnectionConfig, FastMail, MessageSchema, MessageType
 
 from app.shared.configs.settings import get_settings
+from decouple import config
 
 settings = get_settings()
 
 conf = ConnectionConfig(
-    MAIL_USERNAME=os.environ.get("MAIL_USERNAME", ""),
-    MAIL_PASSWORD=os.environ.get("MAIL_PASSWORD", ""),
-    MAIL_PORT=os.environ.get("MAIL_PORT", 1025),
-    MAIL_SERVER=os.environ.get("MAIL_SERVER", "smtp"),
-    MAIL_STARTTLS=os.environ.get("MAIL_STARTTLS", False),
-    MAIL_SSL_TLS=os.environ.get("MAIL_SSL_TLS", False),
+    MAIL_USERNAME=config("MAIL_USERNAME", default=""),
+    MAIL_PASSWORD=config("MAIL_PASSWORD", default=""),
+    MAIL_PORT=config("MAIL_PORT", default=1025, cast=int),
+    MAIL_SERVER=config("MAIL_SERVER", default="smtp"),
+    MAIL_STARTTLS=config("MAIL_STARTTLS", default=False, cast=bool),
+    MAIL_SSL_TLS=config("MAIL_SSL_TLS", default=False, cast=bool),
     MAIL_DEBUG=True,
-    MAIL_FROM=os.environ.get("MAIL_FROM", 'noreply@test.com'),
-    MAIL_FROM_NAME=os.environ.get("MAIL_FROM_NAME", settings.APP_NAME),
-    TEMPLATE_FOLDER=Path(__file__).parent.parent / "templates",
-    USE_CREDENTIALS=os.environ.get("USE_CREDENTIALS", True)
+    MAIL_FROM=config("MAIL_FROM", default='noreply@test.com'),
+    MAIL_FROM_NAME=config("MAIL_FROM_NAME", default=settings.APP_NAME),
+    USE_CREDENTIALS=config("USE_CREDENTIALS", default=True),
+    TEMPLATE_FOLDER=Path(__file__).parent.parent / "templates"
 )
 
 fm = FastMail(conf)
