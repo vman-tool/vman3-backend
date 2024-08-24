@@ -80,7 +80,7 @@ settings.json
 
 
 
-venv/
+venv
 virtualenv
 virtual_env
 vman_env

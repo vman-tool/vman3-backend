@@ -3,7 +3,7 @@ import logging
 from decouple import config
 from fastapi import BackgroundTasks
 
-from app.shared.configs.arangodb_db import get_arangodb_session
+from app.shared.configs.arangodb import get_arangodb_session
 from app.users.models.user import User
 from app.users.schemas.user import RegisterUserRequest
 from app.users.services import user

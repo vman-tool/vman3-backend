@@ -87,8 +87,7 @@ Run the following command to start the FastAPI application:
 uvicorn app.main:app --host 0.0.0.0 --port 8080 --reload
 ```
 
-The application will be accessible at `http://
-localhost:8000`.
+The application will be accessible at `http://localhost:8080/vman/api/v1`.
 
 
 

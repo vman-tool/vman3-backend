@@ -3,22 +3,20 @@ import os
 from datetime import datetime
 
 import httpx
-from decouple import config
+
+from app.odk.utils.data_transform import flattenTranslations, xml_to_json
+from app.settings.models.settings import OdkConfigModel
 
 
 class ODKClientAsync:
-    def __init__(self):
-        if os.path.exists("./settings.json"):
-            with open("./settings.json", 'r') as file:
-                self.odk_settings = json.load(file)
-            
-            self.odk_default_project_id = config("DEFAULT_PROJECT_ID", cast=int) 
-            self.odk_base_url = config("ODK_API_URL", cast=str) 
-            self.odk_api_version = config("ODK_API_VERSION", cast=str, default="v1") 
-            self.odk_username = config("ODK_USERNAME", cast=str) 
-            self.odk_password = config("ODK_PASSWORD", cast=str) 
-        else:
-            raise FileNotFoundError("settings.json file not found")
+    def __init__(self, config: OdkConfigModel):
+        self.odk_default_project_id = config.project_id 
+        self.odk_base_url = config.url
+        self.odk_api_version = config.api_version
+        self.odk_username = config.username
+        self.odk_password = config.password
+        self.odk_form_id = config.form_id
+        self.is_sort_allowed = config.is_sort_allowed
 
     async def __aenter__(self):
         self.client = httpx.AsyncClient()
@@ -98,7 +96,7 @@ class ODKClientAsync:
                             json.dump(session_data, file)
         return session_data
     
-    async def getFormSubmissions(self, start_date=None, end_date=None, skip=None, top=None):
+    async def getFormSubmissions(self, start_date=None, end_date=None, skip: int = None, top: int = None, order_by: str = None, order_direction: str = 'asc'):
         headers = {
             "Content-Type": 'application/json',
             "X-Extended-Metadata": "true"
@@ -110,65 +108,60 @@ class ODKClientAsync:
         start_date = start_date if start_date else ""
         end_date = end_date if end_date else ""
 
-        date_filter = ""
+        filter = ""
         if len(start_date) > 0 and len(end_date) > 0:
-            date_filter += f'&$filter=__system/submissionDate ge {start_date} and __system/submissionDate le {end_date}'
+            filter += f'&$filter=__system/submissionDate ge {start_date} and __system/submissionDate le {end_date}'
 
         if len(start_date) > 0 and len(end_date) == 0:
-            date_filter = f'&$filter=__system/submissionDate gt {start_date}'
+            filter = f'&$filter=__system/submissionDate ge {start_date}'
         
         if len(end_date) > 0 and len(start_date) == 0:
-            date_filter = f'&$filter=__system/submissionDate lt {end_date}'
+            filter = f'&$filter=__system/submissionDate le {end_date}'
         
-        url = f"{self.odk_base_url}/{self.odk_api_version}/projects/{self.odk_default_project_id}/forms/{self.odk_settings['va_tables'][0]['odk_form_id']}.svc/Submissions?$count=true{pagination_string}{date_filter}"
-
+        if order_by and self.is_sort_allowed:
+            if order_direction not in ("asc", "desc"):
+                order_direction = "asc"
+            filter += f'&$orderby={order_by} {order_direction}'
+        
+        url = f"{self.odk_base_url}/{self.odk_api_version}/projects/{self.odk_default_project_id}/forms/{self.odk_form_id}.svc/Submissions?$count=true{pagination_string}{filter}"
+        
         response = await self.send_request('get', url, headers=headers)
-
         if response.status_code in {200, 201}:
             return response.json()
         else:
-            return "Failed to fetch form submissions!"
-    
-    def flatten_json(self, y):
-        out = {}
+            # Raise an exception with the response text as the error message
+            raise Exception(f"Failed to fetch form submissions: {response.text}")
 
-        def flatten(x, name=''):
-            if isinstance(x, dict):
-                for a in x:
-                    flatten(x[a], name + a + '_')
-            elif isinstance(x, list):
-                for i, a in enumerate(x):
-                    flatten(a, name + str(i) + '_')
-            else:
-                out[name[:-1]] = x
 
-        flatten(y)
-        return out
-    
-    def flatten_preserve_array_json(self, y):
-        out = {}
 
-        def flatten(x, name=''):
-            if isinstance(x, dict):
-                for a in x:
-                    flatten(x[a], name + a + '_')
-            elif isinstance(x, list):
-                for i, a in enumerate(x):
-                    if isinstance(a, dict):
-                        for k, v in self.flatten_preserve_array_json(a).items():
-                            out[name + str(i) + '_' + k] = v
-                    else:
-                        out[name + str(i)] = a
-            else:
-                out[name[:-1]] = x
 
-        flatten(y)
-        return out
+    async def getFormQuestions(self):  
+        
+        headers = {
+            "Content-Type":'application/json'
+        }
+        
+        url = f'{self.odk_base_url}/{self.odk_api_version}/projects/{self.odk_default_project_id}/forms/{self.odk_form_id}.xml'
+        
+        response = await self.send_request('get', url, headers=headers)
+        
+        if response.status_code in { 200, 201}:
+            json_data = xml_to_json(response.text)
+            questions = json_data['h:html']['h:head']['model']['itext']['translation']
+            fields = questions['text'] if 'text' in questions else flattenTranslations(questions, 'text')
+            
+            return fields
+        else:
+            return json.loads(response.text)
 
-# Example usage:
-# async def main():
-#     async with ODKClientAsync() as client:
-#         submissions = await client.getFormSubmissions()
-#         print(submissions)
-# 
-# asyncio.run(main())
+    async def getFormFields(self):
+        headers = {
+            "Content-Type":'application/json'
+        }
+        
+        url = f'{self.odk_base_url}/{self.odk_api_version}/projects/{self.odk_default_project_id}/forms/{self.odk_form_id}/fields?odata=true'
+        
+        response = await self.send_request('get', url, headers=headers)
+        
+        return json.loads(response.text)
+

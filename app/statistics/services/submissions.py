@@ -3,12 +3,22 @@ from typing import List, Optional
 
 from arango.database import StandardDatabase
 
+from app.settings.services.odk_configs import fetch_odk_config
 from app.shared.configs.constants import db_collections
 from app.shared.configs.models import ResponseMainModel
 
 
 async def fetch_submissions_statistics(paging: bool = True, page_number: int = 1, limit: int = 10, start_date: Optional[date] = None, end_date: Optional[date] = None, locations: Optional[List[str]] = None, db: StandardDatabase = None) -> ResponseMainModel:
     try:
+        config = await fetch_odk_config(db)
+        region_field = config.field_mapping.location_level1
+        district_field = config.field_mapping.location_level2
+        is_adult_field = config.field_mapping.is_adult
+        is_child_field = config.field_mapping.is_child
+        is_neonte_field = config.field_mapping.is_neonate
+        today_field = config.field_mapping.date
+        deceased_gender = config.field_mapping.deceased_gender
+        
         collection = db.collection(db_collections.VA_TABLE)  # Use the actual collection name here
         query = f"""
             FOR doc IN {collection.name}
@@ -17,38 +27,39 @@ async def fetch_submissions_statistics(paging: bool = True, page_number: int = 1
         filters = []
 
         if start_date:
-            filters.append("doc.id10012 >= @start_date")
+            filters.append(f"doc.{today_field} >= @start_date")
             bind_vars["start_date"] = str(start_date)
 
         if end_date:
-            filters.append("doc.id10012 <= @end_date")
+            filters.append(f"doc.{today_field} <= @end_date")
             bind_vars["end_date"] = str(end_date)
 
         if locations:
-            filters.append("doc.id10005r IN @locations")
+            filters.append(f"doc.{region_field} IN @locations")
             bind_vars["locations"] = locations
 
         if filters:
             query += "FILTER " + " AND ".join(filters) + " "
 
-        query += """
-            COLLECT region = doc.id10005r, district = doc.id10005d INTO grouped
+        query += f"""
+             COLLECT region = doc.{region_field}, district = doc.{district_field} INTO grouped
             LET count = LENGTH(grouped)
-            LET lastSubmission = MAX(grouped[*].doc.id10012)
-            LET adults = SUM(grouped[*].doc.isadult)
-            LET children = SUM(grouped[*].doc.ischild)
-            LET neonates = SUM(grouped[*].doc.isneonatal)
+            LET lastSubmission = MAX(grouped[*].doc.{today_field})
+           
+            LET adults = grouped[*].doc.{is_adult_field} ? TO_NUMBER(grouped[*].doc.{is_adult_field}) : []
+            LET children = grouped[*].doc.{is_child_field} ? TO_NUMBER(grouped[*].doc.{is_child_field}) : []
+            LET neonates = grouped[*].doc.{is_neonte_field} ? TO_NUMBER(grouped[*].doc.{is_neonte_field}) : []
             LET male = LENGTH(
               FOR sub IN grouped[*].doc
-              FILTER sub.id10010b == "male"
+              FILTER sub.{deceased_gender} == "male"
               RETURN sub
             )
             LET female = LENGTH(
               FOR sub IN grouped[*].doc
-              FILTER sub.id10010b == "female"
+              FILTER sub.{deceased_gender} == "female"
               RETURN sub
             )
-            RETURN {
+            RETURN {{
               region,
               district,
               count,
@@ -58,7 +69,7 @@ async def fetch_submissions_statistics(paging: bool = True, page_number: int = 1
               neonates,
               male,
               female
-            }
+            }}
         """
 
         # if paging and page_number and limit:
