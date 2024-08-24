@@ -14,12 +14,11 @@ from app.odk.utils.data_transform import (
     filter_non_questions,
     odk_questions_formatter,
 )
+from app.odk.utils.odk_client import ODKClientAsync
 from app.settings.services.odk_configs import fetch_odk_config
 from app.shared.configs.arangodb import ArangoDBClient, get_arangodb_client
 from app.shared.configs.constants import db_collections
 from app.shared.configs.models import ResponseMainModel
-from app.utilits.odk_client import ODKClientAsync
-from app.utilits.odk_client import ODKClientAsync
 
 
 async def fetch_odk_data_with_async(
