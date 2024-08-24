@@ -3,10 +3,10 @@ from types import SimpleNamespace
 from arango.database import StandardDatabase
 from fastapi import HTTPException, status
 
+from app.odk.utils.odk_client import ODKClientAsync
 from app.settings.models.settings import SettingsConfigData
 from app.shared.configs.constants import db_collections
 from app.shared.configs.models import ResponseMainModel
-from app.utilits.odk_client import ODKClientAsync
 
 
 async def fetch_odk_config(db: StandardDatabase) -> SettingsConfigData:
