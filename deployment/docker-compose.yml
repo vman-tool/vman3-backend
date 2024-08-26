@@ -1,0 +1,51 @@
+version: '3.8'
+
+services:
+  frontend:
+    image: ilyatuu/vman3_frontend
+    ports:
+      - 4200:80
+    volumes:
+      - ./config.json:/usr/share/nginx/html/assets/config.json
+    depends_on:
+      - backend
+      - arango-db
+    networks:
+      - default
+
+  backend:
+    image: ilyatuu/vman3_backend
+    ports:
+      - '8080:8080'
+    volumes:
+      - ./app:/app
+      - .settings.json:/vman3/settings.json
+    environment:
+      - PYTHONUNBUFFERED=1
+    env_file:
+      - .env
+    depends_on:
+      - arango-db
+
+  # mongo:
+  #   image: mongo:latest
+  #   ports:
+  #     - '27017:27017'
+  #   volumes:
+  #     - mongo-data:/data/db
+
+  arango-db:
+    image: arangodb/arangodb
+    env_file:
+      - .env
+    volumes:
+      - vman3db:/var/lib/arangodb3
+    ports:
+      - '8529:8529'
+    command:
+      - arangod
+      - --server.endpoint=tcp://0.0.0.0:8529
+
+volumes:
+  vman3db:
+  # mongo-data:
