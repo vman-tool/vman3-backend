@@ -27,21 +27,21 @@ class SystemConfig(BaseModel):
 
 
 class FieldMapping(BaseModel):
-    table_name: str
+    table_name: Optional[str] = None
     table_details: Optional[str] = None  # Optional field
     instance_id: str
     va_id: str
-    consent_id: Optional[str] = None  # Optional field
+    consent_id: str  # Optional field
     date: str
     location_level1: str
-    location_level2: Optional[str] = None  # Optional field
-    deceased_gender: Optional[str] = None  # Optional field
-    is_adult: Optional[str] = None  # Optional field
-    is_child: Optional[str] = None  # Optional field
-    is_neonate: Optional[str] = None  # Optional field
+    location_level2: str  # Optional field
+    deceased_gender: str  # Optional field
+    is_adult:str  # Optional field
+    is_child: str  # Optional field
+    is_neonate: str  # Optional field
     interviewer_name: str
-    interviewer_phone: Optional[str] = None  # Optional field
-    interviewer_sex: Optional[str] = None  # Optional field
+    interviewer_phone: str  # Optional field
+    interviewer_sex: str  # Optional field
     additional_fields: Optional[Dict[str, Any]] = Field(default_factory=dict)  # For additional fields
 
 
