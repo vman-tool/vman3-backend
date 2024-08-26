@@ -13,7 +13,6 @@ async def fetch_odk_config(db: StandardDatabase) -> SettingsConfigData:
     config_data = db.collection(db_collections.SYSTEM_CONFIGS).get('vman_config')  # Assumes 'vman_config' is the key
     if not config_data:
         raise ValueError("ODK configuration not found in the database")
-    print(config_data)
     # Ensure config_data is a dictionary
     if isinstance(config_data, dict):
         return  SettingsConfigData(**config_data)  
