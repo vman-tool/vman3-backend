@@ -1,5 +1,3 @@
-
-
 from arango.database import StandardDatabase
 from fastapi import APIRouter, Depends, status
 
