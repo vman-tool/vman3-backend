@@ -1,6 +1,7 @@
 import json
 from typing import Dict
 from arango.database import StandardDatabase
+from fastapi.concurrency import run_in_threadpool
 from interva.interva5 import InterVA5
 from pycrossva.transform import transform
 from interva.utils import csmf
@@ -15,7 +16,7 @@ async def run_ccva(db: StandardDatabase, task_id: str, task_results: Dict = {}):
     # task_results[task_id] = records
     database_dataframe = pd.read_json(json.dumps(records.data))
     
-    task_results[task_id] = runCCVA(odk_raw = database_dataframe, file_id = task_id)
+    task_results[task_id] = await run_in_threadpool(runCCVA, odk_raw = database_dataframe, file_id = task_id)
     # return records
     # runCCVA()
 
@@ -23,10 +24,9 @@ async def run_ccva(db: StandardDatabase, task_id: str, task_results: Dict = {}):
 
 def runCCVA(odk_raw, id_col: str = None, instrument: str = '2016WHOv151', algorithm: str = 'InterVA5', top=10, undetermined: bool = True, malaria: str = "h", hiv: str = "h", file_id:str = "unnamed_file"):
     if id_col:
-        input_data = transform((instrument, algorithm), odk_raw, raw_data_id=id_col)
+        input_data = transform((instrument, algorithm), odk_raw, raw_data_id=id_col, lower=True)
     else:
-        input_data = transform((instrument, algorithm), odk_raw)
-    #input_data = transform(("2016WHOv151", "InterVA5"), odk_raw, raw_data_id="vaid"p)
+        input_data = transform((instrument, algorithm), odk_raw, lower=True)
     output_folder = "../ccva_files/"
     
     iv5out = InterVA5(input_data, hiv=hiv, malaria=malaria, write=True, directory=output_folder, filename=file_id)
