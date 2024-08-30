@@ -37,9 +37,6 @@ async def get_configs_settings(
 async def save_configs_settings(
 configData: SettingsConfigData,
     db: StandardDatabase = Depends(get_arangodb_session)):
-    print(configData)
-
-  
     response = await add_configs_settings( configData,db=db)
     return response
 

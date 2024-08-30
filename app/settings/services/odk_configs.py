@@ -1,3 +1,4 @@
+import json
 from types import SimpleNamespace
 
 from arango.database import StandardDatabase
@@ -68,6 +69,9 @@ async def add_configs_settings(configData: SettingsConfigData, db: StandardDatab
 
         elif configData.type == 'field_mapping' and configData.field_mapping:
             data['field_mapping'] = configData.field_mapping.model_dump()
+        
+        elif configData.type == 'va_summary' and configData.va_summary:
+            data['va_summary'] = configData.va_summary
             
 
         else:
@@ -87,7 +91,6 @@ async def add_configs_settings(configData: SettingsConfigData, db: StandardDatab
         }
         cursor = db.aql.execute(aql_query, bind_vars=bind_vars)
         result = [doc for doc in cursor]
-        print(result)
         # db.collection(db_collections.SYSTEM_CONFIGS).insert(data, overwrite=False)
 
         # Return success response
