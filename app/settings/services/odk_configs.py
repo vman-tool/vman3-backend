@@ -1,3 +1,4 @@
+import json
 from types import SimpleNamespace
 
 from arango.database import StandardDatabase
@@ -13,7 +14,6 @@ async def fetch_odk_config(db: StandardDatabase) -> SettingsConfigData:
     config_data = db.collection(db_collections.SYSTEM_CONFIGS).get('vman_config')  # Assumes 'vman_config' is the key
     if not config_data:
         raise ValueError("ODK configuration not found in the database")
-    print(config_data)
     # Ensure config_data is a dictionary
     if isinstance(config_data, dict):
         return  SettingsConfigData(**config_data)  
@@ -69,6 +69,9 @@ async def add_configs_settings(configData: SettingsConfigData, db: StandardDatab
 
         elif configData.type == 'field_mapping' and configData.field_mapping:
             data['field_mapping'] = configData.field_mapping.model_dump()
+        
+        elif configData.type == 'va_summary' and configData.va_summary:
+            data['va_summary'] = json.dumps(configData.va_summary)
             
 
         else:
@@ -88,7 +91,6 @@ async def add_configs_settings(configData: SettingsConfigData, db: StandardDatab
         }
         cursor = db.aql.execute(aql_query, bind_vars=bind_vars)
         result = [doc for doc in cursor]
-        print(result)
         # db.collection(db_collections.SYSTEM_CONFIGS).insert(data, overwrite=False)
 
         # Return success response
