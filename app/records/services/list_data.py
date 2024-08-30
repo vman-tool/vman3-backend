@@ -21,7 +21,6 @@ async def fetch_va_records(paging: bool = True, page_number: int = 1, limit: int
         query = f"FOR doc IN {collection.name} "
         bind_vars = {}
         filters = []
-        print(query)
 
         if start_date:
             filters.append(f"doc.{today_field} >= @start_date")
