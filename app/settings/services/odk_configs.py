@@ -71,7 +71,7 @@ async def add_configs_settings(configData: SettingsConfigData, db: StandardDatab
             data['field_mapping'] = configData.field_mapping.model_dump()
         
         elif configData.type == 'va_summary' and configData.va_summary:
-            data['va_summary'] = json.dumps(configData.va_summary)
+            data['va_summary'] = configData.va_summary
             
 
         else:
