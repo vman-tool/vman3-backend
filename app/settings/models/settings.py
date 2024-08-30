@@ -1,4 +1,4 @@
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional, Union
 
 from pydantic import BaseModel, Field
 
@@ -50,3 +50,4 @@ class SettingsConfigData(BaseModel):
     odk_api_configs: Optional[OdkConfigModel] = None  # Optional field
     system_configs:     Optional[SystemConfig] = None  # Optional field
     field_mapping: Optional[FieldMapping] = None  # Optional field
+    va_summary: Union[List[str], None] = None
