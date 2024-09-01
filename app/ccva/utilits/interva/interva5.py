@@ -94,6 +94,7 @@ class InterVA5:
                  return_checked_data: bool = False,
                  openva_app: Optional['PyQt5.QtWidgets.QWidget'] = None,
                  gui_ctrl: dict = {"break": False},
+                 start_time: datetime.timedelta = None,
                  update_callback: Optional[Callable] = None):  # Correctly define update_callback
 
         self.va_input = va_input
@@ -113,6 +114,7 @@ class InterVA5:
         self.gui_ctrl = gui_ctrl
         self.dem_group: DataFrame = DataFrame({})
         self.update_callback = update_callback  # Store the callback for later use in the run method
+        self.start_time = start_time
       
       
         
@@ -402,6 +404,7 @@ class InterVA5:
         list_dem_group = []
 
         for i in range(N):
+            elapsed_time =f"{(datetime.datetime.now() - self.start_time).seconds // 3600}:{(datetime.datetime.now() - self.start_time).seconds // 60 % 60}:{(datetime.datetime.now() - self.start_time).seconds % 60}"
             if self.gui_ctrl["break"]:
                 raise RuntimeError
             k = i + 1
@@ -411,12 +414,12 @@ class InterVA5:
                 progress = round(k / N * 100)
                 print(f"{progress}% completed -x")
                 if self.update_callback:
-                   asyncio.run(self.update_callback({"progress": progress,"data":{},"error": False}))
+                   asyncio.run(self.update_callback({"progress": progress,"message": "Running InterVA5 analysis...","elapsed_time": elapsed_time,"error": False}))
 
             if k == N:
                 print("100% completed -----")
                 if self.update_callback:
-                    asyncio.run(self.update_callback({"progress": 100,"data":{}, "error": False}))
+                    asyncio.run(self.update_callback({"progress": 99,"message": "Complete InterVA5 analysis...","elapsed_time": elapsed_time, "error": False}))
 
  
 
