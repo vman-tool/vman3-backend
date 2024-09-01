@@ -22,6 +22,8 @@ class ArangoDBClient:
     async def connect(self):
         # Run the synchronous connect method in a thread pool
         await run_in_threadpool(self._connect_sync)
+        await self.create_collections()
+        
 
     def _connect_sync(self):
         sys_db = self.client.db("_system", username=self.username, password=self.password)
@@ -32,6 +34,8 @@ class ArangoDBClient:
         if self.db is None:
         # Connect to the specified database
             self.db = self.client.db(self.db_name, username=self.username, password=self.password)
+            
+        
 
     async def create_collections(self):
         # This method remains synchronous, so we run it in a thread pool
@@ -75,6 +79,7 @@ class ArangoDBClient:
 # Non-async function to create collections and indexes
 def create_collections_and_indexes(db: StandardDatabase, collections_with_indexes: dict):
     for collection_name, indexes in collections_with_indexes.items():
+        print(f"Creating collection: {collection_name}")
         if not db.has_collection(collection_name):
             db.create_collection(collection_name)
         
