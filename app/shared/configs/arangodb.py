@@ -79,7 +79,7 @@ class ArangoDBClient:
 # Non-async function to create collections and indexes
 def create_collections_and_indexes(db: StandardDatabase, collections_with_indexes: dict):
     for collection_name, indexes in collections_with_indexes.items():
-        print(f"Creating collection: {collection_name}")
+        # print(f"Creating collection: {collection_name}")
         if not db.has_collection(collection_name):
             db.create_collection(collection_name)
         
