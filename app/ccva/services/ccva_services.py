@@ -20,8 +20,9 @@ from app.shared.services.va_records import shared_fetch_va_records
 
 # The websocket_broadcast function for broadcasting progress updates
 async def websocket_broadcast(task_id: str, progress_data: dict):
-    from app.main import \
-        websocket__manager  # Ensure this points to your actual WebSocket manager instance
+    from app.main import (
+        websocket__manager,  # Ensure this points to your actual WebSocket manager instance
+    )
     await websocket__manager.broadcast(task_id, json.dumps(progress_data))
 
         
@@ -87,7 +88,7 @@ def runCCVA(odk_raw:pd.DataFrame, id_col: str = None,date_col:str =None,start_ti
         
         # Run the InterVA5 analysis, with progress updates via the async callback
         iv5out.run()
-
+        # iv5out.results
         
         # Assuming the output is written to a CSV
         iv5out.write_indiv_prob(filename=f"{file_id}-dt")
