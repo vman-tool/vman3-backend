@@ -9,11 +9,9 @@ from fastapi import HTTPException
 from loguru import logger
 
 from app.odk.models.questions_models import VA_Question
-from app.odk.utils.data_transform import (
-    assign_questions_options,
-    filter_non_questions,
-    odk_questions_formatter,
-)
+from app.odk.utils.data_transform import (assign_questions_options,
+                                          filter_non_questions,
+                                          odk_questions_formatter)
 from app.odk.utils.odk_client import ODKClientAsync
 from app.settings.services.odk_configs import fetch_odk_config
 from app.shared.configs.arangodb import ArangoDBClient, get_arangodb_client
@@ -81,7 +79,7 @@ async def fetch_odk_data_with_async(
                             "progress": 0,
                             "elapsed_time": 0
                         }
-                        await websocket__manager.broadcast(json.dumps(progress_data))
+                        await websocket__manager.broadcast("123",json.dumps(progress_data))
             num_iterations = (total_data_count // top) + (1 if total_data_count % top != 0 else 0)
             records_saved = 0
             last_progress = 0
@@ -123,7 +121,7 @@ async def fetch_odk_data_with_async(
                                     "progress": progress,
                                     "elapsed_time": elapsed_time
                                 }
-                                await websocket__manager.broadcast(json.dumps(progress_data))
+                                await websocket__manager.broadcast("123",json.dumps(progress_data))
                             print(f"\rDownloading: [{'=' * int(progress // 2)}{' ' * (50 - int(progress // 2))}] {progress:.0f}% - Elapsed time: {elapsed_time:.2f}s", end='', flush=True)
                 except Exception as e:
                     raise HTTPException(status_code=500, detail=str(e))
@@ -172,7 +170,7 @@ async def fetch_odk_data_with_async(
                 return {"status": "Data inserted with issues", "elapsed_time": total_elapsed_time}
     except Exception as e:
         if websocket__manager:
-            await websocket__manager.broadcast(f"Error: {str(e)}")
+            await websocket__manager.broadcast("123",f"Error: {str(e)}")
             
         raise HTTPException(status_code=500, detail=str(e))
 
