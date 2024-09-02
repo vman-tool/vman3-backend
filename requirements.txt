@@ -2,7 +2,6 @@ aiosmtplib==2.0.2
 annotated-types==0.7.0
 anyio==4.4.0
 APScheduler==3.10.4
-apturl==0.5.2
 arango==0.2.1
 asgiref==3.5.0
 asyncio-throttle==1.0.2
