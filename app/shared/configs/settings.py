@@ -22,8 +22,8 @@ class Settings(BaseSettings):
     # JWT Secret Key
     JWT_SECRET: str = config("JWT_SECRET", "***REMOVED***")
     JWT_ALGORITHM: str = config("ACCESS_TOKEN_ALGORITHM", "HS256")
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = config("ACCESS_TOKEN_EXPIRE_MINUTES", default=10, cast=int)
-    REFRESH_TOKEN_EXPIRE_MINUTES: int = config("REFRESH_TOKEN_EXPIRE_MINUTES", default=1440, cast=int)
+    ACCESS_TOKEN_EXPIRE_MINUTES: float = config("ACCESS_TOKEN_EXPIRE_MINUTES", default=10, cast=float)
+    REFRESH_TOKEN_EXPIRE_MINUTES: float = config("REFRESH_TOKEN_EXPIRE_MINUTES", default=1440, cast=float)
 
     # App Secret Key
     SECRET_KEY: str = config("SECRET_KEY", default="***REMOVED***")
