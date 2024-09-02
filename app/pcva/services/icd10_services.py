@@ -7,6 +7,7 @@ from app.pcva.models.pcva_models import ICD10, ICD10Category
 from app.pcva.responses.icd10_response_classes import ICD10CategoryResponseClass, ICD10ResponseClass
 from app.shared.configs.constants import db_collections
 from app.users.models.user import User
+from app.shared.utils.database_utilities import replace_object_values
 
 async def create_icd10_categories_service(categories, user, db: StandardDatabase = None):
     try:
@@ -97,3 +98,38 @@ async def update_icd10_codes(codes, user, db: StandardDatabase = None) -> List[I
         return created_codes
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to update categories: {e}")
+    
+async def create_or_icd10_codes_from_file(codes, user, db: StandardDatabase):
+    try:
+        created_codes = []
+        for code in codes:
+            if "category" in code:
+                filters = {"or_conditions": [{"name": code.get("category", "")}, {"uuid": code.get("category", "")}]}
+                existing_category = await ICD10Category.get_many(filters=filters, include_deleted=False, db = db)
+                if len(existing_category) > 0:
+                        category = existing_category[0]
+                else:
+                    to_save_category  = {
+                        "name": code.get("category", ""),
+                        "created_by": user['uuid'],
+                    }
+                    category = await ICD10Category(**to_save_category).save(db = db)
+                
+                code["category"] = category.get("uuid", "")
+
+                existing_code = await ICD10.get_many(include_deleted=False, filters={"name": code.get("name", "")}, db = db)
+                if len(existing_code) > 0:
+                    existing_code = existing_code[0]
+                    code = replace_object_values(code, existing_code)
+                    saved_code = await ICD10(**code).update(updated_by=user['uuid'], db = db)
+                    created_code = await ICD10ResponseClass.get_structured_code(icd10_code = saved_code, db = db)
+                else:
+                    code['created_by']=user['uuid']
+                    saved_code = await ICD10(**code).save(db)
+                    created_code = await ICD10ResponseClass.get_structured_code(icd10_code = saved_code, db = db)
+                created_codes.append(created_code)
+            else:
+                raise HTTPException(status_code=400, detail="Missing 'category' field in the uploaded codes")
+        return created_codes
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to create/update codes: {e}")
