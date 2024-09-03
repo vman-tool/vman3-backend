@@ -89,6 +89,7 @@ async def fetch_ccva_processed(paging: bool = True, page_number: int = 1, limit:
 
         if filters:
             query += "FILTER " + " AND ".join(filters) + " "
+        query += "SORT doc.created_at DESC "
 
         if paging and page_number and limit:
             query += "LIMIT @offset, @size "

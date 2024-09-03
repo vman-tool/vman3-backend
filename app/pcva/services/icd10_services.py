@@ -7,7 +7,7 @@ from app.pcva.models.pcva_models import ICD10, ICD10Category
 from app.pcva.responses.icd10_response_classes import ICD10CategoryResponseClass, ICD10ResponseClass
 from app.shared.configs.constants import db_collections
 from app.users.models.user import User
-from app.shared.utils.database_utilities import record_exists, replace_object_values
+from app.shared.utils.database_utilities import replace_object_values
 
 async def create_icd10_categories_service(categories, user, db: StandardDatabase = None):
     try:
@@ -121,7 +121,8 @@ async def create_or_icd10_codes_from_file(codes, user, db: StandardDatabase):
                 if len(existing_code) > 0:
                     existing_code = existing_code[0]
                     code = replace_object_values(code, existing_code)
-                    created_code = await ICD10(**code).update(updated_by=user['uuid'], db = db)
+                    saved_code = await ICD10(**code).update(updated_by=user['uuid'], db = db)
+                    created_code = await ICD10ResponseClass.get_structured_code(icd10_code = saved_code, db = db)
                 else:
                     code['created_by']=user['uuid']
                     saved_code = await ICD10(**code).save(db)

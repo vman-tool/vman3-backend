@@ -12,6 +12,7 @@ from fastapi.concurrency import run_in_threadpool
 from interva.utils import csmf
 from pycrossva.transform import transform
 
+from app.ccva.models.ccva_models import InterVA5Progress
 from app.ccva.utilits.interva.interva5 import InterVA5
 from app.settings.services.odk_configs import fetch_odk_config
 from app.shared.configs.constants import db_collections
@@ -20,9 +21,8 @@ from app.shared.services.va_records import shared_fetch_va_records
 
 # The websocket_broadcast function for broadcasting progress updates
 async def websocket_broadcast(task_id: str, progress_data: dict):
-    from app.main import (
-        websocket__manager,  # Ensure this points to your actual WebSocket manager instance
-    )
+    from app.main import \
+        websocket__manager  # Ensure this points to your actual WebSocket manager instance
     await websocket__manager.broadcast(task_id, json.dumps(progress_data))
 
         
@@ -53,7 +53,14 @@ async def run_ccva(db: StandardDatabase, task_id: str, task_results: Dict):
         id_col = config.field_mapping.instance_id
         date_col = config.field_mapping.date
         # Run the CCVA process in a thread pool, with real-time updates
-        await update_callback({"progress": 4, "message": "Running InterVA5 analysis...", "status": 'running',"elapsed_time": f"{(datetime.now() - start_time).seconds // 3600}:{(datetime.now() - start_time).seconds // 60 % 60}:{(datetime.now() - start_time).seconds % 60}", "task_id": task_id, "error": False})
+        await update_callback(InterVA5Progress(
+        progress=4,
+        message="Running InterVA5 analysis...",
+        status="running",
+        elapsed_time=f"{(datetime.now() - start_time).seconds // 3600}:{(datetime.now() - start_time).seconds // 60 % 60}:{(datetime.now() - start_time).seconds % 60}",
+        task_id=task_id,
+        error=False
+    ).model_dump_json())
         
         await run_in_threadpool(
             runCCVA, odk_raw=database_dataframe, file_id=task_id, update_callback=update_callback,db= db, id_col=id_col,date_col=date_col,start_time=start_time
@@ -84,7 +91,14 @@ def runCCVA(odk_raw:pd.DataFrame, id_col: str = None,date_col:str =None,start_ti
         # Create an InterVA5 instance with the async callback
         iv5out = InterVA5(input_data, hiv=hiv, malaria=malaria, write=True, directory=output_folder, filename=file_id,start_time=start_time, update_callback=update_callback, return_checked_data=True)
 
-        asyncio.run(update_callback({"progress": 7, "message": "Running InterVA5 analysis...","elapsed_time": f"{(datetime.now() - start_time).seconds // 3600}:{(datetime.now() - start_time).seconds // 60 % 60}:{(datetime.now() - start_time).seconds % 60}", "status": 'running', "task_id": file_id, "error": False}))
+        asyncio.run(update_callback(InterVA5Progress(
+        progress=7,
+        message="Running InterVA5 analysis...",
+        status="running",
+        elapsed_time=f"{(datetime.now() - start_time).seconds // 3600}:{(datetime.now() - start_time).seconds // 60 % 60}:{(datetime.now() - start_time).seconds % 60}",
+        task_id=file_id,
+        error=False
+    ).model_dump_json()))
         
         # Run the InterVA5 analysis, with progress updates via the async callback
         iv5out.run()
@@ -99,7 +113,7 @@ def runCCVA(odk_raw:pd.DataFrame, id_col: str = None,date_col:str =None,start_ti
         
         records = df.to_dict(orient='records')
         # Insert the records into the database
-        # db.collection(db_collections.INTERVA5).insert_many(records, overwrite=True)
+        # db.collection(db_collections.INTERVA5).insert_many(records, overwrite=True, overwrite_mode="update")
         print("InterVA5 analysis completed.")
 
         # Remove the temporary CSV file
@@ -234,7 +248,6 @@ def compile_ccva_results(iv5out, top=10, undetermined=True,start_time:timedelta=
         "created_at": datetime.now().isoformat(),
         "total_records": total_records,
         "elapsed_time":   f"{elapsed_time.seconds // 3600}:{(elapsed_time.seconds // 60) % 60}:{elapsed_time.seconds % 60}",
-
         "range":rangeDates,
         "all": all_results,
         "male": male_results,

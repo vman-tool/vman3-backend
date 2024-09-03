@@ -17,6 +17,7 @@ from app.settings.services.odk_configs import fetch_odk_config
 from app.shared.configs.arangodb import ArangoDBClient, get_arangodb_client
 from app.shared.configs.constants import db_collections
 from app.shared.configs.models import ResponseMainModel
+from app.pcva.responses.va_response_classes import VAQuestionResponseClass
 
 
 async def fetch_odk_data_with_async(
@@ -56,7 +57,7 @@ async def fetch_odk_data_with_async(
                 total_data_count = data_for_count["@odata.count"]
                 server_latest_submisson_date = data_for_count['value'][0]['__system']['submissionDate']
             except Exception as e:
-                raise HTTPException(status_code=500, detail=str(e))
+                raise e
 
             if total_data_count == available_data_count and start_date == server_latest_submisson_date:
                 logger.info("\nVman is up to date.")
@@ -89,7 +90,7 @@ async def fetch_odk_data_with_async(
                     data = await odk_client.getFormSubmissions(top=top, skip=skip, start_date=start_date, end_date=end_date, order_by='__system/submissionDate', order_direction='asc')
                     if isinstance(data, str):
                         logger.error(f"Error fetching data: {data}")
-                        raise HTTPException(status_code=500, detail=data)
+                        raise e
                     df = pd.json_normalize(data['value'], sep='/')
                     df.columns = [col.split('/')[-1] for col in df.columns]
                     
@@ -100,7 +101,7 @@ async def fetch_odk_data_with_async(
                     
                     return loads(df.to_json(orient='records'))
                 except Exception as e:
-                    raise HTTPException(status_code=500, detail=str(e))
+                    raise e
             async def insert_all_data(data: List[dict]):
                 nonlocal records_saved, last_progress, start_time
                 try:
@@ -124,7 +125,7 @@ async def fetch_odk_data_with_async(
                                 await websocket__manager.broadcast("123",json.dumps(progress_data))
                             print(f"\rDownloading: [{'=' * int(progress // 2)}{' ' * (50 - int(progress // 2))}] {progress:.0f}% - Elapsed time: {elapsed_time:.2f}s", end='', flush=True)
                 except Exception as e:
-                    raise HTTPException(status_code=500, detail=str(e))
+                    raise e
             # async def insert_all_data(data: List[dict]):
             #     nonlocal records_saved, last_progress
             #     try:
@@ -156,7 +157,7 @@ async def fetch_odk_data_with_async(
                     if data_chunk:
                         await insert_all_data(data_chunk)
                 except Exception as e:
-                    raise HTTPException(status_code=500, detail=str(e))
+                    raise e
 
             end_time = time.time()
             total_elapsed_time = end_time - start_time
@@ -172,13 +173,14 @@ async def fetch_odk_data_with_async(
         if websocket__manager:
             await websocket__manager.broadcast("123",f"Error: {str(e)}")
             
-        raise HTTPException(status_code=500, detail=str(e))
+        raise e
 
 
 async def fetch_form_questions(db: StandardDatabase):
     try:
+        
         config = await fetch_odk_config(db)
-        async with ODKClientAsync(config) as odk_client:
+        async with ODKClientAsync(config.odk_api_configs) as odk_client:
             questions = await odk_client.getFormQuestions()
             fields = await odk_client.getFormFields()
 
@@ -200,8 +202,11 @@ async def fetch_form_questions(db: StandardDatabase):
                 await VA_Question(**question).save(db, "name")
                 count += 1
 
+            questions = await VA_Question.get_many(paging=False, db=db)
 
-            return ResponseMainModel(data=[], message="Questions fetched successfully", total=count)
+            questions = [VAQuestionResponseClass(**question).model_dump() for question in questions]
+            questions = { question['name']: question for question in questions} if len(questions) else []
+            return ResponseMainModel(data=questions, message="Questions fetched successfully", total=count)
     except Exception as e:
         raise e
 
