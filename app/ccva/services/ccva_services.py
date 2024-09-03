@@ -248,7 +248,6 @@ def compile_ccva_results(iv5out, top=10, undetermined=True,start_time:timedelta=
         "created_at": datetime.now().isoformat(),
         "total_records": total_records,
         "elapsed_time":   f"{elapsed_time.seconds // 3600}:{(elapsed_time.seconds // 60) % 60}:{elapsed_time.seconds % 60}",
-
         "range":rangeDates,
         "all": all_results,
         "male": male_results,
