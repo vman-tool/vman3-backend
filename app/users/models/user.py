@@ -3,11 +3,10 @@ from typing import List, Optional, Union
 
 from arango.database import StandardDatabase
 from fastapi import HTTPException
-from pydantic import BaseModel, EmailStr
+from pydantic import EmailStr
 
 from app.shared.configs.constants import db_collections
 from app.shared.configs.models import VManBaseModel
-from app.shared.configs.security import hash_password, is_password_strong_enough
 from app.users.models.role import Role
 
 
@@ -42,8 +41,13 @@ class User(VManBaseModel):
 
         # cursor = collection.find({'email': self.email}, limit=1)
         # user = [doc for doc in cursor]
-
-        return {
+        
+        # check if user exist with new data
+        if user['new']:
+            user=user['new']
+        else:
+            user=user
+        data={
             "id": user["_key"],
             "uuid": user["uuid"],
             "name": user["name"],
@@ -51,6 +55,7 @@ class User(VManBaseModel):
             "is_active": user["is_active"],
             "created_at":user["created_at"]
         }
+        return data
 
 
 
