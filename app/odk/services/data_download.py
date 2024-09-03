@@ -1,3 +1,4 @@
+import json
 import time
 from json import loads
 from typing import Dict, List
@@ -7,15 +8,15 @@ from arango.database import StandardDatabase
 from fastapi import HTTPException
 from loguru import logger
 
+from app.odk.models.questions_models import VA_Question
+from app.odk.utils.data_transform import (assign_questions_options,
+                                          filter_non_questions,
+                                          odk_questions_formatter)
+from app.odk.utils.odk_client import ODKClientAsync
 from app.settings.services.odk_configs import fetch_odk_config
 from app.shared.configs.arangodb import ArangoDBClient, get_arangodb_client
 from app.shared.configs.constants import db_collections
-from app.odk.utils.odk_client import ODKClientAsync
-from app.utilits.websocket_manager import WebSocketManager
 from app.shared.configs.models import ResponseMainModel
-
-from app.odk.utils.data_transform import assign_questions_options, odk_questions_formatter, filter_non_questions
-from app.odk.models.questions_models import VA_Question
 
 
 async def fetch_odk_data_with_async(
@@ -28,7 +29,7 @@ async def fetch_odk_data_with_async(
     db: StandardDatabase = None,
 ):   
     try:
-        websocket_manager: WebSocketManager = WebSocketManager()
+        from app.main import websocket__manager
         log_message = "\nFetching data from ODK Central"
         if start_date or end_date:
             log_message += f" between {start_date} and {end_date}"
@@ -49,13 +50,13 @@ async def fetch_odk_data_with_async(
             start_date = records_margins.get('latest_date', None)
             available_data_count = records_margins.get('total_records', 0)
             
-        async with ODKClientAsync(config) as odk_client:
+        async with ODKClientAsync(config.odk_api_configs) as odk_client:
             try:
                 data_for_count = await odk_client.getFormSubmissions(top= 1 if resend is False else top,skip= None if resend is False else skip, order_by='__system/submissionDate', order_direction='asc')
                 total_data_count = data_for_count["@odata.count"]
                 server_latest_submisson_date = data_for_count['value'][0]['__system']['submissionDate']
             except Exception as e:
-                raise HTTPException(status_code=500, detail=str(e))
+                raise e
 
             if total_data_count == available_data_count and start_date == server_latest_submisson_date:
                 logger.info("\nVman is up to date.")
@@ -71,7 +72,14 @@ async def fetch_odk_data_with_async(
                 total_data_count = total_data_count - available_data_count
 
             logger.info(f"{total_data_count} total to be downloaded")
-            
+            if websocket__manager:
+                        # await websocket__manager.broadcast(f"Progress: {progress:.0f}%")
+                        progress_data = {
+                            "total_records": total_data_count,
+                            "progress": 0,
+                            "elapsed_time": 0
+                        }
+                        await websocket__manager.broadcast("123",json.dumps(progress_data))
             num_iterations = (total_data_count // top) + (1 if total_data_count % top != 0 else 0)
             records_saved = 0
             last_progress = 0
@@ -81,20 +89,22 @@ async def fetch_odk_data_with_async(
                     data = await odk_client.getFormSubmissions(top=top, skip=skip, start_date=start_date, end_date=end_date, order_by='__system/submissionDate', order_direction='asc')
                     if isinstance(data, str):
                         logger.error(f"Error fetching data: {data}")
-                        raise HTTPException(status_code=500, detail=data)
+                        raise e
                     df = pd.json_normalize(data['value'], sep='/')
                     df.columns = [col.split('/')[-1] for col in df.columns]
                     
                     df.columns = df.columns.str.lower()
                     df = df.dropna(axis=1, how='all')
+
+                    
                     
                     return loads(df.to_json(orient='records'))
                 except Exception as e:
-                    raise HTTPException(status_code=500, detail=str(e))
-
+                    raise e
             async def insert_all_data(data: List[dict]):
-                nonlocal records_saved, last_progress
+                nonlocal records_saved, last_progress, start_time
                 try:
+                    elapsed_time = 0  # Initialize elapsed_time to a default value
                     for item in data:
                         await insert_data_to_arangodb(item)
                         records_saved += 1
@@ -102,12 +112,40 @@ async def fetch_odk_data_with_async(
                         progress = (records_saved / total_data_count) * 100
                         if int(progress) != last_progress:
                             last_progress = int(progress)
-                            elapsed_time = time.time() - start_time
-                            if websocket_manager:
-                                await websocket_manager.broadcast(f"Progress: {progress:.0f}%")
+                            elapsed_time = time.time() - start_time  # Update elapsed_time based on current time
+                            
+                            if websocket__manager:
+                                # await websocket__manager.broadcast(f"Progress: {progress:.0f}%")
+                                progress_data = {
+                                    "total_records": total_data_count,
+                                    "progress": progress,
+                                    "elapsed_time": elapsed_time
+                                }
+                                await websocket__manager.broadcast("123",json.dumps(progress_data))
                             print(f"\rDownloading: [{'=' * int(progress // 2)}{' ' * (50 - int(progress // 2))}] {progress:.0f}% - Elapsed time: {elapsed_time:.2f}s", end='', flush=True)
                 except Exception as e:
-                    raise HTTPException(status_code=500, detail=str(e))
+                    raise e
+            # async def insert_all_data(data: List[dict]):
+            #     nonlocal records_saved, last_progress
+            #     try:
+            #         for item in data:
+            #             await insert_data_to_arangodb(item)
+            #             records_saved += 1
+
+            #             progress = (records_saved / total_data_count) * 100
+            #             if int(progress) != last_progress:
+            #                 last_progress = int(progress)
+            #                 elapsed_time = time.time() - start_time
+            #             if websocket_manager:
+            #                 progress_data = {
+            #                     "total_records": total_data_count,
+            #                     "progress": progress,
+            #                     "elapsed_time": elapsed_time
+            #                 }
+            #                 await websocket_manager.broadcast(json.dumps(progress_data))
+            #                 print(f"\rDownloading: [{'=' * int(progress // 2)}{' ' * (50 - int(progress // 2))}] {progress:.0f}% - Elapsed time: {elapsed_time:.2f}s", end='', flush=True)
+            #     except Exception as e:
+            #         raise HTTPException(status_code=500, detail=str(e))
 
             for i in range(num_iterations):
                 chunk_skip = skip + i * top
@@ -118,7 +156,7 @@ async def fetch_odk_data_with_async(
                     if data_chunk:
                         await insert_all_data(data_chunk)
                 except Exception as e:
-                    raise HTTPException(status_code=500, detail=str(e))
+                    raise e
 
             end_time = time.time()
             total_elapsed_time = end_time - start_time
@@ -131,10 +169,10 @@ async def fetch_odk_data_with_async(
                 logger.info(f"\nSuccessfully inserted {records_saved} records while records were {total_data_count} - Total elapsed time: {total_elapsed_time:.2f}s")
                 return {"status": "Data inserted with issues", "elapsed_time": total_elapsed_time}
     except Exception as e:
-        if websocket_manager:
-            await websocket_manager.broadcast(f"Error: {str(e)}")
+        if websocket__manager:
+            await websocket__manager.broadcast("123",f"Error: {str(e)}")
             
-        raise HTTPException(status_code=500, detail=str(e))
+        raise e
 
 
 async def fetch_form_questions(db: StandardDatabase):

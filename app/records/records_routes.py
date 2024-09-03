@@ -10,7 +10,6 @@ from app.records.services.map_data import fetch_va_map_records
 from app.records.services.regions_data import get_unique_regions
 from app.shared.configs.arangodb import get_arangodb_session
 from app.shared.configs.models import ResponseMainModel
-from app.users.decorators.user import get_current_user, oauth2_scheme
 
 # from sqlalchemy.orm import Session
 
@@ -19,29 +18,29 @@ data_router = APIRouter(
     prefix="/records",
     tags=["Records"],
     responses={404: {"description": "Not found"}},
-    dependencies=[Depends(oauth2_scheme), Depends(get_current_user)]
+    # dependencies=[Depends(oauth2_scheme), Depends(get_current_user)]
 )
 
 
 
-@data_router.get("/s",status_code=status.HTTP_200_OK, response_model=ResponseMainModel)
-async def get_va_recordss(
-    paging: Optional[str] = Query(None, alias="paging"),
-    page_number: Optional[int] = Query(1, alias="page_number"),
-    limit: Optional[int] = Query(10, alias="limit"),
-    db: StandardDatabase = Depends(get_arangodb_session)):
+# @data_router.get("/s",status_code=status.HTTP_200_OK, response_model=ResponseMainModel)
+# async def get_va_recordss(
+#     paging: Optional[str] = Query(None, alias="paging"),
+#     page_number: Optional[int] = Query(1, alias="page_number"),
+#     limit: Optional[int] = Query(10, alias="limit"),
+#     db: StandardDatabase = Depends(get_arangodb_session)):
 
-    try:
-        allow_paging = False if paging is not None and paging.lower() == 'false' else True
-        return await fetch_va_records(allow_paging, page_number, limit, db)
+#     try:
+#         allow_paging = False if paging is not None and paging.lower() == 'false' else True
+#         return await fetch_va_records(allow_paging, page_number, limit, db)
 
-    except Exception as e:
-        return ResponseMainModel(
-            data=None,
-            message="Failed to fetch records",
-            error=str(e),
-            total=None
-        )
+#     except Exception as e:
+#         return ResponseMainModel(
+#             data=None,
+#             message="Failed to fetch records",
+#             error=str(e),
+#             total=None
+#         )
         
         
 @data_router.get("/", status_code=status.HTTP_200_OK, response_model=ResponseMainModel)

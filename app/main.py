@@ -1,20 +1,14 @@
 from contextlib import asynccontextmanager
-import os
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
-from apscheduler.triggers.cron import CronTrigger
-from apscheduler.triggers.interval import IntervalTrigger
 from decouple import config
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, HTMLResponse
+from fastapi.responses import HTMLResponse
 from loguru import logger
 
 from app import routes
-from app.odk.services import data_download, schedulers
-from app.shared.configs.arangodb import ArangoDBClient, get_arangodb_client
-from app.shared.configs.database import (close_mongo_connection,
-                                         connect_to_mongo)
+from app.shared.middlewares.error_handlers import register_error_handlers
 from app.users.utils.default import default_account_creation
 from app.utilits import websocket_manager
 
@@ -24,17 +18,13 @@ scheduler = AsyncIOScheduler()
 async def lifespan(app: FastAPI):
     # Application startup logic
     logger.info("Application startup")
-    scheduler.add_job(schedulers. scheduled_failed_chucks_retry, IntervalTrigger(minutes=60*3))
-    scheduler.add_job(data_download. fetch_odk_data_with_async, CronTrigger(hour=18, minute=0))
+    logger.info("Visit http://localhost:8080/vman/api/v1/docs for the API documentation (Swagger UI)")
+    logger.info("Visit http://localhost:8080/vman/api/v1 for the main API")
+
+    # scheduler.add_job(schedulers. scheduled_failed_chucks_retry, IntervalTrigger(minutes=60*3))
+    # scheduler.add_job(data_download. fetch_odk_data_with_async, CronTrigger(hour=18, minute=0))
     scheduler.start()
 
-    # Initialize MongoDB connection
-    await connect_to_mongo()
-
-    # Initialize ArangoDB connection
-    arango_client= await get_arangodb_client()
-    await ArangoDBClient.create_collections(arango_client)
-    app.state.arango_client = arango_client
     await default_account_creation()
     
     try:
@@ -42,9 +32,8 @@ async def lifespan(app: FastAPI):
     finally:
         # Application shutdown logic
         logger.info("Application shutdown")
+        scheduler.shutdown()
         
-        # Close MongoDB connection
-        await close_mongo_connection()
 
 def create_application():
     application = FastAPI(
@@ -55,23 +44,25 @@ def create_application():
         lifespan=lifespan
     )
     routes.main_route(application)
+  
     return application
 
 app = create_application()
+register_error_handlers(app)
 websocket__manager = websocket_manager.WebSocketManager()
 
 origins = config('CORS_ALLOWED_ORIGINS', default="*").split(',')
-
 app.add_middleware(
     CORSMiddleware,
+    
     allow_origins=origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-        
 
+ 
 @app.get("/vman/api/v1", response_class=HTMLResponse)
 @app.get("/vman", response_class=HTMLResponse)
 @app.get("/", response_class=HTMLResponse)
@@ -105,12 +96,38 @@ async def get():
 
 
 
-@app.websocket("/vman/api/v1/ws/download_progress")
-async def websocket_download_progress(websocket: WebSocket):
-    await websocket__manager.connect(websocket)
+# @app.websocket("/ws")
+# async def websocket_download_progress(websocket: WebSocket):
+#     await websocket__manager.connect(websocket)
+#     try:
+#         while True:
+#              data=await websocket.receive_text()  # Keep the connection open
+#              await websocket.send_text(f"Message text was: {data}")
+#     except WebSocketDisconnect:
+#         websocket__manager.disconnect(websocket)
+
+
+
+@app.websocket("/vman/api/v1/ws/ccva_progress/{task_id}")
+async def websocket_va_1(websocket: WebSocket, task_id: str):
+    await websocket__manager.connect(task_id, websocket)
     try:
         while True:
-             data=await websocket.receive_text()  # Keep the connection open
-             await websocket.send_text(f"Message text was: {data}")
+            data = await websocket.receive_text()
+            # Handle incoming data here if needed
+            await websocket__manager.send_personal_message(f"Message received for task {task_id}: {data}", websocket)
     except WebSocketDisconnect:
-        websocket__manager.disconnect(websocket)
+        websocket__manager.disconnect(task_id, websocket)
+
+@app.websocket("/vman/api/v1/ws/odk_progress/{task_id}")
+async def websocket_progress(websocket: WebSocket,task_id: str):
+    # task_id = "some_task_id"  # Define how you want to assign the task_id or pass it dynamically
+    await websocket__manager.connect(task_id, websocket)
+    try:
+        while True:
+            data = await websocket.receive_text()
+            # Here you can send updates for the progress of a specific task_id
+            await websocket__manager.send_personal_message(f"Message received for task {task_id}: {data}", websocket)
+            # await asyncio.sleep(1)  # Simulate progress update every second
+    except WebSocketDisconnect:
+        websocket__manager.disconnect(task_id, websocket)

@@ -7,6 +7,7 @@ from app.records import records_routes
 from app.settings import settings_routes
 from app.statistics import statistics_routes
 from app.users import users_routes
+from app.ccva import ccva_routes
 
 
 def main_route(application):
@@ -25,5 +26,7 @@ def create_main_router():
     main_router.include_router(records_routes.data_router)
     main_router.include_router(statistics_routes.statistics_router)
     main_router.include_router(settings_routes.settings_router)
+    main_router.include_router(settings_routes.settings_router)
+    main_router.include_router(ccva_routes.ccva_router)
 
     return main_router
