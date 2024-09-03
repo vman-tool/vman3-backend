@@ -56,7 +56,7 @@ async def fetch_odk_data_with_async(
                 total_data_count = data_for_count["@odata.count"]
                 server_latest_submisson_date = data_for_count['value'][0]['__system']['submissionDate']
             except Exception as e:
-                raise HTTPException(status_code=500, detail=str(e))
+                raise e
 
             if total_data_count == available_data_count and start_date == server_latest_submisson_date:
                 logger.info("\nVman is up to date.")
@@ -89,7 +89,7 @@ async def fetch_odk_data_with_async(
                     data = await odk_client.getFormSubmissions(top=top, skip=skip, start_date=start_date, end_date=end_date, order_by='__system/submissionDate', order_direction='asc')
                     if isinstance(data, str):
                         logger.error(f"Error fetching data: {data}")
-                        raise HTTPException(status_code=500, detail=data)
+                        raise e
                     df = pd.json_normalize(data['value'], sep='/')
                     df.columns = [col.split('/')[-1] for col in df.columns]
                     
@@ -100,7 +100,7 @@ async def fetch_odk_data_with_async(
                     
                     return loads(df.to_json(orient='records'))
                 except Exception as e:
-                    raise HTTPException(status_code=500, detail=str(e))
+                    raise e
             async def insert_all_data(data: List[dict]):
                 nonlocal records_saved, last_progress, start_time
                 try:
@@ -124,7 +124,7 @@ async def fetch_odk_data_with_async(
                                 await websocket__manager.broadcast("123",json.dumps(progress_data))
                             print(f"\rDownloading: [{'=' * int(progress // 2)}{' ' * (50 - int(progress // 2))}] {progress:.0f}% - Elapsed time: {elapsed_time:.2f}s", end='', flush=True)
                 except Exception as e:
-                    raise HTTPException(status_code=500, detail=str(e))
+                    raise e
             # async def insert_all_data(data: List[dict]):
             #     nonlocal records_saved, last_progress
             #     try:
@@ -156,7 +156,7 @@ async def fetch_odk_data_with_async(
                     if data_chunk:
                         await insert_all_data(data_chunk)
                 except Exception as e:
-                    raise HTTPException(status_code=500, detail=str(e))
+                    raise e
 
             end_time = time.time()
             total_elapsed_time = end_time - start_time
@@ -172,7 +172,7 @@ async def fetch_odk_data_with_async(
         if websocket__manager:
             await websocket__manager.broadcast("123",f"Error: {str(e)}")
             
-        raise HTTPException(status_code=500, detail=str(e))
+        raise e
 
 
 async def fetch_form_questions(db: StandardDatabase):

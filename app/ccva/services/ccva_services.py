@@ -63,7 +63,7 @@ async def run_ccva(db: StandardDatabase, task_id: str, task_results: Dict):
     ).model_dump_json())
         
         await run_in_threadpool(
-            runCCVA, odk_raw=database_dataframe.head(2000), file_id=task_id, update_callback=update_callback,db= db, id_col=id_col,date_col=date_col,start_time=start_time
+            runCCVA, odk_raw=database_dataframe, file_id=task_id, update_callback=update_callback,db= db, id_col=id_col,date_col=date_col,start_time=start_time
         )
         
 
@@ -113,7 +113,7 @@ def runCCVA(odk_raw:pd.DataFrame, id_col: str = None,date_col:str =None,start_ti
         
         records = df.to_dict(orient='records')
         # Insert the records into the database
-        db.collection(db_collections.INTERVA5).insert_many(records, overwrite=True, overwrite_mode="update")
+        # db.collection(db_collections.INTERVA5).insert_many(records, overwrite=True, overwrite_mode="update")
         print("InterVA5 analysis completed.")
 
         # Remove the temporary CSV file
