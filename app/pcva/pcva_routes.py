@@ -253,7 +253,7 @@ async def code_assigned_va(
 
 @pcva_router.get("/form_questions", status_code=status.HTTP_200_OK)
 async def get_form_questions(
-    questions_keys: Optional[str] = Query(None, alias="question_id", description="If you need many, separate questons keys by comma, DOnt specify to get all the questions"),
+    questions_keys: Optional[str] = Query(None, alias="question_id", description="If you need many, separate questons keys by comma, Do not specify to get all the questions"),
     current_user: User = Depends(get_arangodb_session),
     db: StandardDatabase = Depends(get_arangodb_session)
 ) -> ResponseMainModel:
