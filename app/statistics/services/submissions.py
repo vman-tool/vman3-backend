@@ -46,9 +46,19 @@ async def fetch_submissions_statistics(paging: bool = True, page_number: int = 1
             LET count = LENGTH(grouped)
             LET lastSubmission = MAX(grouped[*].doc.{today_field})
            
-            LET adults = grouped[*].doc.{is_adult_field} ? TO_NUMBER(grouped[*].doc.{is_adult_field}) : []
-            LET children = grouped[*].doc.{is_child_field} ? TO_NUMBER(grouped[*].doc.{is_child_field}) : []
-            LET neonates = grouped[*].doc.{is_neonte_field} ? TO_NUMBER(grouped[*].doc.{is_neonte_field}) : []
+            // LET adults = grouped[*].doc.{is_adult_field} ? TO_NUMBER(grouped[*].doc.{is_adult_field}) : []
+            // LET children = grouped[*].doc.{is_child_field} ? TO_NUMBER(grouped[*].doc.{is_child_field}) : []
+            // LET neonates = grouped[*].doc.{is_neonte_field} ? TO_NUMBER(grouped[*].doc.{is_neonte_field}) : []
+
+            LET children = LENGTH(FOR sub IN grouped[*].doc
+                            FILTER sub.{is_child_field} == "1"
+                            RETURN sub)
+            LET adults = LENGTH(FOR sub IN grouped[*].doc
+                            FILTER sub.{is_adult_field} == "1"
+                            RETURN sub)
+            LET neonates = LENGTH(FOR sub IN grouped[*].doc
+                            FILTER sub.{is_neonte_field} == "1"
+                            RETURN sub)
             LET male = LENGTH(
               FOR sub IN grouped[*].doc
               FILTER sub.{deceased_gender} == "male"
