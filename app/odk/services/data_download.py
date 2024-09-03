@@ -17,6 +17,7 @@ from app.settings.services.odk_configs import fetch_odk_config
 from app.shared.configs.arangodb import ArangoDBClient, get_arangodb_client
 from app.shared.configs.constants import db_collections
 from app.shared.configs.models import ResponseMainModel
+from app.pcva.responses.va_response_classes import VAQuestionResponseClass
 
 
 async def fetch_odk_data_with_async(
@@ -177,8 +178,9 @@ async def fetch_odk_data_with_async(
 
 async def fetch_form_questions(db: StandardDatabase):
     try:
+        
         config = await fetch_odk_config(db)
-        async with ODKClientAsync(config) as odk_client:
+        async with ODKClientAsync(config.odk_api_configs) as odk_client:
             questions = await odk_client.getFormQuestions()
             fields = await odk_client.getFormFields()
 
@@ -200,8 +202,11 @@ async def fetch_form_questions(db: StandardDatabase):
                 await VA_Question(**question).save(db, "name")
                 count += 1
 
+            questions = await VA_Question.get_many(paging=False, db=db)
 
-            return ResponseMainModel(data=[], message="Questions fetched successfully", total=count)
+            questions = [VAQuestionResponseClass(**question).model_dump() for question in questions]
+            questions = { question['name']: question for question in questions} if len(questions) else []
+            return ResponseMainModel(data=questions, message="Questions fetched successfully", total=count)
     except Exception as e:
         raise e
 
