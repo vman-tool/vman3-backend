@@ -9,6 +9,14 @@ from app.ccva.services.ccva_services import run_ccva
 from app.shared.configs.arangodb import get_arangodb_session
 from app.shared.configs.models import ResponseMainModel
 from app.users.decorators.user import get_current_user, oauth2_scheme
+<<<<<<< HEAD
+from fastapi import APIRouter, Depends, status
+from fastapi import UploadFile, File, HTTPException
+
+import csv
+
+=======
+>>>>>>> b34844164b5c095b272425abbe4d9f494a2ce06f
 
 ccva_router = APIRouter(
     prefix="/ccva",
@@ -17,6 +25,24 @@ ccva_router = APIRouter(
     # dependencies=[Depends(oauth2_scheme), Depends(get_current_user)]
 )
 
+<<<<<<< HEAD
+@ccva_router.get("/", status_code=status.HTTP_200_OK)
+async def get_va_records():
+    return {"message":"ccva works"}
+
+@ccva_router.post("/upload_csv", status_code=status.HTTP_200_OK)
+async def upload_csv(file: UploadFile = File(...)):
+    # Check if file exist
+    if not file.filename.endswith(".csv"):
+        raise HTTPException(status_code=400, detail="Invalid file format")
+    
+    content = await file.read()
+    csv_data = content.decode("utf-8").splitlines()
+    csv_reader = csv.reader(csv_data)
+
+    return {"message":"file uploaded"}
+    
+=======
 # In-memory store for task results
 task_results = {}
 
@@ -44,3 +70,4 @@ async def get_internal_ccva(
 ):
    return await fetch_ccva_processed(db=db)
     
+>>>>>>> b34844164b5c095b272425abbe4d9f494a2ce06f

@@ -1,26 +1,44 @@
 from typing import Any, Dict, List, Optional, Union
-from fastapi import APIRouter, HTTPException, Query
-from arango.database import StandardDatabase
-from fastapi import APIRouter, Depends, status
 
-from app.pcva.requests.icd10_request_classes import ICD10CategoryRequestClass, ICD10CategoryUpdateClass, ICD10CreateRequestClass, ICD10UpdateRequestClass
-from app.pcva.requests.va_request_classes import AssignVARequestClass, CodeAssignedVARequestClass
-from app.pcva.responses.icd10_response_classes import ICD10CategoryResponseClass, ICD10ResponseClass
-from app.pcva.responses.va_response_classes import AssignVAResponseClass, CodedVAResponseClass
+from arango.database import StandardDatabase
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+
+from app.pcva.requests.icd10_request_classes import (
+    ICD10CategoryRequestClass,
+    ICD10CategoryUpdateClass,
+    ICD10CreateRequestClass,
+    ICD10UpdateRequestClass,
+)
+from app.pcva.requests.va_request_classes import (
+    AssignVARequestClass,
+    CodeAssignedVARequestClass,
+)
+from app.pcva.responses.icd10_response_classes import (
+    ICD10CategoryResponseClass,
+    ICD10ResponseClass,
+)
+from app.pcva.responses.va_response_classes import CodedVAResponseClass
 from app.pcva.services.icd10_services import (
     create_icd10_categories_service,
-    get_icd10_categories_service, 
-    get_icd10_codes,
     create_icd10_codes,
-    update_icd10_categories_service, 
-    update_icd10_codes
+    get_icd10_categories_service,
+    get_icd10_codes,
+    update_icd10_categories_service,
+    update_icd10_codes,
 )
-from app.pcva.services.va_records_services import assign_va_service, code_assigned_va_service, fetch_va_records, get_coded_va_service, get_concordants_va_service, get_form_questions_service, get_va_assignment_service
+from app.pcva.services.va_records_services import (
+    assign_va_service,
+    code_assigned_va_service,
+    get_coded_va_service,
+    get_concordants_va_service,
+    get_form_questions_service,
+    get_va_assignment_service,
+)
 from app.shared.configs.arangodb import get_arangodb_session
+from app.shared.configs.models import ResponseMainModel
 from app.users.decorators.user import get_current_user, oauth2_scheme
 from app.users.models.user import User
-from app.shared.configs.models import ResponseMainModel
-
+from app.shared.services.va_records import shared_fetch_va_records
 
 pcva_router = APIRouter(
     prefix="/pcva",
@@ -48,7 +66,7 @@ async def get_va_records(
             filters = {
                 "instanceid": va_id
             }
-        return await fetch_va_records(paging = allowPaging, page_number = page_number, limit = limit, include_assignment = include_assignment, filters=filters, format_records=format_records, db=db)
+        return await shared_fetch_va_records(paging = allowPaging, page_number = page_number, limit = limit, include_assignment = include_assignment, filters=filters, format_records=format_records, db=db)
         
     except Exception as e:
         raise e

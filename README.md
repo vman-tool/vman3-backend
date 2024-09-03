@@ -1,4 +1,4 @@
-# Vman3 API
+# VMan3 API
 
 This is the API for the Vman3 project. It is built using FastAPI and MongoDB.
 
@@ -10,7 +10,11 @@ This is the API for the Vman3 project. It is built using FastAPI and MongoDB.
 - Git/ Git Flow
 
 ## Setup Instructions
+```
+Run 'git clone https://github.com/vman-tool/vman3' to copy the project local then,
+Run 'cd vman3 ' to change to the project directory,
 
+```
 ### 1. Create and Activate a Virtual Environment
 
 Create a virtual environment to manage your project dependencies.
@@ -57,10 +61,25 @@ ODK_PASSWORD=""
 ```bash
 
 cp settings.json.example settings.json
+```
+# command copy the content of env_sample.example to .env
+
+```
+cp .env_sample .env
     
 ```
 
-### 5. Running the Application
+### 5. Running the arangodb database  with Docker Compose
+
+
+After ensuring the above configurations, build and run the Docker containers:
+
+```bash
+docker compose up arango-db -d
+
+```
+
+### 6. Running the Application
 
 Run the following command to start the FastAPI application:
 
@@ -72,15 +91,7 @@ The application will be accessible at `http://localhost:8080/vman/api/v1`.
 
 
 
-
-
-
-
-### 6. Running the Application with Docker Compose
-
-
-
-
+### 7. Running the Application with Docker Compose
 
 
 After ensuring the above configurations, build and run the Docker containers:
