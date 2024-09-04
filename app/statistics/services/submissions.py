@@ -91,7 +91,7 @@ async def fetch_submissions_statistics(paging: bool = True, page_number: int = 1
 
         cursor = db.aql.execute(query, bind_vars=bind_vars)
         data = [document for document in cursor]
-        print(query)
+
         # # Fetch total count of documents
         # count_query = f"""
         #     FOR doc IN {collection.name}
