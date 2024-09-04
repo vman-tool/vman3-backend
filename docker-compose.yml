@@ -12,7 +12,11 @@ services:
       - arango-db
 
   arango-db:
+<<<<<<< HEAD
     image: arangodb/arangodb:3.12.2
+=======
+    image: arangodb/arangodb:12
+>>>>>>> 90641a8 (clean docker)
     env_file:
       - .env
     volumes:
