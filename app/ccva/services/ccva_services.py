@@ -44,15 +44,13 @@ async def run_ccva(db: StandardDatabase, task_id: str, task_results: Dict,start_
         filters = {}
 
         # Add filters based on start_date and end_date if they exist
-        # if start_date:
-        #     filters[">=_conditions"] = [{
-        #         f"{today_field}": str(start_date)
-        #     }]
-            
-        # if end_date:
-        #     filters["<=_conditions"] = [{
-        #         f"{today_field}": str(end_date)  # Use end_date here, not start_date
-        #     }]
+        if start_date:
+            filters[today_field] = {'>=': str(start_date) }
+            # filters[today_field] = {'$gte': str(start_date) } # Alternative approach to use less that or greater than
+
+        if end_date:
+            filters[end_date] = {'<=': str(end_date) }
+            # filters[end_date] = {'$lte': str(end_date) } # Alternative approach to use less that or greater than
 
         
         print(filters)
