@@ -2,8 +2,8 @@
 import asyncio
 import json
 import os
-from datetime import datetime, timedelta
-from typing import Dict
+from datetime import date, datetime, timedelta
+from typing import Dict, Optional
 
 import numpy as np
 import pandas as pd
@@ -27,7 +27,7 @@ async def websocket_broadcast(task_id: str, progress_data: dict):
 
         
 # The main run_ccva function that integrates everything
-async def run_ccva(db: StandardDatabase, task_id: str, task_results: Dict):
+async def run_ccva(db: StandardDatabase, task_id: str, task_results: Dict,start_date: Optional[date] = None, end_date: Optional[date] = None,):
     try:
                 # Define the async callback to send progress updates
         async def update_callback(progress):
@@ -37,8 +37,24 @@ async def run_ccva(db: StandardDatabase, task_id: str, task_results: Dict):
 
         initial_message = {"progress": 1, "message": "Collecting data.", "status":'init',"elapsed_time": f"{(datetime.now() - start_time).seconds // 3600}:{(datetime.now() - start_time).seconds // 60 % 60}:{(datetime.now() - start_time).seconds % 60}","task_id": task_id, "error": False}
         await update_callback(initial_message)
+        
+        config = await fetch_odk_config(db)
+        today_field = config.field_mapping.date
         # Fetch records from the database asynchronously
-        records = await shared_fetch_va_records(paging=False, include_assignment=False, format_records=False, db=db)
+        filters = {}
+
+        # Add filters based on start_date and end_date if they exist
+        if start_date:
+            filters[today_field] = {'>=': str(start_date) }
+            # filters[today_field] = {'$gte': str(start_date) } # Alternative approach to use less that or greater than
+
+        if end_date:
+            filters[end_date] = {'<=': str(end_date) }
+            # filters[end_date] = {'$lte': str(end_date) } # Alternative approach to use less that or greater than
+
+        
+        print(filters)
+        records = await shared_fetch_va_records(paging=False, include_assignment=False, format_records=False, db=db, filters=filters)
         database_dataframe = pd.read_json(json.dumps(records.data))
 
         
