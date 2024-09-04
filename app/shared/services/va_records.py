@@ -1,6 +1,10 @@
-from arango.database import StandardDatabase
 from typing import Dict
+
+from arango.database import StandardDatabase
 from fastapi import HTTPException
+
+from fastapi import HTTPException
+
 from app.pcva.utilities.va_records_utils import format_va_record
 from app.settings.services.odk_configs import fetch_odk_config
 from app.shared.configs.constants import db_collections
@@ -140,7 +144,7 @@ async def shared_fetch_va_records(paging: bool = True,  page_number: int = 1, li
                     "offset": (page_number - 1) * limit,
                     "size": limit
                 })
-            
+            print(query)
             cursor = db.aql.execute(query, bind_vars=bind_vars)
             
             if format_records:
