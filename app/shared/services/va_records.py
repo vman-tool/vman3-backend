@@ -37,12 +37,19 @@ async def shared_fetch_va_records(paging: bool = True,  page_number: int = 1, li
 
     total_count_query = f"""
         RETURN LENGTH(
+<<<<<<< HEAD
             FOR {records_name} IN {db_collections.VA_TABLE}
             {filters_string}
             RETURN 1
         )
     """
 
+=======
+        FOR {records_name} IN {db_collections.VA_TABLE}
+        {filters_string}
+        )
+    """
+>>>>>>> a22e059 (Fix query issues in shared va records fetching functions)
     total_count_cursor = db.aql.execute(query = total_count_query, bind_vars = bind_vars)
     total_count = total_count_cursor.next() 
 
@@ -63,14 +70,22 @@ async def shared_fetch_va_records(paging: bool = True,  page_number: int = 1, li
                 
             if paging and page_number and limit:
             
+<<<<<<< HEAD
                 query += f"LIMIT @offset, @size RETURN {records_name}"
+=======
+                query += "LIMIT @offset, @size RETURN {records_name}"
+>>>>>>> a22e059 (Fix query issues in shared va records fetching functions)
             
                 bind_vars.update({
                     "offset": (page_number - 1) * limit,
                     "size": limit
                 })
             else:
+<<<<<<< HEAD
                 query += f"RETURN {records_name}"
+=======
+                query += "RETURN {records_name}"
+>>>>>>> a22e059 (Fix query issues in shared va records fetching functions)
 
             cursor = db.aql.execute(query, bind_vars=bind_vars)
 
@@ -96,10 +111,17 @@ async def shared_fetch_va_records(paging: bool = True,  page_number: int = 1, li
             
             if paging and page_number and limit:
         
+<<<<<<< HEAD
                 query += f"""LIMIT @offset, @size RETURN {records_name})"""
             
             else:
                 query += f"RETURN {records_name}"
+=======
+                query += """LIMIT @offset, @size RETURN {records_name})"""
+            
+            else:
+                query += "RETURN {records_name}"
+>>>>>>> a22e059 (Fix query issues in shared va records fetching functions)
                 
             query += f"""
                 // Step 2: Get the va IDs for the paginated results

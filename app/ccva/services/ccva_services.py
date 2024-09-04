@@ -54,6 +54,7 @@ async def run_ccva(db: StandardDatabase, task_id: str, task_results: Dict,start_
         # Fetch records from the database asynchronously
         # filters = {}
 
+<<<<<<< HEAD
         # # Add filters based on start_date and end_date if they exist
         # if start_date:
         #     filters[today_field] = {'>=': str(start_date) }
@@ -62,6 +63,16 @@ async def run_ccva(db: StandardDatabase, task_id: str, task_results: Dict,start_
         # if end_date:
         #     filters[today_field] = {'<=': str(end_date) }
         #     # filters[end_date] = {'$lte': str(end_date) } # Alternative approach to use less that or greater than
+=======
+        # Add filters based on start_date and end_date if they exist
+        if start_date:
+            filters[today_field] = {'>=': str(start_date) }
+            # filters[today_field] = {'$gte': str(start_date) } # Alternative approach to use less that or greater than
+
+        if end_date:
+            filters[end_date] = {'<=': str(end_date) }
+            # filters[end_date] = {'$lte': str(end_date) } # Alternative approach to use less that or greater than
+>>>>>>> a22e059 (Fix query issues in shared va records fetching functions)
 
         
         # print(filters)
