@@ -27,15 +27,8 @@ services:
     depends_on:
       - arango-db
 
-  # mongo:
-  #   image: mongo:latest
-  #   ports:
-  #     - '27017:27017'
-  #   volumes:
-  #     - mongo-data:/data/db
-
   arango-db:
-    image: arangodb/arangodb
+    image: arangodb/arangodb:12
     env_file:
       - .env
     volumes:
@@ -48,4 +41,3 @@ services:
 
 volumes:
   vman3db:
-  # mongo-data:

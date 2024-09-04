@@ -1,5 +1,5 @@
 services:
-  web:
+  fro:
     build: .
     ports:
       - '8080:8080'
@@ -9,28 +9,19 @@ services:
     environment:
       - PYTHONUNBUFFERED=1
     depends_on:
-      - mongo
-
-  mongo:
-    image: mongo:latest
-    ports:
-      - '27017:27017'
-    volumes:
-      - mongo-data:/data/db
+      - arango-db
 
   arango-db:
-    image: arangodb/arangodb
+    image: arangodb/arangodb:12
     env_file:
       - .env
     volumes:
       - vman3db:/var/lib/arangodb3
     ports:
       - '8529:8529'
-      # - '8002:8530'
     command:
       - arangod
       - --server.endpoint=tcp://0.0.0.0:8529
 
 volumes:
   vman3db:
-  mongo-data:
