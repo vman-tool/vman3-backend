@@ -37,10 +37,12 @@ async def shared_fetch_va_records(paging: bool = True,  page_number: int = 1, li
 
     total_count_query = f"""
         RETURN LENGTH(
-        FOR {records_name} IN {db_collections.VA_TABLE}
-        {filters_string}
+            FOR {records_name} IN {db_collections.VA_TABLE}
+            {filters_string}
+            RETURN 1
         )
     """
+
     total_count_cursor = db.aql.execute(query = total_count_query, bind_vars = bind_vars)
     total_count = total_count_cursor.next() 
 
@@ -61,14 +63,14 @@ async def shared_fetch_va_records(paging: bool = True,  page_number: int = 1, li
                 
             if paging and page_number and limit:
             
-                query += "LIMIT @offset, @size RETURN {records_name}"
+                query += f"LIMIT @offset, @size RETURN {records_name}"
             
                 bind_vars.update({
                     "offset": (page_number - 1) * limit,
                     "size": limit
                 })
             else:
-                query += "RETURN {records_name}"
+                query += f"RETURN {records_name}"
 
             cursor = db.aql.execute(query, bind_vars=bind_vars)
 
@@ -91,12 +93,13 @@ async def shared_fetch_va_records(paging: bool = True,  page_number: int = 1, li
             if filters_string:
                 query += f"{filters_string}  "
             
+            
             if paging and page_number and limit:
         
-                query += """LIMIT @offset, @size RETURN {records_name})"""
+                query += f"""LIMIT @offset, @size RETURN {records_name})"""
             
             else:
-                query += "RETURN {records_name}"
+                query += f"RETURN {records_name}"
                 
             query += f"""
                 // Step 2: Get the va IDs for the paginated results
