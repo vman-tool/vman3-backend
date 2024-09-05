@@ -45,7 +45,7 @@ async def fetch_va_records(paging: bool = True, page_number: int = 1, limit: int
             })
 
         query += "RETURN doc"
-        print(query)
+        # print(query)
         cursor = db.aql.execute(query, bind_vars=bind_vars)
         data = [map_to_data_response(config,document) for document in cursor]
 
@@ -67,6 +67,8 @@ async def fetch_va_records(paging: bool = True, page_number: int = 1, limit: int
         raise BadRequestException(f"Failed to fetch records: {str(e)}",str(e))
     
     
+
+
 
 
 
