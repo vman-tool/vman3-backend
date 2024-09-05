@@ -25,7 +25,7 @@ async def websocket_broadcast(task_id: str, progress_data: dict):
 
         from app.main import \
             websocket__manager  # Ensure this points to your actual WebSocket manager instance
-        await asyncio.sleep(1)
+        await asyncio.sleep(2)
         await websocket__manager.broadcast(task_id, json.dumps(progress_data))
     except Exception as e:
         print(e)
@@ -42,7 +42,7 @@ async def run_ccva(db: StandardDatabase, task_id: str, task_results: Dict,start_
         start_time = datetime.now()
 
 
-        websocket_broadcast(task_id=task_id, progress_data= InterVA5Progress(
+        await websocket_broadcast(task_id=task_id, progress_data= InterVA5Progress(
             progress=1,
             total_records=0,
             message="Collecting data.",
