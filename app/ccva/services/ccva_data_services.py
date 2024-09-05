@@ -99,10 +99,8 @@ async def fetch_ccva_processed(paging: bool = True, page_number: int = 1, limit:
             })
 
         query += "RETURN doc"
-        print(query)
         cursor = db.aql.execute(query, bind_vars=bind_vars)
         data = [document for document in cursor]
-        print(data)
 
         # Fetch total count of documents
         
