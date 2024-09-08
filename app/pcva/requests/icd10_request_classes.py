@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Optional, Union
 from pydantic import BaseModel, Field
 
 
@@ -6,7 +6,7 @@ class ICD10CategoryRequestClass(BaseModel):
     name: str
 
 class ICD10CategoryUpdateClass(BaseModel):
-    uuid: str
+    uuid: Union[str, None] = None
     name: str
 
 class ICD10CreateRequestClass(BaseModel):
@@ -15,6 +15,6 @@ class ICD10CreateRequestClass(BaseModel):
     category: Optional[str]
 class ICD10UpdateRequestClass(BaseModel):
     uuid: Optional[str]
-    code: Optional[str]
-    name: Optional[str]
-    category: Optional[str]
+    code: Union[str, None] = None
+    name: Union[str, None] = None
+    category: Union[str, None] = None

@@ -61,8 +61,11 @@ class VManBaseModel(BaseModel):
     async def save(self, db: StandardDatabase, unique_field: str = None):
         """
         This method saved the data and returns the new saved data.
+
         :param db: Standard database object
-        :param unique_field: This is the field to be checked as unique and be used as a reference for data update or new insert
+        :param unique_field: for insert or update, specify a field to be used to check if record exists for it to update or not to insert new
+
+        :return Newly saved data
         """
         self.init_collection(db)
         collection = db.collection(self.get_collection_name())
