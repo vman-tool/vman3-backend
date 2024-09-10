@@ -40,7 +40,7 @@ def create_application():
         title="vman3",
         version="1.0.0",
         docs_url="/vman/api/v1/docs",
-        openapi_url="/api/v1/openapi.json",
+        openapi_url="/vman/api/v1/openapi.json",
         lifespan=lifespan
     )
     routes.main_route(application)
