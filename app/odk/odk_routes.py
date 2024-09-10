@@ -12,7 +12,7 @@ from app.users.models.user import User
 
 odk_router = APIRouter(
     prefix="/odk",
-    tags=["odk"],
+    tags=["ODK"],
     responses={404: {"description": "Not found"}},
 )
 
