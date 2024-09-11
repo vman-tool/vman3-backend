@@ -3,8 +3,6 @@ from typing import Dict
 from arango.database import StandardDatabase
 from fastapi import HTTPException
 
-from fastapi import HTTPException
-
 from app.pcva.utilities.va_records_utils import format_va_record
 from app.settings.services.odk_configs import fetch_odk_config
 from app.shared.configs.constants import db_collections

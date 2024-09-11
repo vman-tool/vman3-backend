@@ -1,5 +1,6 @@
 
 import logging
+import math
 from typing import AsyncGenerator
 
 from arango import ArangoClient
@@ -133,3 +134,23 @@ async def get_arangodb_session() -> AsyncGenerator[StandardDatabase, None]:
         yield client.db
     finally:
         pass  # No explicit closing needed        pass  # No explicit closing needed
+    
+def null_convert_data(data):
+    """
+    Recursively converts any NaN values to None and ensures the data is suitable for inserting into databases.
+    
+    :param data: Any Python data structure (dict, list, or scalar)
+    :return: Processed data with NaN values replaced by None
+    """
+    if isinstance(data, dict):
+        # Recursively convert each value in the dictionary
+        return {key: null_convert_data(value) for key, value in data.items()}
+    elif isinstance(data, list):
+        # Recursively convert each element in the list
+        return [null_convert_data(element) for element in data]
+    elif isinstance(data, float) and math.isnan(data):
+        # Convert NaN to None
+        return None
+    else:
+        # Return the original value if it's not NaN or doesn't need conversion
+        return data
