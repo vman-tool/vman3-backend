@@ -1,6 +1,10 @@
-from arango.database import StandardDatabase
 from typing import Dict
+
+from arango.database import StandardDatabase
 from fastapi import HTTPException
+
+from fastapi import HTTPException
+
 from app.pcva.utilities.va_records_utils import format_va_record
 from app.settings.services.odk_configs import fetch_odk_config
 from app.shared.configs.constants import db_collections
@@ -14,18 +18,6 @@ async def shared_fetch_va_records(paging: bool = True,  page_number: int = 1, li
     bind_vars = {}
 
     config = await fetch_odk_config(db)
-
-    total_count_query = f"RETURN LENGTH({db_collections.VA_TABLE})"
-    total_count_cursor = db.aql.execute(total_count_query)
-    total_count = total_count_cursor.next() 
-
-    if total_count is None or total_count == 0:
-        return ResponseMainModel(
-            data=[],
-            total_count=0,
-            page_number=page_number,
-            limit=limit
-        )
     
 
 
@@ -42,24 +34,43 @@ async def shared_fetch_va_records(paging: bool = True,  page_number: int = 1, li
 
     if filters_list:
         filters_string += " FILTER " + " AND ".join(filters_list)
+
+    total_count_query = f"""
+        RETURN LENGTH(
+            FOR {records_name} IN {db_collections.VA_TABLE}
+            {filters_string}
+            RETURN 1
+        )
+    """
+
+    total_count_cursor = db.aql.execute(query = total_count_query, bind_vars = bind_vars)
+    total_count = total_count_cursor.next() 
+
+    if total_count is None or total_count == 0:
+        return ResponseMainModel(
+            data=[],
+            total_count=0,
+            page_number=page_number,
+            limit=limit
+        )
     
     try:
         if not include_assignment or not assignment_collection_exists:
-            query = f"FOR doc IN {va_table_collection.name} "
+            query = f"FOR {records_name} IN {va_table_collection.name} "
 
             if filters_string:
                 query += f"{filters_string}  "
                 
             if paging and page_number and limit:
             
-                query += "LIMIT @offset, @size RETURN doc"
+                query += f"LIMIT @offset, @size RETURN {records_name}"
             
                 bind_vars.update({
                     "offset": (page_number - 1) * limit,
                     "size": limit
                 })
             else:
-                query += "RETURN doc"
+                query += f"RETURN {records_name}"
 
             cursor = db.aql.execute(query, bind_vars=bind_vars)
 
@@ -75,19 +86,20 @@ async def shared_fetch_va_records(paging: bool = True,  page_number: int = 1, li
             query = f"""
                 // Step 1: Get paginated va records
                 LET paginatedVa = (
-                    FOR v IN {db_collections.VA_TABLE}
+                    FOR {records_name} IN {db_collections.VA_TABLE}
                         
                 """
             
             if filters_string:
                 query += f"{filters_string}  "
             
+            
             if paging and page_number and limit:
         
-                query += """LIMIT @offset, @size RETURN v)"""
+                query += f"""LIMIT @offset, @size RETURN {records_name})"""
             
             else:
-                query += "RETURN v"
+                query += f"RETURN {records_name}"
                 
             query += f"""
                 // Step 2: Get the va IDs for the paginated results
@@ -140,7 +152,6 @@ async def shared_fetch_va_records(paging: bool = True,  page_number: int = 1, li
                     "offset": (page_number - 1) * limit,
                     "size": limit
                 })
-            
             cursor = db.aql.execute(query, bind_vars=bind_vars)
             
             if format_records:

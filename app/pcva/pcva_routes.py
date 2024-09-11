@@ -1,7 +1,10 @@
+from io import BytesIO
+import json
 from typing import Any, Dict, List, Optional, Union
 
 from arango.database import StandardDatabase
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
+import pandas as pd
 
 from app.pcva.requests.icd10_request_classes import (
     ICD10CategoryRequestClass,
@@ -21,6 +24,7 @@ from app.pcva.responses.va_response_classes import CodedVAResponseClass
 from app.pcva.services.icd10_services import (
     create_icd10_categories_service,
     create_icd10_codes,
+    create_or_icd10_codes_from_file,
     get_icd10_categories_service,
     get_icd10_codes,
     update_icd10_categories_service,
@@ -73,7 +77,7 @@ async def get_va_records(
 
 
 @pcva_router.get(
-        path="/get-icd10-categories", 
+        path="/icd10-categories", 
         status_code=status.HTTP_200_OK,
 )
 async def get_icd10_categories(
@@ -122,7 +126,36 @@ async def update_icd10_categories(
     except:
         raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed update icd10 codes")
 
+@pcva_router.post(
+        path="/upload-icd10-data", 
+        status_code=status.HTTP_200_OK,
+        description="Update categories in excel or csv or json format"
+)
+async def upload_file(
+    file: UploadFile = File(),
+    user: User = Depends(get_current_user),
+    db: StandardDatabase = Depends(get_arangodb_session)
+    ):
+    try:
+        file_extension = file.filename.split(".")[-1].lower()
 
+        content = await file.read()
+        file_content = BytesIO(content)
+
+        if file_extension == "csv":
+            df = pd.read_csv(file_content)
+        elif file_extension == "xlsx" or file_extension == "xls":
+            df = pd.read_excel(file_content)
+        elif file_extension == "json":
+            data = json.loads(content)
+            df = pd.json_normalize(data)
+        else:
+            raise HTTPException(status_code=400, detail="Invalid file type")
+        
+        data_dictionary = df.head().to_dict(orient="records")
+        return await create_or_icd10_codes_from_file(data_dictionary, user, db)
+    except Exception as e:
+        raise e
 
 @pcva_router.get(
         path="/get-icd10", 
@@ -253,7 +286,7 @@ async def code_assigned_va(
 
 @pcva_router.get("/form_questions", status_code=status.HTTP_200_OK)
 async def get_form_questions(
-    questions_keys: Optional[str] = Query(None, alias="question_id", description="If you need many, separate questons keys by comma, DOnt specify to get all the questions"),
+    questions_keys: Optional[str] = Query(None, alias="question_id", description="If you need many, separate questons keys by comma, Do not specify to get all the questions"),
     current_user: User = Depends(get_arangodb_session),
     db: StandardDatabase = Depends(get_arangodb_session)
 ) -> ResponseMainModel:
