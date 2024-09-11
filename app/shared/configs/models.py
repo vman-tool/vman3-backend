@@ -80,7 +80,7 @@ class VManBaseModel(BaseModel):
             new_doc = collection.update(doc, return_new=True)
         else:
             new_doc = collection.insert(doc, return_new=True)
-        return new_doc
+        return new_doc['new'] if 'new' in new_doc else new_doc
 
     @classmethod
     async def get(cls, doc_id: str = None, doc_uuid: str = None, db: StandardDatabase = None):

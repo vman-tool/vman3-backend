@@ -26,7 +26,7 @@ class ICD10(VManBaseModel):
 
 class AssignedVA(VManBaseModel):
     vaId: str
-    coder: Optional[str]
+    coder: str
 
     @classmethod
     def get_collection_name(cls) -> str:

@@ -4,7 +4,7 @@ from pydantic import BaseModel
 
 class AssignVARequestClass(BaseModel):
     vaIds: List[str]
-    coder: Optional[str]
+    coder: Union[str, None] = None
     new_coder: Union[str, None] = None 
 
 class CodeAssignedVARequestClass(BaseModel):
