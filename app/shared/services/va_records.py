@@ -43,6 +43,8 @@ async def shared_fetch_va_records(paging: bool = True,  page_number: int = 1, li
         )
     """
 
+    print(total_count_query)
+
     total_count_cursor = db.aql.execute(query = total_count_query, bind_vars = bind_vars)
     total_count = total_count_cursor.next() 
 
