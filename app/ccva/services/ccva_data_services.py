@@ -16,7 +16,7 @@ async def fetch_ccva_records(paging: bool = True, page_number: int = 1, limit: i
         region_field = config.field_mapping.location_level1
 
         today_field = config.field_mapping.date
-        collection = db.collection(db_collections.INTERVA5)  # Use the actual collection name here
+        collection = db.collection(db_collections.CCVA_RESULTS)  # Use the actual collection name here
         query = f"FOR doc IN {collection.name} "
         bind_vars = {}
         filters = []
@@ -69,10 +69,10 @@ async def fetch_ccva_records(paging: bool = True, page_number: int = 1, limit: i
     
     
     
-async def fetch_ccva_processed(paging: bool = True, page_number: int = 1, limit: int = 1, start_date: Optional[date] = None, end_date: Optional[date] = None, locations: Optional[List[str]] = None, db: StandardDatabase = None) -> ResponseMainModel:
+async def fetch_processed_ccva_graphs(paging: bool = True, page_number: int = 1, limit: int = 1, start_date: Optional[date] = None, end_date: Optional[date] = None, locations: Optional[List[str]] = None, db: StandardDatabase = None) -> ResponseMainModel:
     try:
 
-        collection = db.collection(db_collections.CCVA_RESULTS)  # Use the actual collection name here
+        collection = db.collection(db_collections.CCVA_GRAPH_RESULTS)  # Use the actual collection name here
         query = f"FOR doc IN {collection.name} "
         bind_vars = {}
         filters = []
@@ -99,10 +99,10 @@ async def fetch_ccva_processed(paging: bool = True, page_number: int = 1, limit:
             })
 
         query += "RETURN doc"
-        print(query)
+
         cursor = db.aql.execute(query, bind_vars=bind_vars)
         data = [document for document in cursor]
-        print(data)
+
 
         # Fetch total count of documents
         
