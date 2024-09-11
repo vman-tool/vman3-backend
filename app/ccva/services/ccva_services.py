@@ -85,13 +85,6 @@ async def run_ccva(db: StandardDatabase, task_id: str, task_results: Dict,start_
         # records = await shared_fetch_va_records(paging=False, include_assignment=False, format_records=False, db=db, filters=filters)
         database_dataframe = pd.read_json(json.dumps(records.data))
 
-
-        
-
-        
-
-        
-
        
         # Fetch the  configuration
         config = await fetch_odk_config(db)
