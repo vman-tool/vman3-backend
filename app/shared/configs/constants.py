@@ -16,8 +16,10 @@ class db_collections():
     DOWNLOAD_TRACKER: str   ='download_tracker'
     DOWNLOAD_PROCESS_TRACKER: str   ='download_process_tracker'
     SYSTEM_CONFIGS: str = 'system_configs'
-    INTERVA5: str = 'interva_5'
+    # INTERVA5: str = 'interva_'
     CCVA_RESULTS: str = 'ccva_results'
+    CCVA_GRAPH_RESULTS: str = 'ccva_graph_results'
+    CCVA_ERRORS:str = 'ccva_errors'
     
     
     
@@ -43,8 +45,11 @@ collections_with_indexes = {
     db_collections.DOWNLOAD_PROCESS_TRACKER: [],
     db_collections.SYSTEM_CONFIGS: [],
     db_collections.VA_QUESTIONS: [],
-    db_collections.CCVA_RESULTS: [],
-    db_collections.INTERVA5: [
-          {"fields": ["ID"], "unique": True, "type": "persistent", "name": "idx_interva5_id"},
-    ]
+    db_collections.CCVA_RESULTS: [
+        #   {"fields": ["ID"], "unique": True, "type": "persistent", "name": "idx_interva5_id"},
+          ],
+    db_collections.CCVA_GRAPH_RESULTS: [
+        
+    ],
+    db_collections.CCVA_ERRORS: []
 }

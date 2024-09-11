@@ -1,7 +1,6 @@
 
 import asyncio
 import json
-import os
 from datetime import date, datetime, timedelta
 from typing import Dict, Optional
 
@@ -16,6 +15,7 @@ from app.ccva.models.ccva_models import InterVA5Progress
 from app.ccva.utilits.interva.interva5 import InterVA5
 from app.records.services.list_data import fetch_va_records_json
 from app.settings.services.odk_configs import fetch_odk_config
+from app.shared.configs.arangodb import null_convert_data
 from app.shared.configs.constants import db_collections
 
 
@@ -23,10 +23,7 @@ from app.shared.configs.constants import db_collections
 async def websocket_broadcast(task_id: str, progress_data: dict):
     try:
 
-        from app.main import \
-            websocket__manager  # Ensure this points to your actual WebSocket manager instance
-        await asyncio.sleep(2)
-        await websocket__manager.broadcast(task_id, json.dumps(progress_data))
+        pass
     except Exception as e:
         print(e)
         pass
@@ -142,22 +139,15 @@ def runCCVA(odk_raw:pd.DataFrame, id_col: str = None,date_col:str =None,start_ti
         
         # Run the InterVA5 analysis, with progress updates via the async callback
         iv5out.run()
-        # iv5out.results
-        
-        # Assuming the output is written to a CSV
-        iv5out.write_indiv_prob(filename=f"{file_id}-dt")
-        
-        # Read the CSV file into a list of dictionaries
-        df = pd.read_csv(f"{file_id}-dt.csv")
-
-        
-        records = df.to_dict(orient='records')
+        records =  iv5out.get_indiv_prob(
+            top=10
+        )
         # Insert the records into the database
-        # db.collection(db_collections.INTERVA5).insert_many(records, overwrite=True, overwrite_mode="update")
+        db.collection(db_collections.CCVA_RESULTS).insert_many(null_convert_data(records.to_dict(orient='records')), overwrite=True, overwrite_mode="update")
         print("InterVA5 analysis completed.")
 
         # Remove the temporary CSV file
-        os.remove(f"{file_id}-dt.csv")
+        # os.remove(f"{file_id}-dt.csv")
         total_records = len(records)
         rangeDates={"start": odk_raw[date_col].max(), "end":odk_raw[date_col].min()}
         ccva_results= compile_ccva_results(iv5out, top=top, undetermined=undetermined, task_id=file_id,start_time= start_time,total_records=total_records,  rangeDates =rangeDates, db=db)
@@ -297,9 +287,8 @@ def compile_ccva_results(iv5out, top=10, undetermined=True,start_time:timedelta=
         "neonate": neonate_results,
         # "merged": merged_results
     }
-    print(ccva_results)
 
-    db.collection(db_collections.CCVA_RESULTS).insert(ccva_results)
+    db.collection(db_collections.CCVA_GRAPH_RESULTS).insert(ccva_results)
     asyncio.run(  websocket_broadcast(task_id,{"progress": 100, "message": "Finish CCVA analysis...", "status": 'completed', "data": ccva_results ,"elapsed_time": f"{(datetime.now() - start_time).seconds // 3600}:{(datetime.now() - start_time).seconds // 60 % 60}:{(datetime.now() - start_time).seconds % 60}", "task_id": task_id, "error": False}))
 
     return ccva_results
