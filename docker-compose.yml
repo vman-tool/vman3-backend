@@ -12,15 +12,7 @@ services:
       - arango-db
 
   arango-db:
-<<<<<<< HEAD
-<<<<<<< HEAD
     image: arangodb/arangodb:3.12.2
-=======
-    image: arangodb/arangodb:12
->>>>>>> 90641a8 (clean docker)
-=======
-    image: arangodb/arangodb:3.12.2
->>>>>>> a22e059 (Fix query issues in shared va records fetching functions)
     env_file:
       - .env
     volumes:
