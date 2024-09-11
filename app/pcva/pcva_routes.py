@@ -274,8 +274,8 @@ async def code_assigned_va(
     except Exception as e:
         raise e
 
-@pcva_router.get("/get_concordant_vas", status_code=status.HTTP_200_OK)
-async def code_assigned_va(
+@pcva_router.get("/get_concordants", status_code=status.HTTP_200_OK)
+async def get_concordants(
     current_user: User = Depends(get_current_user),
     db: StandardDatabase = Depends(get_arangodb_session)):
     try:
