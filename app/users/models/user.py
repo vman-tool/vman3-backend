@@ -7,6 +7,7 @@ from pydantic import EmailStr
 
 from app.shared.configs.constants import db_collections
 from app.shared.configs.models import VManBaseModel
+from app.shared.utils.database_utilities import record_exists
 from app.users.models.role import Role
 
 
@@ -26,14 +27,8 @@ class User(VManBaseModel):
         return db_collections.USERS
     
     async def save(self, db: StandardDatabase):
-        self.init_collection(db)
-
-        collection = db.collection(db_collections.USERS)
-
-        cursor = cursor =collection.find({'email': self.email}, limit=1)
-        result = [doc for doc in cursor]
+        user_exist =  await record_exists(db_collections.USERS, custom_fields={"email": self.email})
         
-        user_exist =  result
         if user_exist:
             raise HTTPException(status_code=400, detail="Email already exists.")
 
@@ -43,10 +38,6 @@ class User(VManBaseModel):
         # user = [doc for doc in cursor]
         
         # check if user exist with new data
-        if user['new']:
-            user=user['new']
-        else:
-            user=user
         data={
             "id": user["_key"],
             "uuid": user["uuid"],
