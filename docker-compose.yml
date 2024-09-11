@@ -1,5 +1,5 @@
 services:
-  fro:
+  frontend:
     build: .
     ports:
       - '8080:8080'
@@ -9,9 +9,9 @@ services:
     environment:
       - PYTHONUNBUFFERED=1
     depends_on:
-      - arango-db
+      - arangodb
 
-  arango-db:
+  arangodb:
     image: arangodb/arangodb:3.12.2
     env_file:
       - .env
