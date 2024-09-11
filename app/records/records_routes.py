@@ -43,7 +43,7 @@ data_router = APIRouter(
 #         )
         
         
-@data_router.get("/", status_code=status.HTTP_200_OK, response_model=ResponseMainModel)
+@data_router.get("", status_code=status.HTTP_200_OK, response_model=ResponseMainModel)
 async def get_va_records(
     paging: Optional[str] = Query(None, alias="paging"),
     page_number: Optional[int] = Query(1, alias="page_number"),

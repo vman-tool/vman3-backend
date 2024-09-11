@@ -40,7 +40,7 @@ def create_application():
         title="vman3",
         version="1.0.0",
         docs_url="/vman/api/v1/docs",
-        openapi_url="/api/v1/openapi.json",
+        openapi_url="/vman/api/v1/openapi.json",
         lifespan=lifespan
     )
     routes.main_route(application)
@@ -120,7 +120,7 @@ async def websocket_va_1(websocket: WebSocket, task_id: str):
         websocket__manager.disconnect(task_id, websocket)
 
 @app.websocket("/vman/api/v1/ws/odk_progress/{task_id}")
-async def websocket_progress(websocket: WebSocket,task_id: str):
+async def odk_progress(websocket: WebSocket,task_id: str):
     # task_id = "some_task_id"  # Define how you want to assign the task_id or pass it dynamically
     await websocket__manager.connect(task_id, websocket)
     try:
@@ -131,3 +131,5 @@ async def websocket_progress(websocket: WebSocket,task_id: str):
             # await asyncio.sleep(1)  # Simulate progress update every second
     except WebSocketDisconnect:
         websocket__manager.disconnect(task_id, websocket)
+        
+ 
