@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import Dict
 from arango import ArangoError
 from arango.database import StandardDatabase
@@ -17,6 +18,21 @@ from app.settings.services.odk_configs import fetch_odk_config
 
 async def assign_va_service(va_records: AssignVARequestClass, user: User,  db: StandardDatabase = None):
     try:
+        if not va_records.coder and not va_records.new_coder:
+            raise HTTPException(status_code=400, detail=f"Coder or new coder must be specified")
+        
+        if va_records.coder or va_records.new_coder:
+            is_valid_coder = True
+            is_valid_new_coder = True
+
+            if va_records.coder:
+                is_valid_coder = await record_exists(db_collections.USERS, uuid = va_records.coder, db = db)
+            if va_records.new_coder:
+                is_valid_new_coder = await record_exists(db_collections.USERS, uuid = va_records.new_coder, db = db)
+            
+            if not (is_valid_coder and is_valid_new_coder):
+                raise HTTPException(status_code=400, detail=f"Invalid {'new coder' if va_records.new_coder else 'coder'} specified")
+
         vaIds  = va_records.vaIds
         va_assignment_data = []
         for vaId in vaIds:
@@ -29,7 +45,8 @@ async def assign_va_service(va_records: AssignVARequestClass, user: User,  db: S
                 va_data = {
                     "vaId": vaId,
                     "coder": va_records.coder,
-                    "created_by": user.uuid
+                    "created_by": user.uuid,
+                    "created_at": datetime.now().isoformat(),
                 }
             va_object = AssignedVA(**va_data)
             is_valid_va = await record_exists(db_collections.VA_TABLE, custom_fields={"__id": vaId}, db = db)
@@ -42,6 +59,7 @@ async def assign_va_service(va_records: AssignVARequestClass, user: User,  db: S
                 },
                 db = db
             )
+            print("Does it exists: ", existing_va_assignment_data)
             if existing_va_assignment_data:
                 if len(existing_va_assignment_data) > 1:
                     raise HTTPException(status_code=400, detail=f"Multiple assignments found for this VA with this coder")
@@ -52,6 +70,7 @@ async def assign_va_service(va_records: AssignVARequestClass, user: User,  db: S
                     raise HTTPException(status_code=400, detail=f"Include new coder Id to update existing assignment.")
             else:
                 saved_object = await va_object.save(db = db)
+                print("Object saved successfully: ", saved_object)
             va_assignment_data.append(await AssignVAResponseClass.get_structured_assignment(assignment=saved_object, db = db))
         
         return va_assignment_data
