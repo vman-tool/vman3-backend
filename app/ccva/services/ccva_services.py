@@ -124,6 +124,7 @@ def runCCVA(odk_raw:pd.DataFrame, id_col: str = None,date_col:str =None,start_ti
         # Define the output folder
         output_folder = "../ccva_files/"
         
+        
         # Create an InterVA5 instance with the async callback
         iv5out = InterVA5(input_data, hiv=hiv, malaria=malaria, write=True, directory=output_folder, filename=file_id,start_time=start_time, update_callback=update_callback, return_checked_data=True)
 
