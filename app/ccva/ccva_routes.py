@@ -1,10 +1,8 @@
 
 import uuid
-from datetime import date
-from typing import Optional
 
 from arango.database import StandardDatabase
-from fastapi import APIRouter, BackgroundTasks, Body, Depends, status
+from fastapi import APIRouter, BackgroundTasks, Depends, status
 
 from app.ccva.services.ccva_data_services import fetch_processed_ccva_graphs
 from app.ccva.services.ccva_services import run_ccva
@@ -27,13 +25,11 @@ async def run_internal_ccva(
     background_tasks: BackgroundTasks,
     oauth = Depends(oauth2_scheme), 
     current_user = Depends(get_current_user),
-    start_date: Optional[date] = Body(None, alias="start_date"),
-    end_date: Optional[date] = Body(None, alias="end_date"),
     db: StandardDatabase = Depends(get_arangodb_session)
 ):
     try:
         task_id = str(uuid.uuid4())
-        background_tasks.add_task(run_ccva, db, task_id, task_results, start_date, end_date)
+        background_tasks.add_task(run_ccva, db, task_id, task_results)
         return ResponseMainModel(data={"task_id": task_id}, message="CCVA Is running ...")
     except Exception as e:
         raise e

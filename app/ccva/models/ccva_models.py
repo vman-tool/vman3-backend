@@ -1,13 +1,10 @@
-from typing import Optional
-
 from pydantic import BaseModel
 
 
 class InterVA5Progress(BaseModel):
-    total_records: Optional[int] = 0
-    progress: Optional[int] = 0
+    progress: int
     message: str
     status: str
-    elapsed_time: Optional[str] = "0:00:00"
+    elapsed_time: str
     task_id: str
     error: bool
