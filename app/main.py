@@ -108,28 +108,49 @@ async def get():
 
 
 
+# @app.websocket("/vman/api/v1/ws/ccva_progress/{task_id}")
+# async def websocket_va_1(websocket: WebSocket, task_id: str):
+#     await websocket__manager.connect(task_id, websocket)
+#     try:
+#         while True:
+#             data = await websocket.receive_text()
+#             # Handle incoming data here if needed
+#             await websocket__manager.send_personal_message(f"Message received for task {task_id}: {data}", websocket)
+#     except WebSocketDisconnect:
+#         websocket__manager.disconnect(task_id, websocket)
+
+# @app.websocket("/vman/api/v1/ws/odk_progress/{task_id}")
+# async def odk_progress(websocket: WebSocket,task_id: str):
+#     # task_id = "some_task_id"  # Define how you want to assign the task_id or pass it dynamically
+#     await websocket__manager.connect(task_id, websocket)
+#     try:
+#         while True:
+#             data = await websocket.receive_text()
+#             # Here you can send updates for the progress of a specific task_id
+#             await websocket__manager.send_personal_message(f"Message received for task {task_id}: {data}", websocket)
+#             # await asyncio.sleep(1)  # Simulate progress update every second
+#     except WebSocketDisconnect:
+#         websocket__manager.disconnect(task_id, websocket)
+        
+ 
 @app.websocket("/vman/api/v1/ws/ccva_progress/{task_id}")
 async def websocket_va_1(websocket: WebSocket, task_id: str):
     await websocket__manager.connect(task_id, websocket)
     try:
         while True:
             data = await websocket.receive_text()
-            # Handle incoming data here if needed
+            # Send a personalized message based on task_id
             await websocket__manager.send_personal_message(f"Message received for task {task_id}: {data}", websocket)
     except WebSocketDisconnect:
         websocket__manager.disconnect(task_id, websocket)
 
 @app.websocket("/vman/api/v1/ws/odk_progress/{task_id}")
-async def odk_progress(websocket: WebSocket,task_id: str):
-    # task_id = "some_task_id"  # Define how you want to assign the task_id or pass it dynamically
+async def odk_progress(websocket: WebSocket, task_id: str):
     await websocket__manager.connect(task_id, websocket)
     try:
         while True:
             data = await websocket.receive_text()
-            # Here you can send updates for the progress of a specific task_id
+            # Send updates for the progress of the specific task_id
             await websocket__manager.send_personal_message(f"Message received for task {task_id}: {data}", websocket)
-            # await asyncio.sleep(1)  # Simulate progress update every second
     except WebSocketDisconnect:
         websocket__manager.disconnect(task_id, websocket)
-        
- 
