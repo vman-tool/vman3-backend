@@ -128,6 +128,45 @@ class VManBaseModel(BaseModel):
         if not records:
             return []
         return records
+    
+    @classmethod
+    async def count(cls, filters: Dict[str, Any] = {}, include_deleted: bool = None, db: StandardDatabase = None):
+        """
+        Counts the number of records from the specified collection using dynamic filters.
+
+        :param db: The ArangoDB database instance.
+        :param collection_name: The name of the collection to query.
+        :param filters: A dictionary of filters to apply to the query.
+            - include array of object inside or_conditions key in filters object to incorporate OR filter
+            - include array of object inside in_conditions key in filters object to incorporate IN filter
+            - include field with object that key is in ['==', '!=', '<', '<=', '>', '>=', "$gt", "$lt", "$lte", "$eq", "$ne", "$gte"] for comparison fields
+        :return: A list of records matching the filters.
+        """
+        cls.init_collection(db)
+        collection = db.collection(cls.get_collection_name())
+        bind_vars = {}
+        aql_filters = []
+
+        query = f"""
+            RETURN LENGTH(FOR doc in {collection.name}
+        """
+
+
+        aql_filters, vars = add_query_filters(filters, bind_vars)
+
+        bind_vars.update(vars)
+        
+        if not include_deleted:
+            aql_filters.append("doc.is_deleted == false")
+        
+        if aql_filters:
+            query += " FILTER " + " AND ".join(aql_filters)
+
+        query += "RETURN 1)"
+        
+        cursor = db.aql.execute(query, bind_vars=bind_vars)
+
+        return cursor.next()
 
     async def update(self, updated_by: str, db: StandardDatabase):
         """
