@@ -25,32 +25,13 @@ from math import isclose
 from os import chdir, getcwd, mkdir, path
 from pkgutil import get_data
 
-from numpy import (
-    argsort,
-    array,
-    concatenate,
-    copy,
-    delete,
-    nan,
-    nanmax,
-    nansum,
-    ndarray,
-    where,
-)
-from pandas import (
-    DataFrame,
-    Index,
-    Series,
-    isna,
-    read_csv,
-    read_excel,
-    set_option,
-    to_numeric,
-)
-from vacheck.datacheck5 import datacheck5
-
 from interva.data.causetext import CAUSETEXTV5
 from interva.utils import _get_dem_groups
+from numpy import (argsort, array, concatenate, copy, delete, nan, nanmax,
+                   nansum, ndarray, where)
+from pandas import (DataFrame, Index, Series, isna, read_csv, read_excel,
+                    set_option, to_numeric)
+from vacheck.datacheck5 import datacheck5
 
 
 class InterVA5:
@@ -433,14 +414,12 @@ class InterVA5:
                 progress = round(k / N * 100)
                 print(f"{progress}% completed -x")
                 if self.update_callback:
-                   asyncio.run(self.update_callback({"progress": progress,"message": "Running InterVA5 analysis...",
-                                                     "total_records": N,
-                                                     "elapsed_time": elapsed_time,"error": False}))
+                   asyncio.run(self.update_callback({"progress": progress,"message": "Running InterVA5 analysis...","elapsed_time": elapsed_time,"error": False}))
 
             if k == N:
                 print("100% completed -----")
                 if self.update_callback:
-                    asyncio.run(self.update_callback({"progress": 99,"total_records": N,"message": "Complete InterVA5 analysis...","elapsed_time": elapsed_time, "error": False}))
+                    asyncio.run(self.update_callback({"progress": 99,"message": "Complete InterVA5 analysis...","elapsed_time": elapsed_time, "error": False}))
 
  
 
