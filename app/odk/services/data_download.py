@@ -9,15 +9,17 @@ from fastapi import HTTPException
 from loguru import logger
 
 from app.odk.models.questions_models import VA_Question
-from app.odk.utils.data_transform import (assign_questions_options,
-                                          filter_non_questions,
-                                          odk_questions_formatter)
+from app.odk.utils.data_transform import (
+    assign_questions_options,
+    filter_non_questions,
+    odk_questions_formatter,
+)
 from app.odk.utils.odk_client import ODKClientAsync
+from app.pcva.responses.va_response_classes import VAQuestionResponseClass
 from app.settings.services.odk_configs import fetch_odk_config
 from app.shared.configs.arangodb import ArangoDBClient, get_arangodb_client
 from app.shared.configs.constants import db_collections
 from app.shared.configs.models import ResponseMainModel
-from app.pcva.responses.va_response_classes import VAQuestionResponseClass
 
 
 async def fetch_odk_data_with_async(
@@ -90,7 +92,7 @@ async def fetch_odk_data_with_async(
                     data = await odk_client.getFormSubmissions(top=top, skip=skip, start_date=start_date, end_date=end_date, order_by='__system/submissionDate', order_direction='asc')
                     if isinstance(data, str):
                         logger.error(f"Error fetching data: {data}")
-                        raise e
+                        raise HTTPException(status_code=500, detail=data)
                     df = pd.json_normalize(data['value'], sep='/')
                     df.columns = [col.split('/')[-1] for col in df.columns]
                     
