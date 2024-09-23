@@ -1,6 +1,6 @@
 
-from http.client import HTTPException
-from typing import Dict, List, Optional
+from fastapi import HTTPException
+from typing import Any, Dict, List, Optional
 from arango.database import StandardDatabase
 from fastapi import APIRouter, BackgroundTasks, Depends, Header, Query, status
 from fastapi.responses import JSONResponse
@@ -8,10 +8,11 @@ from fastapi.security import OAuth2PasswordRequestForm
 
 # from sqlalchemy.orm import Session
 from app.shared.configs.arangodb import ArangoDBClient, get_arangodb_session
+from app.shared.configs.models import ResponseMainModel
 from app.users.decorators.user import get_current_user, oauth2_scheme
 from app.users.responses.user import LoginResponse, UserResponse
 from app.users.schemas.user import (EmailRequest, RegisterUserRequest,
-                                    ResetRequest, VerifyUserRequest)
+                                    ResetRequest, RoleRequest, VerifyUserRequest)
 from app.users.services import user
 
 user_router = APIRouter(
@@ -92,4 +93,35 @@ async def get_users(
         db=session
     )
 
+@user_router.get("/roles", status_code=status.HTTP_200_OK, response_model=ResponseMainModel | Any)
+async def get_roles(
+        paging: Optional[str] = Query(None, alias="paging"),
+        page_number: Optional[int] = Query(1, alias="page_number"),
+        limit: Optional[int] = Query(10, alias="limit"), 
+        current_user = Depends(get_current_user), 
+        session = Depends(get_arangodb_session)
+    ):
+
+    try:
+        return await user.fetch_roles(
+            paging=paging, 
+            page_number=page_number, 
+            limit=limit,
+            filters = {},
+            db=session
+        )
+    except HTTPException as e:
+        raise e
+
+@user_router.post("/roles", status_code=status.HTTP_200_OK, response_model=ResponseMainModel | Any)
+async def get_roles(
+        data: RoleRequest,
+        current_user = Depends(get_current_user), 
+        session = Depends(get_arangodb_session)
+    ):
+
+    try:
+        return await user.create_role(data = data, current_user = current_user, db=session)
+    except HTTPException as e:
+        raise e
 

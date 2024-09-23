@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime
-from http.client import HTTPException
+from fastapi import HTTPException
 from typing import Any, Dict, List, Optional, TypeVar, Union
 
 from arango.database import StandardDatabase
@@ -19,7 +19,7 @@ class Pager(BaseModel):
 class ResponseMainModel(BaseModel):
     data: Optional[Union[Union[List[Any], List[T]], Union[Dict[str, Any],Dict[str, T]], None]] = None
     message: str
-    error: Optional[str] = None
+    error: Optional[Any] = None
     total: Optional[int] = None
     pager: Optional[Pager]= None
     
@@ -97,7 +97,7 @@ class VManBaseModel(BaseModel):
             cursor = db.aql.execute(query, bind_vars=bind_vars)
             doc = cursor.next()
         if not doc:
-            raise HTTPException(status_code=404, detail="Record not found")
+            raise HTTPException(status_code=404, detail=f"{cls.__name__} not found")
         return doc
    
     @classmethod
@@ -162,7 +162,7 @@ class VManBaseModel(BaseModel):
         if aql_filters:
             query += " FILTER " + " AND ".join(aql_filters)
 
-        query += "RETURN 1)"
+        query += " RETURN 1)"
         
         cursor = db.aql.execute(query, bind_vars=bind_vars)
 

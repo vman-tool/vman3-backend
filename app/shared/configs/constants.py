@@ -9,7 +9,6 @@ class db_collections():
     USERS: str = 'users'
     USER_TOKENS: str = 'user_tokens'
     ROLES: str = 'role'
-    PRIVILEGES: str = 'privilege'
     USER_ROLES: str = 'user_role'
     ICD10_CATEGORY: str = 'icd10_category'
     ICD10: str = 'icd10'
@@ -22,7 +21,21 @@ class db_collections():
     CCVA_RESULTS: str = 'ccva_results'
     CCVA_GRAPH_RESULTS: str = 'ccva_graph_results'
     CCVA_ERRORS:str = 'ccva_errors'
-    
+
+
+class AccessPrivileges():
+    """
+    Access privileges for different entities
+    """
+    PCVA_MODULE_ACCESS: str = 'PCVA_VIEW'
+    PCVA_CREATE_ICD10_CODES: str = 'PCVA_CREATE_ICD10_CODES'
+    PCVA_VIEW_ICD10_CODES: str = 'PCVA_VIEW_ICD10_CODES'
+    PCVA_UPDATE_ICD10_CODES: str = 'PCVA_UPDATE_ICD10_CODES'
+    PCVA_DELETE_ICD10_CODES: str = 'PCVA_DELETE_ICD10_CODES'
+    PCVA_CREATE_ICD10_CATEGORIES: str = 'PCVA_CREATE_ICD10_CATEGORIES'
+    PCVA_VIEW_ICD10_CATEGORIES: str = 'PCVA_VIEW_ICD10_CATEGORIES'
+    PCVA_UPDATE_ICD10_CATEGORIES: str = 'PCVUPDATETE_ICD10_CATEGORIES'
+    PCVA_DELETE_ICD10_CATEGORIES: str = 'PCVDELETETE_ICD10_CATEGORIES'
     
     
 collections_with_indexes = {
@@ -38,7 +51,6 @@ collections_with_indexes = {
     ],
     db_collections.USERS: [],
     db_collections.ROLES: [],
-    db_collections.PRIVILEGES: [],
     db_collections.USER_ROLES: [],
     db_collections.USER_TOKENS: [],
     db_collections.USER_ROLES: [],
