@@ -8,7 +8,9 @@ class db_collections():
     VA_QUESTIONS: str = 'form_questions'
     USERS: str = 'users'
     USER_TOKENS: str = 'user_tokens'
-    USER_ROLES: str = 'role'
+    ROLES: str = 'role'
+    PRIVILEGES: str = 'privilege'
+    USER_ROLES: str = 'user_role'
     ICD10_CATEGORY: str = 'icd10_category'
     ICD10: str = 'icd10'
     ASSIGNED_VA: str = 'assigned_va'
@@ -35,6 +37,9 @@ collections_with_indexes = {
         {"fields": ["id10007"], "unique": False, "type": "persistent", "name": "idx_interviewer"}
     ],
     db_collections.USERS: [],
+    db_collections.ROLES: [],
+    db_collections.PRIVILEGES: [],
+    db_collections.USER_ROLES: [],
     db_collections.USER_TOKENS: [],
     db_collections.USER_ROLES: [],
     db_collections.ICD10_CATEGORY: [],
@@ -51,5 +56,5 @@ collections_with_indexes = {
     db_collections.CCVA_GRAPH_RESULTS: [
         
     ],
-    db_collections.CCVA_ERRORS: []
+    db_collections.CCVA_ERRORS: [],
 }
