@@ -9,7 +9,7 @@ from fastapi import BackgroundTasks, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
 from pydantic import BaseModel
 
-from app.shared.configs.constants import db_collections
+from app.shared.configs.constants import AccessPrivileges, db_collections
 from app.shared.configs.models import BaseResponseModel, Pager, ResponseMainModel
 from app.shared.configs.security import (
     generate_token,
@@ -22,6 +22,7 @@ from app.shared.configs.security import (
     verify_password,
 )
 from app.shared.configs.settings import get_settings
+from app.shared.utils.database_utilities import replace_object_values
 from app.shared.utils.response import populate_user_fields
 from app.users.models.role import Role
 from app.users.models.user import User, UserToken
@@ -32,6 +33,7 @@ from app.users.services.email import (
     send_password_reset_email,
 )
 from app.users.utils.string import unique_string
+from app.utilits.data_validation import validate_privileges
 
 settings = get_settings()
 
@@ -321,12 +323,30 @@ async def fetch_roles(paging: bool = None, page_number: int = None, limit: int =
         return ResponseMainModel(data = roles, message = "Role fetched successfully!", total = roles_count ,pager = Pager(page = page_number, limit=limit))
     except:
         raise HTTPException(status_code=400, detail="Roles not found.")
-    
-async def create_role(data: RoleRequest = None, current_user: User = None, db: StandardDatabase = None):
+
+async def save_role(data: RoleRequest = None, current_user: User = None, db: StandardDatabase = None):
     try:
-        role_json = data.model_dump()
-        role_json['created_by'] = current_user['uuid']
-        role = await Role(**role_json).save(db=db)
-        return ResponseMainModel(data = await populate_user_fields(data = role, db = db), message = "Role created successfully")
-    except:
-        raise HTTPException(status_code=400, detail="Failed to create role.")
+        if validate_privileges(data.privileges):
+            filters = { "or_conditions": [
+                {"uuid": data.uuid}, 
+                {"name": data.name}
+            ]}
+            existing_role = await Role.get_many(filters = filters, db=db)
+            if len(existing_role) == 1:
+                existing_role = existing_role[0]
+                role_json = replace_object_values(data.model_dump(), existing_role)
+                print(role_json)
+                role = await Role(**role_json).update(updated_by = current_user['uuid'], db=db)
+                message = "Role updated successfully."
+            elif len(existing_role) > 1:
+                raise HTTPException(status_code=400, detail="Multiple roles found with the same name or UUID.")
+            else:
+                role_json = data.model_dump()
+                role_json['created_by'] = current_user['uuid']
+                role = await Role(**role_json).save(db=db)
+                message = "Role created successfully"
+            return ResponseMainModel(data = await populate_user_fields(data = role, db = db), message=message)
+        else:
+            raise HTTPException(status_code=400, detail="Invalid privileges have been defined.")
+    except Exception as e:
+        raise e
