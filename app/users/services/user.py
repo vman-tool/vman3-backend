@@ -2,6 +2,7 @@
 
 import logging
 from datetime import datetime, timedelta
+from typing import Dict
 
 from arango.database import StandardDatabase
 from fastapi import BackgroundTasks, HTTPException, status
@@ -9,6 +10,7 @@ from fastapi.security import OAuth2PasswordRequestForm
 from pydantic import BaseModel
 
 from app.shared.configs.constants import db_collections
+from app.shared.configs.models import BaseResponseModel, Pager, ResponseMainModel
 from app.shared.configs.security import (
     generate_token,
     get_token_payload,
@@ -20,9 +22,11 @@ from app.shared.configs.security import (
     verify_password,
 )
 from app.shared.configs.settings import get_settings
+from app.shared.utils.response import populate_user_fields
+from app.users.models.role import Role
 from app.users.models.user import User, UserToken
 from app.users.responses.user import UserResponse
-from app.users.schemas.user import RegisterUserRequest, VerifyUserRequest
+from app.users.schemas.user import RegisterUserRequest, RoleRequest, VerifyUserRequest
 from app.users.services.email import (
     send_account_activation_confirmation_email,
     send_password_reset_email,
@@ -309,3 +313,20 @@ async def fetch_users(paging: bool= None, page_number: int = None, limit: int = 
 # async def get_user_detail(pk: str, db = Depends(get_arangodb_session)):
 #     user = await fetch_user_detail(pk, db)
 #     return user
+
+async def fetch_roles(paging: bool = None, page_number: int = None, limit: int = None, filters: Dict = None, db: StandardDatabase = None):
+    try:
+        roles = await Role.get_many(paging = paging, page_number = page_number, limit = limit, filters=filters, db=db)
+        roles_count = await Role.count(filters=filters, db=db)
+        return ResponseMainModel(data = roles, message = "Role fetched successfully!", total = roles_count ,pager = Pager(page = page_number, limit=limit))
+    except:
+        raise HTTPException(status_code=400, detail="Roles not found.")
+    
+async def create_role(data: RoleRequest = None, current_user: User = None, db: StandardDatabase = None):
+    try:
+        role_json = data.model_dump()
+        role_json['created_by'] = current_user['uuid']
+        role = await Role(**role_json).save(db=db)
+        return ResponseMainModel(data = await populate_user_fields(data = role, db = db), message = "Role created successfully")
+    except:
+        raise HTTPException(status_code=400, detail="Failed to create role.")

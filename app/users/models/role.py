@@ -11,13 +11,6 @@ class Role(VManBaseModel):
     def get_collection_name(cls) -> str:
         return db_collections.ROLES
 
-class Privilege(VManBaseModel):
-    name: str
-
-    @classmethod
-    def get_collection_name(cls) -> str:
-        return db_collections.PRIVILEGES
-
 class UserRole(VManBaseModel):
     user: str
     role: str

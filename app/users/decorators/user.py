@@ -15,7 +15,6 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login")
 async def get_current_user(token: str = Depends(oauth2_scheme), db = Depends(get_arangodb_session)):
  
     user = await get_token_user(token=token, db=db)
-    # print(user)
     if user is  not None:
         return user
     raise HTTPException(status_code=401, detail="Not authorised..")    
