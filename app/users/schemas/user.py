@@ -25,6 +25,7 @@ class ResetRequest(BaseModel):
     password: str
 
 class RoleRequest(BaseModel):
+    uuid: Union[str, None] = None
     name: str
     privileges: Union[List[str], None] = None
     
