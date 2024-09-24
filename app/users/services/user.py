@@ -2,7 +2,7 @@
 
 import logging
 from datetime import datetime, timedelta
-from typing import Dict
+from typing import Dict, List
 
 from arango.database import StandardDatabase
 from fastapi import BackgroundTasks, HTTPException, status
@@ -26,7 +26,7 @@ from app.shared.utils.database_utilities import replace_object_values
 from app.shared.utils.response import populate_user_fields
 from app.users.models.role import Role
 from app.users.models.user import User, UserToken
-from app.users.responses.user import UserResponse
+from app.users.responses.user import RoleResponse, UserResponse
 from app.users.schemas.user import RegisterUserRequest, RoleRequest, VerifyUserRequest
 from app.users.services.email import (
     send_account_activation_confirmation_email,
@@ -316,11 +316,14 @@ async def fetch_users(paging: bool= None, page_number: int = None, limit: int = 
 #     user = await fetch_user_detail(pk, db)
 #     return user
 
-async def fetch_roles(paging: bool = None, page_number: int = None, limit: int = None, filters: Dict = None, db: StandardDatabase = None):
+async def fetch_roles(paging: bool = None, page_number: int = None, limit: int = None, filters: Dict = None, include_deleted: bool = False, db: StandardDatabase = None):
     try:
-        roles = await Role.get_many(paging = paging, page_number = page_number, limit = limit, filters=filters, db=db)
+        roles = await Role.get_many(paging = paging, page_number = page_number, limit = limit, filters=filters, include_deleted=include_deleted, db=db)
+        formarted_roles = []
+        for role in roles:
+            formarted_roles.append(await RoleResponse.get_structured_role(role = role, db=db))
         roles_count = await Role.count(filters=filters, db=db)
-        return ResponseMainModel(data = roles, message = "Role fetched successfully!", total = roles_count ,pager = Pager(page = page_number, limit=limit))
+        return ResponseMainModel(data = formarted_roles, message = "Role fetched successfully!", total = roles_count ,pager = Pager(page = page_number, limit=limit))
     except:
         raise HTTPException(status_code=400, detail="Roles not found.")
 
@@ -345,8 +348,15 @@ async def save_role(data: RoleRequest = None, current_user: User = None, db: Sta
                 role_json['created_by'] = current_user['uuid']
                 role = await Role(**role_json).save(db=db)
                 message = "Role created successfully"
-            return ResponseMainModel(data = await populate_user_fields(data = role, db = db), message=message)
+            return ResponseMainModel(data = await RoleResponse.get_structured_role(role = role, db=db), message=message)
         else:
             raise HTTPException(status_code=400, detail="Invalid privileges have been defined.")
+    except Exception as e:
+        raise e
+
+async def delete_role(data: List[str] = [], current_user: User = None, db: StandardDatabase = None):
+    try:
+        for role in data:
+            await Role.delete(doc_uuid=role, deleted_by = current_user['uuid'], db=db)            
     except Exception as e:
         raise e
