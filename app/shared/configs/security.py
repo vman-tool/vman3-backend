@@ -124,16 +124,3 @@ async def load_user(email: str, db:StandardDatabase):
 #     raise HTTPException(status_code=401, detail="Not authorised.")    
 
 from fastapi import Depends, HTTPException, status
-
-def get_current_user_privileges(user_role: str):
-    
-    return AccessPrivileges.get(user_role, set())
-
-def check_privilege(required_privilege: str):
-    def dependency(user_role: str = Depends(get_current_user_privileges)):
-        if required_privilege not in user_role:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="You do not have permission to perform this action."
-            )
-    return dependency
