@@ -198,7 +198,7 @@ class VManBaseModel(BaseModel):
         return collection.update({'_key': original_doc['_key'], **original_doc}, return_new=True)["new"]
 
     @classmethod
-    async def delete(cls, doc_id: str = None, doc_uuid: str = None, deleted_by: str = None, db: StandardDatabase = None):
+    async def delete(cls, doc_id: str = None, doc_uuid: str = None, deleted_by: str = None, hard_delete: bool = False, db: StandardDatabase = None):
         """
         Delete the record with the provided id or uuid and user uuid.
 
@@ -206,7 +206,6 @@ class VManBaseModel(BaseModel):
         :param doc_uuid: The UUID of the record to delete.
         :param deleted_by: The user UUID deleting the record.
         """
-        # TODO: Include hard deletion logics so that the method allows both soft and hard deletion
         cls.init_collection(db)
         collection = db.collection(cls.get_collection_name())
 
@@ -220,7 +219,9 @@ class VManBaseModel(BaseModel):
             bind_vars = {'uuid': doc_uuid}
             cursor = db.aql.execute(query, bind_vars=bind_vars)
             doc = cursor.next()
-
+        if hard_delete:
+            return collection.delete(doc, silent=True)
+        doc["is_deleted"] = True
         doc["deleted_by"] = deleted_by
         doc["deleted_at"] = datetime.now().isoformat()
         

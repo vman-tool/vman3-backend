@@ -114,13 +114,24 @@ async def get_roles(
         raise e
 
 @user_router.post("/roles", status_code=status.HTTP_200_OK, response_model=ResponseMainModel | Any, description="Include uuid or the same name to update any role. Make sure to include all privileges during update as they are being replaced completely")
-async def get_roles(
+async def create_or_update_roles(
         data: RoleRequest,
         current_user = Depends(get_current_user), 
         session = Depends(get_arangodb_session)
     ):
     try:
         return await user.save_role(data = data, current_user = current_user, db=session)
+    except HTTPException as e:
+        raise e
+
+@user_router.delete("/roles", status_code=status.HTTP_200_OK, response_model=ResponseMainModel | Any, description="Include uuid or the same name to update any role. Make sure to include all privileges during update as they are being replaced completely")
+async def delete_roles(
+        data: List[str],
+        current_user = Depends(get_current_user), 
+        session = Depends(get_arangodb_session)
+    ):
+    try:
+        return await user.delete_role(data = data, current_user = current_user, db=session)
     except HTTPException as e:
         raise e
 
