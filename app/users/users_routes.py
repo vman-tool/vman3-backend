@@ -1,6 +1,6 @@
 
 from fastapi import HTTPException
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union
 from arango.database import StandardDatabase
 from fastapi import APIRouter, BackgroundTasks, Depends, Header, Query, status
 from fastapi.responses import JSONResponse
@@ -11,7 +11,7 @@ from app.shared.configs.arangodb import ArangoDBClient, get_arangodb_session
 from app.shared.configs.models import ResponseMainModel
 from app.users.decorators.user import get_current_user, oauth2_scheme
 from app.users.responses.user import LoginResponse, UserResponse
-from app.users.schemas.user import (EmailRequest, RegisterUserRequest,
+from app.users.schemas.user import (AssignRolesRequest, EmailRequest, RegisterUserRequest,
                                     ResetRequest, RoleRequest, VerifyUserRequest)
 from app.users.services import user
 
@@ -132,6 +132,39 @@ async def delete_roles(
     ):
     try:
         return await user.delete_role(data = data, current_user = current_user, db=session)
+    except HTTPException as e:
+        raise e
+
+@user_router.post("/assign-roles", status_code=status.HTTP_200_OK, response_model=ResponseMainModel | Any, description="Include uuid or the same name to update any role. Make sure to include all privileges during update as they are being replaced completely")
+async def assign_roles(
+        data: AssignRolesRequest,
+        current_user = Depends(get_current_user), 
+        session = Depends(get_arangodb_session)
+    ):
+    try:
+        return await user.assign_roles(data = data, current_user = current_user, db=session)
+    except HTTPException as e:
+        raise e
+
+@user_router.post("/unassign-roles", status_code=status.HTTP_200_OK, response_model=ResponseMainModel | Any, description="Include uuid or the same name to update any role. Make sure to include all privileges during update as they are being replaced completely")
+async def unassign_roles(
+        data: AssignRolesRequest,
+        current_user = Depends(get_current_user), 
+        session = Depends(get_arangodb_session)
+    ):
+    try:
+        return await user.unassign_roles(data = data, current_user = current_user, db=session)
+    except HTTPException as e:
+        raise e
+
+@user_router.get("/user-roles", status_code=status.HTTP_200_OK, response_model=ResponseMainModel | Any, description="Include uuid or the same name to update any role. Make sure to include all privileges during update as they are being replaced completely")
+async def get_user_roles(
+        user_uuid: Union[str, None] = None,
+        current_user = Depends(get_current_user), 
+        session = Depends(get_arangodb_session)
+    ):
+    try:
+        return await user.get_user_roles(user_uuid=user_uuid, current_user = current_user, db=session)
     except HTTPException as e:
         raise e
 
