@@ -10,14 +10,12 @@ from app.shared.configs.constants import db_collections
 from app.shared.utils.database_utilities import add_query_filters, replace_object_values
 
 
-T = TypeVar('T')
-
 class Pager(BaseModel):
     page: Union[int, None] = None
     limit: Union[int, None] = None
 
 class ResponseMainModel(BaseModel):
-    data: Optional[Union[Union[List[Any], List[T]], Union[Dict[str, Any],Dict[str, T]], None]] = None
+    data: Any = None
     message: str
     error: Optional[Any] = None
     total: Optional[int] = None
@@ -336,9 +334,9 @@ class BaseResponseModel(BaseModel):
     Use this class to standardize the response of your API endpoints.
     """
     uuid: str
-    created_by: Optional[ResponseUser]
-    updated_by: Optional[ResponseUser]
-    deleted_by: Optional[ResponseUser]
+    created_by: Union[ResponseUser, None] = None
+    updated_by: Union[ResponseUser, None] = None
+    deleted_by: Union[ResponseUser, None] = None
 
     @classmethod
     def get_user(cls, user_uuid: str, db: StandardDatabase) -> ResponseUser:
@@ -362,14 +360,11 @@ class BaseResponseModel(BaseModel):
         """
             Use this method to populate user fields as a standard response.
         """
-        if 'created_by' in data and data['created_by']:
-            data['created_by'] = cls.get_user(data['created_by'], db)
+        data['created_by'] = cls.get_user(data['created_by'], db) if 'created_by' in data and data['created_by'] else None
         
-        if 'updated_by' in data and data['updated_by']:
-            data['updated_by'] = cls.get_user(data['updated_by'], db)
+        data['updated_by'] = cls.get_user(data['updated_by'], db) if 'updated_by' in data and data['updated_by'] else None
         
-        if 'deleted_by' in data and data['deleted_by']:
-            data['deleted_by'] = cls.get_user(data['deleted_by'], db)
+        data['deleted_by'] = cls.get_user(data['deleted_by'], db) if 'deleted_by' in data and data['deleted_by'] else None
 
         for field in specific_fields:
             if field in data and data[field]:

@@ -28,4 +28,8 @@ class RoleRequest(BaseModel):
     uuid: Union[str, None] = None
     name: str
     privileges: Union[List[str], None] = None
+
+class AssignRolesRequest(BaseModel):
+    user: str
+    roles: Union[List[str], None] = None
     

@@ -22,12 +22,12 @@ from app.shared.configs.security import (
     verify_password,
 )
 from app.shared.configs.settings import get_settings
-from app.shared.utils.database_utilities import replace_object_values
+from app.shared.utils.database_utilities import record_exists, replace_object_values
 from app.shared.utils.response import populate_user_fields
-from app.users.models.role import Role
+from app.users.models.role import Role, UserRole
 from app.users.models.user import User, UserToken
-from app.users.responses.user import RoleResponse, UserResponse
-from app.users.schemas.user import RegisterUserRequest, RoleRequest, VerifyUserRequest
+from app.users.responses.user import RoleResponse, UserResponse, UserRolesResponse
+from app.users.schemas.user import AssignRolesRequest, RegisterUserRequest, RoleRequest, VerifyUserRequest
 from app.users.services.email import (
     send_account_activation_confirmation_email,
     send_password_reset_email,
@@ -318,14 +318,14 @@ async def fetch_users(paging: bool= None, page_number: int = None, limit: int = 
 
 async def fetch_roles(paging: bool = None, page_number: int = None, limit: int = None, filters: Dict = None, include_deleted: bool = False, db: StandardDatabase = None):
     try:
-        roles = await Role.get_many(paging = paging, page_number = page_number, limit = limit, filters=filters, include_deleted=include_deleted, db=db)
+        roles = await Role.get_many(paging = paging, page_number = page_number, limit = limit, filters=filters, db=db)
         formarted_roles = []
         for role in roles:
             formarted_roles.append(await RoleResponse.get_structured_role(role = role, db=db))
         roles_count = await Role.count(filters=filters, db=db)
         return ResponseMainModel(data = formarted_roles, message = "Role fetched successfully!", total = roles_count ,pager = Pager(page = page_number, limit=limit))
-    except:
-        raise HTTPException(status_code=400, detail="Roles not found.")
+    except Exception as e:
+        raise e
 
 async def save_role(data: RoleRequest = None, current_user: User = None, db: StandardDatabase = None):
     try:
@@ -360,3 +360,89 @@ async def delete_role(data: List[str] = [], current_user: User = None, db: Stand
             await Role.delete(doc_uuid=role, deleted_by = current_user['uuid'], db=db)            
     except Exception as e:
         raise e
+
+async def assign_roles(data: AssignRolesRequest = None, current_user: User = None, db: StandardDatabase = None):
+    try:
+        filters = {
+            "in_conditions": [
+                {'uuid': data.roles}
+            ]
+        }
+        existing_roles = await Role.get_many(filters=filters, db=db)
+        if not record_exists(db_collections.USERS, data.user):
+            raise HTTPException(status_code=404, detail="User does not exist.")
+        
+        if len(existing_roles) != len(data.roles):
+            raise HTTPException(status_code=404, detail="Some roles do not exist.")
+
+        for role in data.roles:
+            existing_user_role = await UserRole.get_many(filters={"user": data.user, "role": role}, db=db)
+            if len(existing_user_role) == 0:
+                user_role_json = {
+                    "user": data.user,
+                    "role": role,
+                    "created_by": current_user['uuid']
+                }
+                user_role = await UserRole(**user_role_json).save(db=db)
+            else:
+                continue    
+    except Exception as e:
+        raise e
+
+async def unassign_roles(data: AssignRolesRequest = None, current_user: User = None, db: StandardDatabase = None):
+    try:
+        existing_roles = await Role.get_many(filters={"in_conditions": [{'uuid': data.roles}]}, db=db)
+        if not record_exists(db_collections.USERS, data.user):
+            raise HTTPException(status_code=404, detail="User does not exist.")
+        
+        if len(existing_roles) != len(data.roles):
+            raise HTTPException(status_code=404, detail="Some roles do not exist.")
+
+        for role in data.roles:
+            existing_user_role = await UserRole.get_many(filters={"user": data.user, "role": role}, db=db)
+            if len(existing_user_role) == 1:
+                await UserRole.delete(doc_uuid=existing_user_role[0].get('uuid'), hard_delete=True, db=db)
+            else:
+                raise HTTPException(status_code=404, detail="Could not finish role unassignment due to duplicate records")
+                 
+    except Exception as e:
+        raise e
+
+async def get_user_roles(user_uuid: str  = None, current_user: User = None, db: StandardDatabase = None):
+    try:
+        if user_uuid is None:
+            user_uuid = current_user['uuid']
+        query = f"""
+            FOR user_role IN {db_collections.USER_ROLES}
+                FILTER user_role.user == @user_uuid
+                
+                LET role = (
+                    FOR r IN {db_collections.ROLES}
+                        FILTER r.uuid == user_role.role
+                        RETURN {{ uuid: r.uuid, name: r.name, privileges: r.privileges }}
+                )[0]
+                
+                COLLECT user = user_role.user INTO roleGroups
+                
+                RETURN MERGE(
+                    FIRST(roleGroups[*].user_role),
+                    {{roles: roleGroups[*].role}}
+                )
+        """
+        
+        bind_vars = {
+            "user_uuid": user_uuid
+        }
+        user_exists = await record_exists(db_collections.USERS, user_uuid, db=db)
+        if not user_exists:
+            raise HTTPException(status_code=404, detail="User does not exist.")
+        
+        user_roles = await UserRole.run_custom_query(query=query, bind_vars=bind_vars, db=db)
+        user_roles = user_roles.next()
+
+        user_roles_response = await UserRolesResponse.get_structured_user_role(user_role=user_roles, db=db)
+
+        return ResponseMainModel(data = user_roles_response, message='User Roles Fetched successfully.')
+    except Exception as e:
+        raise e
+    

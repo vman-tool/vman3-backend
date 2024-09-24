@@ -1,12 +1,12 @@
 from datetime import datetime
-from typing import List, Union
+from typing import Any, Dict, List, Union
 
 from arango import Optional
 from pydantic import BaseModel, EmailStr
 from arango.database import StandardDatabase
 
 from app.shared.configs.constants import db_collections
-from app.shared.configs.models import BaseResponseModel
+from app.shared.configs.models import BaseResponseModel, ResponseUser
 from app.shared.utils.response import populate_user_fields
 from app.users.responses.base import BaseResponse
 
@@ -45,5 +45,37 @@ class RoleResponse(BaseResponseModel):
             bind_vars = {'role_uuid': role_uuid}
             cursor = db.aql.execute(query, bind_vars=bind_vars)
             role = cursor.next()
-        populated_role_data = await populate_user_fields(role, db=db)
+        populated_role_data = await populate_user_fields(data = role, db=db)
+        return cls(**populated_role_data)
+
+class UserRolesResponse(BaseResponseModel):
+    user: ResponseUser
+    roles: Union[List[Dict], None] = None
+
+    @classmethod
+    async def get_structured_user_role(cls, user_role_uuid = None, user_role = None, db: StandardDatabase = None):
+        user_role = user_role
+        if not user_role:
+            query = f"""
+            FOR user_role IN {db_collections.USER_ROLES}
+                FILTER user_role.uuid == @user_role_uuid
+                
+                LET role = (
+                    FOR r IN {db_collections.ROLES}
+                        FILTER r.uuid == user_role.role
+                        RETURN {{ uuid: r.uuid, name: r.name, privileges: r.privileges }}
+                )[0]
+                
+                COLLECT user = user_role.user INTO roleGroups
+                
+                RETURN MERGE(
+                    FIRST(roleGroups[*].user_role),
+                    {{roles: roleGroups[*].role}}
+                )
+            """
+            bind_vars = {'user_role_uuid': user_role_uuid}
+            cursor = db.aql.execute(query, bind_vars=bind_vars)
+            user_role = cursor.next()
+        user_role.pop("role", None)
+        populated_role_data = await populate_user_fields(data = user_role, specific_fields=['user'], db=db)
         return cls(**populated_role_data)
