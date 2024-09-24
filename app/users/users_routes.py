@@ -9,7 +9,7 @@ from fastapi.security import OAuth2PasswordRequestForm
 # from sqlalchemy.orm import Session
 from app.shared.configs.arangodb import ArangoDBClient, get_arangodb_session
 from app.shared.configs.models import ResponseMainModel
-from app.users.decorators.user import get_current_user, oauth2_scheme
+from app.users.decorators.user import check_privileges, get_current_user, oauth2_scheme
 from app.users.responses.user import LoginResponse, UserResponse
 from app.users.schemas.user import (AssignRolesRequest, EmailRequest, RegisterUserRequest,
                                     ResetRequest, RoleRequest, VerifyUserRequest)
@@ -99,6 +99,7 @@ async def get_roles(
         page_number: Optional[int] = Query(1, alias="page_number"),
         limit: Optional[int] = Query(10, alias="limit"), 
         current_user = Depends(get_current_user), 
+        required_privs: List[str] = Depends(check_privileges([])),
         session = Depends(get_arangodb_session)
     ):
 
@@ -158,7 +159,7 @@ async def unassign_roles(
         raise e
 
 @user_router.get("/user-roles", status_code=status.HTTP_200_OK, response_model=ResponseMainModel | Any, description="Include uuid or the same name to update any role. Make sure to include all privileges during update as they are being replaced completely")
-async def get_user_roles(
+async def get_users_roles(
         user_uuid: Union[str, None] = None,
         current_user = Depends(get_current_user), 
         session = Depends(get_arangodb_session)
