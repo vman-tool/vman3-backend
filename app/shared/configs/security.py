@@ -122,5 +122,3 @@ async def load_user(email: str, db:StandardDatabase):
 #     if user:
 #         return user
 #     raise HTTPException(status_code=401, detail="Not authorised.")    
-
-from fastapi import Depends, HTTPException, status
