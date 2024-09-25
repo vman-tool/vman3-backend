@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime
-from http.client import HTTPException
+from fastapi import HTTPException
 from typing import Any, Dict, List, Optional, TypeVar, Union
 
 from arango.database import StandardDatabase
@@ -10,16 +10,14 @@ from app.shared.configs.constants import db_collections
 from app.shared.utils.database_utilities import add_query_filters, replace_object_values
 
 
-T = TypeVar('T')
-
 class Pager(BaseModel):
     page: Union[int, None] = None
     limit: Union[int, None] = None
 
 class ResponseMainModel(BaseModel):
-    data: Optional[Union[Union[List[Any], List[T]], Union[Dict[str, Any],Dict[str, T]], None]] = None
+    data: Any = None
     message: str
-    error: Optional[str] = None
+    error: Optional[Any] = None
     total: Optional[int] = None
     pager: Optional[Pager]= None
     
@@ -97,7 +95,7 @@ class VManBaseModel(BaseModel):
             cursor = db.aql.execute(query, bind_vars=bind_vars)
             doc = cursor.next()
         if not doc:
-            raise HTTPException(status_code=404, detail="Record not found")
+            raise HTTPException(status_code=404, detail=f"{cls.__name__} not found")
         return doc
    
     @classmethod
@@ -162,7 +160,7 @@ class VManBaseModel(BaseModel):
         if aql_filters:
             query += " FILTER " + " AND ".join(aql_filters)
 
-        query += "RETURN 1)"
+        query += " RETURN 1)"
         
         cursor = db.aql.execute(query, bind_vars=bind_vars)
 
@@ -198,7 +196,7 @@ class VManBaseModel(BaseModel):
         return collection.update({'_key': original_doc['_key'], **original_doc}, return_new=True)["new"]
 
     @classmethod
-    async def delete(cls, doc_id: str = None, doc_uuid: str = None, deleted_by: str = None, db: StandardDatabase = None):
+    async def delete(cls, doc_id: str = None, doc_uuid: str = None, deleted_by: str = None, hard_delete: bool = False, db: StandardDatabase = None):
         """
         Delete the record with the provided id or uuid and user uuid.
 
@@ -206,7 +204,6 @@ class VManBaseModel(BaseModel):
         :param doc_uuid: The UUID of the record to delete.
         :param deleted_by: The user UUID deleting the record.
         """
-        # TODO: Include hard deletion logics so that the method allows both soft and hard deletion
         cls.init_collection(db)
         collection = db.collection(cls.get_collection_name())
 
@@ -220,7 +217,9 @@ class VManBaseModel(BaseModel):
             bind_vars = {'uuid': doc_uuid}
             cursor = db.aql.execute(query, bind_vars=bind_vars)
             doc = cursor.next()
-
+        if hard_delete:
+            return collection.delete(doc, silent=True)
+        doc["is_deleted"] = True
         doc["deleted_by"] = deleted_by
         doc["deleted_at"] = datetime.now().isoformat()
         
@@ -335,9 +334,9 @@ class BaseResponseModel(BaseModel):
     Use this class to standardize the response of your API endpoints.
     """
     uuid: str
-    created_by: Optional[ResponseUser]
-    updated_by: Optional[ResponseUser]
-    deleted_by: Optional[ResponseUser]
+    created_by: Union[ResponseUser, None] = None
+    updated_by: Union[ResponseUser, None] = None
+    deleted_by: Union[ResponseUser, None] = None
 
     @classmethod
     def get_user(cls, user_uuid: str, db: StandardDatabase) -> ResponseUser:
@@ -361,14 +360,11 @@ class BaseResponseModel(BaseModel):
         """
             Use this method to populate user fields as a standard response.
         """
-        if 'created_by' in data and data['created_by']:
-            data['created_by'] = cls.get_user(data['created_by'], db)
+        data['created_by'] = cls.get_user(data['created_by'], db) if 'created_by' in data and data['created_by'] else None
         
-        if 'updated_by' in data and data['updated_by']:
-            data['updated_by'] = cls.get_user(data['updated_by'], db)
+        data['updated_by'] = cls.get_user(data['updated_by'], db) if 'updated_by' in data and data['updated_by'] else None
         
-        if 'deleted_by' in data and data['deleted_by']:
-            data['deleted_by'] = cls.get_user(data['deleted_by'], db)
+        data['deleted_by'] = cls.get_user(data['deleted_by'], db) if 'deleted_by' in data and data['deleted_by'] else None
 
         for field in specific_fields:
             if field in data and data[field]:
