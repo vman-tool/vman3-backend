@@ -1,4 +1,4 @@
-
+from functools import lru_cache
 
 class db_collections():
     """
@@ -58,8 +58,10 @@ collections_with_indexes = {
 
 class AccessPrivileges():
     """
-    Access privileges for different entities
+        Access privileges for different entities
     """
+
+    # PCVA Privileges
     PCVA_MODULE_ACCESS: str = 'PCVA_MODULE_VIEW'
     PCVA_CREATE_ICD10_CODES: str = 'PCVA_CREATE_ICD10_CODES'
     PCVA_VIEW_ICD10_CODES: str = 'PCVA_VIEW_ICD10_CODES'
@@ -69,4 +71,11 @@ class AccessPrivileges():
     PCVA_VIEW_ICD10_CATEGORIES: str = 'PCVA_VIEW_ICD10_CATEGORIES'
     PCVA_UPDATE_ICD10_CATEGORIES: str = 'PCVA_UPDATE_ICD10_CATEGORIES'
     PCVA_DELETE_ICD10_CATEGORIES: str = 'PCVA_DELETE_ICD10_CATEGORIES'
+
+    @classmethod
+    @lru_cache(maxsize=None)
+    def get_privileges(cls, search_term: str = None):
+        if search_term:
+            return [value for name, value in vars(cls).items() if isinstance(value, str) and not name.startswith("__") and search_term.lower() in value.lower()]
+        return [value for name, value in vars(cls).items() if isinstance(value, str) and not name.startswith("__")]
  

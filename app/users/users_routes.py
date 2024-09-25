@@ -8,6 +8,7 @@ from fastapi.security import OAuth2PasswordRequestForm
 
 # from sqlalchemy.orm import Session
 from app.shared.configs.arangodb import ArangoDBClient, get_arangodb_session
+from app.shared.configs.constants import AccessPrivileges
 from app.shared.configs.models import ResponseMainModel
 from app.users.decorators.user import check_privileges, get_current_user, oauth2_scheme
 from app.users.responses.user import LoginResponse, UserResponse
@@ -92,6 +93,19 @@ async def get_users(
         limit=limit, 
         db=session
     )
+
+@user_router.get("/privileges", status_code=status.HTTP_200_OK, response_model=ResponseMainModel | Any)
+async def get_roles(
+        privilege: Optional[str] = Query(None, alias="privilege"),
+        current_user = Depends(get_current_user),
+        required_privs: List[str] = Depends(check_privileges([])),
+        session = Depends(get_arangodb_session)
+    ):
+
+    try:
+        return ResponseMainModel(data=AccessPrivileges.get_privileges(privilege), message="Privileges fetched successfully")
+    except HTTPException as e:
+        raise e
 
 @user_router.get("/roles", status_code=status.HTTP_200_OK, response_model=ResponseMainModel | Any)
 async def get_roles(
