@@ -74,8 +74,14 @@ class AccessPrivileges():
 
     @classmethod
     @lru_cache(maxsize=None)
-    def get_privileges(cls, search_term: str = None):
+    def get_privileges(cls, search_term: str=None, exact: bool=False):
+        """
+            Get all privileges or filter based on search term and exact match flag.
+            :param search_term: Search term for filtering privileges.
+            :param exact: Flag to specify exact match or partial search.
+            :return: List of privileges.
+        """
         if search_term:
-            return [value for name, value in vars(cls).items() if isinstance(value, str) and not name.startswith("__") and search_term.lower() in value.lower()]
+            return [value for name, value in vars(cls).items() if isinstance(value, str) and not name.startswith("__") and (search_term == value if exact else search_term.lower() in value.lower())]
         return [value for name, value in vars(cls).items() if isinstance(value, str) and not name.startswith("__")]
  

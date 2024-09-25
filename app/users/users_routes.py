@@ -95,15 +95,16 @@ async def get_users(
     )
 
 @user_router.get("/privileges", status_code=status.HTTP_200_OK, response_model=ResponseMainModel | Any)
-async def get_roles(
+async def get_privileges(
         privilege: Optional[str] = Query(None, alias="privilege"),
+        exact: Optional[bool] = Query(False, alias="exact"),
         current_user = Depends(get_current_user),
         required_privs: List[str] = Depends(check_privileges([])),
         session = Depends(get_arangodb_session)
     ):
 
     try:
-        return ResponseMainModel(data=AccessPrivileges.get_privileges(privilege), message="Privileges fetched successfully")
+        return ResponseMainModel(data=AccessPrivileges.get_privileges(privilege, exact), message="Privileges fetched successfully")
     except HTTPException as e:
         raise e
 
