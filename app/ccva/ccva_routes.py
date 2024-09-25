@@ -1,4 +1,3 @@
-
 import uuid
 
 from arango.database import StandardDatabase

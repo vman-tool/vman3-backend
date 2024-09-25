@@ -165,10 +165,11 @@ def add_query_filters(filters: Dict = None, bind_vars: Dict = None, document_nam
 
     if in_conditions:
         in_clauses = []
-        for field, values in in_conditions.items():
-            bind_var_key = f"{field}_in_values"
-            in_clauses.append(f"{document_name}.{field} IN @{bind_var_key}")
-            bind_vars[bind_var_key] = values
-        aql_filters.append(" AND ".join(in_clauses))
+        for condition in in_conditions:
+            for field, values in condition.items():
+                bind_var_key = f"{field}_in_values"
+                in_clauses.append(f"{document_name}.{field} IN @{bind_var_key}")
+                bind_vars[bind_var_key] = values
+            aql_filters.append(" AND ".join(in_clauses))
 
     return aql_filters, bind_vars
