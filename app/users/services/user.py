@@ -269,21 +269,29 @@ async def fetch_users(paging: bool= None, page_number: int = None, limit: int = 
         db=db
     )
 
+    total_users = await User.count(db=db)
+    user_data = [
+                UserResponse(
+                    uuid=user["uuid"],
+                    id=user["_key"],
+                    name=user["name"],
+                    email=user["email"],
+                    is_active=user["is_active"],
+                    created_at=user.get("created_at")
+                ) for user in users
+            ]
     
     if users:
-        return {
-            "page_number": page_number,
-            "limit": limit,
-            "data": [UserResponse(
-                uuid=user["uuid"],
-                id=user["_key"],
-                name=user["name"],
-                email=user["email"],
-                is_active=user["is_active"],
-                created_at=user.get("created_at")
-                ) for user in users]
-        }
-    raise HTTPException(status_code=400, detail="Users does not exist.")
+        return ResponseMainModel(
+                data=user_data, 
+                message="Users fetched successfully",
+                total= total_users,
+                pager=Pager(
+                    page=page_number,
+                    limit=limit
+                )
+            )
+    raise HTTPException(status_code=400, detail="Users not found.")
 
 # async def fetch_user_detail(pk: str, db: StandardDatabase):
 #     loop = asyncio.get_event_loop()
