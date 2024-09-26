@@ -79,7 +79,7 @@ async def fetch_user(user = Depends(get_current_user)):
 async def get_user_info(uuid, session = Depends(get_arangodb_session)):
     return await user.fetch_user_detail(uuid, session)
 
-@auth_router.get("", status_code=status.HTTP_200_OK, response_model=List[UserResponse] | Dict)
+@auth_router.get("", status_code=status.HTTP_200_OK, response_model=ResponseMainModel)
 async def get_users(
         paging: Optional[str] = Query(None, alias="paging"),
         page_number: Optional[int] = Query(1, alias="page_number"),
