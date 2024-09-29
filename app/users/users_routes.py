@@ -140,7 +140,7 @@ async def create_or_update_roles(
     except HTTPException as e:
         raise e
 
-@user_router.delete("/roles", status_code=status.HTTP_200_OK, response_model=ResponseMainModel | Any, description="Include uuid or the same name to update any role. Make sure to include all privileges during update as they are being replaced completely")
+@user_router.delete("/roles", status_code=status.HTTP_200_OK, response_model=ResponseMainModel | Any, description="Submit list of role uuids")
 async def delete_roles(
         data: List[str],
         current_user = Depends(get_current_user), 
@@ -151,7 +151,7 @@ async def delete_roles(
     except HTTPException as e:
         raise e
 
-@user_router.post("/assign-roles", status_code=status.HTTP_200_OK, response_model=ResponseMainModel | Any, description="Include uuid or the same name to update any role. Make sure to include all privileges during update as they are being replaced completely")
+@user_router.post("/assign-roles", status_code=status.HTTP_200_OK, response_model=ResponseMainModel | Any, description="Use uuid's for user as well as roles, roles not included in roles list will be automatically unsassigned")
 async def assign_roles(
         data: AssignRolesRequest,
         current_user = Depends(get_current_user), 
@@ -162,7 +162,7 @@ async def assign_roles(
     except HTTPException as e:
         raise e
 
-@user_router.post("/unassign-roles", status_code=status.HTTP_200_OK, response_model=ResponseMainModel | Any, description="Include uuid or the same name to update any role. Make sure to include all privileges during update as they are being replaced completely")
+@user_router.post("/unassign-roles", status_code=status.HTTP_200_OK, response_model=ResponseMainModel | Any, description="Use uuid's for user as well as roles")
 async def unassign_roles(
         data: AssignRolesRequest,
         current_user = Depends(get_current_user), 
@@ -173,7 +173,7 @@ async def unassign_roles(
     except HTTPException as e:
         raise e
 
-@user_router.get("/user-roles", status_code=status.HTTP_200_OK, response_model=ResponseMainModel | Any, description="Include uuid or the same name to update any role. Make sure to include all privileges during update as they are being replaced completely")
+@user_router.get("/user-roles", status_code=status.HTTP_200_OK, response_model=ResponseMainModel | Any, description="provide user uuid if you wish to get specific user roles otherwise, current user is used by default")
 async def get_users_roles(
         user_uuid: Union[str, None] = None,
         current_user = Depends(get_current_user), 

@@ -9,7 +9,7 @@ class db_collections():
     USERS: str = 'users'
     USER_TOKENS: str = 'user_tokens'
     ROLES: str = 'role'
-    USER_ROLES: str = 'user_role'
+    USER_ROLES: str = 'user_roles'
     ICD10_CATEGORY: str = 'icd10_category'
     ICD10: str = 'icd10'
     ASSIGNED_VA: str = 'assigned_va'
