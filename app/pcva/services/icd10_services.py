@@ -1,4 +1,4 @@
-from typing import List
+from typing import Dict, List
 from arango import ArangoError
 from arango.database import StandardDatabase
 from fastapi import HTTPException
@@ -6,6 +6,7 @@ from fastapi import HTTPException
 from app.pcva.models.pcva_models import ICD10, ICD10Category
 from app.pcva.responses.icd10_response_classes import ICD10CategoryResponseClass, ICD10ResponseClass
 from app.shared.configs.constants import db_collections
+from app.shared.configs.models import Pager, ResponseMainModel
 from app.users.models.user import User
 from app.shared.utils.database_utilities import replace_object_values
 
@@ -18,11 +19,11 @@ async def create_icd10_categories_service(categories, user, db: StandardDatabase
             saved_category = await ICD10Category(**category).save(db)
             created_category = ICD10CategoryResponseClass.get_structured_category(icd10_category = saved_category, db = db)
             created_categories.append(created_category)
-        return created_categories
+        return ResponseMainModel(data=created_categories, message="Categories created successfully", total=len(created_categories))
     except ArangoError as e:
         raise HTTPException(status_code=500, detail=f"Failed to create categories: {e}")
 
-async def get_icd10_categories_service(paging: bool = True,  page_number: int = 1, limit: int = 10, include_deleted: bool = None, db: StandardDatabase = None) -> List[ICD10ResponseClass]:
+async def get_icd10_categories_service(paging: bool = True,  page_number: int = 1, filters: Dict= {}, limit: int = 10, include_deleted: bool = None, db: StandardDatabase = None) -> ResponseMainModel:
     try:
         data = [
             await ICD10CategoryResponseClass.get_structured_category(icd10_category = icd10_category, db = db) 
@@ -30,19 +31,17 @@ async def get_icd10_categories_service(paging: bool = True,  page_number: int = 
                 paging = paging, 
                 page_number = page_number, 
                 limit = limit, 
+                filters=filters,
                 include_deleted = include_deleted,
                 db = db
             )]
-        return {
-            "page_number": page_number,
-            "limit": limit,
-            "data": data
-        } if paging else data
+        count_data = await ICD10Category.count(filters=filters, include_deleted=include_deleted, db=db)
+        return ResponseMainModel(data=data, total=count_data, message="ICD10 Categories fetched successfully", pager=Pager(page=page_number, limit=limit))
     except ArangoError as e:
         raise HTTPException(status_code=500, detail=f"Failed to get codes: {e}")
 
 
-async def update_icd10_categories_service(categories, user, db: StandardDatabase = None) -> List[ICD10ResponseClass]:
+async def update_icd10_categories_service(categories, user, db: StandardDatabase = None) -> ResponseMainModel:
     try:
         updated_categories = []
         for category in categories:
@@ -50,11 +49,11 @@ async def update_icd10_categories_service(categories, user, db: StandardDatabase
             saved_category = ICD10Category(**category_json).update(user['uuid'], db)
             created_category = await ICD10CategoryResponseClass.get_structured_category(icd10_category = saved_category, db = db)
             updated_categories.append(created_category)
-        return updated_categories
+        return ResponseMainModel(data=updated_categories, message="Categories updated successfully", total=len(updated_categories))
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to update categories: {e}")
 
-async def get_icd10_codes(paging: bool = True,  page_number: int = 1, limit: int = 10, include_deleted: bool = None, db: StandardDatabase = None) -> List[ICD10ResponseClass]:
+async def get_icd10_codes(paging: bool = True,  page_number: int = 1, limit: int = 10, filters: Dict= None, include_deleted: bool = None, db: StandardDatabase = None) -> List[ICD10ResponseClass]:
     try:
         data = [
             await ICD10ResponseClass.get_structured_code(icd10_code = icd10_code, db = db) 
@@ -62,18 +61,16 @@ async def get_icd10_codes(paging: bool = True,  page_number: int = 1, limit: int
                 paging = paging, 
                 page_number = page_number, 
                 limit = limit, 
+                filters = filters,
                 include_deleted = include_deleted,
                 db = db
             )]
-        return {
-            "page_number": page_number,
-            "limit": limit,
-            "data": data
-        } if paging else data
+        count_data = await ICD10.count(filters=filters, include_deleted=include_deleted, db=db)
+        return ResponseMainModel(data=data, total=count_data, message="ICD10 fetched successfully", pager=Pager(page=page_number, limit=limit))
     except ArangoError as e:
         raise HTTPException(status_code=500, detail=f"Failed to get codes: {e}")
 
-async def create_icd10_codes(codes, user, db: StandardDatabase = None) -> List[ICD10ResponseClass]:
+async def create_icd10_codes(codes, user, db: StandardDatabase = None) -> ResponseMainModel:
     try:
         created_codes = []
         for code in codes:
@@ -83,21 +80,21 @@ async def create_icd10_codes(codes, user, db: StandardDatabase = None) -> List[I
             saved_code = await ICD10(**code).save(db)
             created_code = await ICD10ResponseClass.get_structured_code(icd10_code = saved_code, db = db)
             created_codes.append(created_code)
-        return created_codes
+        return ResponseMainModel(data=created_codes, message="ICD10 Codes created successfully", total=len(created_codes))
     except ArangoError as e:
-        raise HTTPException(status_code=500, detail=f"Failed to create categories: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to create icd10 codes: {e}")
 
-async def update_icd10_codes(codes, user, db: StandardDatabase = None) -> List[ICD10ResponseClass]:
+async def update_icd10_codes(codes, user, db: StandardDatabase = None) -> ResponseMainModel:
     try:
-        created_codes = []
+        updated_codes = []
         for code in codes:
             code_json = code.model_dump()
             saved_code = ICD10(**code_json).update(user['uuid'], db)
             created_code = await ICD10ResponseClass.get_structured_code(icd10_code = saved_code, db = db)
-            created_codes.append(created_code)
-        return created_codes
+            updated_codes.append(created_code)
+        return ResponseMainModel(data=updated_codes, message="ICD10 Codes updated successfully", total=len(updated_codes))
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to update categories: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to update icd10 codes: {e}")
     
 async def create_or_icd10_codes_from_file(codes, user, db: StandardDatabase):
     try:
@@ -130,6 +127,6 @@ async def create_or_icd10_codes_from_file(codes, user, db: StandardDatabase):
                 created_codes.append(created_code)
             else:
                 raise HTTPException(status_code=400, detail="Missing 'category' field in the uploaded codes")
-        return created_codes
+        return ResponseMainModel(data=created_codes, message="Data imported successfully", total=len(created_codes))
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to create/update codes: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to import file: {e}")

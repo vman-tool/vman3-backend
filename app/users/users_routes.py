@@ -1,6 +1,6 @@
 
-from http.client import HTTPException
-from typing import Dict, List, Optional
+from fastapi import HTTPException
+from typing import Any, Dict, List, Optional, Union
 from arango.database import StandardDatabase
 from fastapi import APIRouter, BackgroundTasks, Depends, Header, Query, status
 from fastapi.responses import JSONResponse
@@ -8,10 +8,12 @@ from fastapi.security import OAuth2PasswordRequestForm
 
 # from sqlalchemy.orm import Session
 from app.shared.configs.arangodb import ArangoDBClient, get_arangodb_session
-from app.users.decorators.user import get_current_user, oauth2_scheme
+from app.shared.configs.constants import AccessPrivileges
+from app.shared.configs.models import ResponseMainModel
+from app.users.decorators.user import check_privileges, get_current_user, oauth2_scheme
 from app.users.responses.user import LoginResponse, UserResponse
-from app.users.schemas.user import (EmailRequest, RegisterUserRequest,
-                                    ResetRequest, VerifyUserRequest)
+from app.users.schemas.user import (AssignRolesRequest, EmailRequest, RegisterUserRequest,
+                                    ResetRequest, RoleRequest, VerifyUserRequest)
 from app.users.services import user
 
 user_router = APIRouter(
@@ -77,7 +79,7 @@ async def fetch_user(user = Depends(get_current_user)):
 async def get_user_info(uuid, session = Depends(get_arangodb_session)):
     return await user.fetch_user_detail(uuid, session)
 
-@auth_router.get("", status_code=status.HTTP_200_OK, response_model=List[UserResponse] | Dict)
+@auth_router.get("", status_code=status.HTTP_200_OK, response_model=ResponseMainModel)
 async def get_users(
         paging: Optional[str] = Query(None, alias="paging"),
         page_number: Optional[int] = Query(1, alias="page_number"),
@@ -92,4 +94,93 @@ async def get_users(
         db=session
     )
 
+@user_router.get("/privileges", status_code=status.HTTP_200_OK, response_model=ResponseMainModel | Any)
+async def get_privileges(
+        privilege: Optional[str] = Query(None, alias="privilege"),
+        exact: Optional[bool] = Query(False, alias="exact"),
+        current_user = Depends(get_current_user),
+        required_privs: List[str] = Depends(check_privileges([])),
+        session = Depends(get_arangodb_session)
+    ):
+
+    try:
+        return ResponseMainModel(data=AccessPrivileges.get_privileges(privilege, exact), message="Privileges fetched successfully")
+    except HTTPException as e:
+        raise e
+
+@user_router.get("/roles", status_code=status.HTTP_200_OK, response_model=ResponseMainModel | Any)
+async def get_roles(
+        paging: Optional[str] = Query(None, alias="paging"),
+        page_number: Optional[int] = Query(1, alias="page_number"),
+        limit: Optional[int] = Query(10, alias="limit"), 
+        current_user = Depends(get_current_user), 
+        required_privs: List[str] = Depends(check_privileges([])),
+        session = Depends(get_arangodb_session)
+    ):
+
+    try:
+        return await user.fetch_roles(
+            paging=paging, 
+            page_number=page_number, 
+            limit=limit,
+            filters = {},
+            db=session
+        )
+    except HTTPException as e:
+        raise e
+
+@user_router.post("/roles", status_code=status.HTTP_200_OK, response_model=ResponseMainModel | Any, description="Include uuid or the same name to update any role. Make sure to include all privileges during update as they are being replaced completely")
+async def create_or_update_roles(
+        data: RoleRequest,
+        current_user = Depends(get_current_user), 
+        session = Depends(get_arangodb_session)
+    ):
+    try:
+        return await user.save_role(data = data, current_user = current_user, db=session)
+    except HTTPException as e:
+        raise e
+
+@user_router.delete("/roles", status_code=status.HTTP_200_OK, response_model=ResponseMainModel | Any, description="Submit list of role uuids")
+async def delete_roles(
+        data: List[str],
+        current_user = Depends(get_current_user), 
+        session = Depends(get_arangodb_session)
+    ):
+    try:
+        return await user.delete_role(data = data, current_user = current_user, db=session)
+    except HTTPException as e:
+        raise e
+
+@user_router.post("/assign-roles", status_code=status.HTTP_200_OK, response_model=ResponseMainModel | Any, description="Use uuid's for user as well as roles, roles not included in roles list will be automatically unsassigned")
+async def assign_roles(
+        data: AssignRolesRequest,
+        current_user = Depends(get_current_user), 
+        session = Depends(get_arangodb_session)
+    ):
+    try:
+        return await user.assign_roles(data = data, current_user = current_user, db=session)
+    except HTTPException as e:
+        raise e
+
+@user_router.post("/unassign-roles", status_code=status.HTTP_200_OK, response_model=ResponseMainModel | Any, description="Use uuid's for user as well as roles")
+async def unassign_roles(
+        data: AssignRolesRequest,
+        current_user = Depends(get_current_user), 
+        session = Depends(get_arangodb_session)
+    ):
+    try:
+        return await user.unassign_roles(data = data, current_user = current_user, db=session)
+    except HTTPException as e:
+        raise e
+
+@user_router.get("/user-roles", status_code=status.HTTP_200_OK, response_model=ResponseMainModel | Any, description="provide user uuid if you wish to get specific user roles otherwise, current user is used by default")
+async def get_users_roles(
+        user_uuid: Union[str, None] = None,
+        current_user = Depends(get_current_user), 
+        session = Depends(get_arangodb_session)
+    ):
+    try:
+        return await user.get_user_roles(user_uuid=user_uuid, current_user = current_user, db=session)
+    except HTTPException as e:
+        raise e
 
