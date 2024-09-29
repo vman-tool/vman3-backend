@@ -42,6 +42,8 @@ async def get_current_user_privileges(current_user: User =  Depends(get_current_
     user_roles_data: ResponseMainModel = await get_user_roles(current_user = current_user, db=db)
     user_roles_data: UserRolesResponse = user_roles_data.data 
     privileges = []
+    if type(user_roles_data) is list:
+        return privileges
     for role in user_roles_data.roles:
         privileges.extend(role.get("privileges", ""))
     return privileges
