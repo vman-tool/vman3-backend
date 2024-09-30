@@ -89,7 +89,7 @@ async def fetch_odk_data_with_async(
                     data = await odk_client.getFormSubmissions(top=top, skip=skip, start_date=start_date, end_date=end_date, order_by='__system/submissionDate', order_direction='asc')
                     if isinstance(data, str):
                         logger.error(f"Error fetching data: {data}")
-                        raise e
+                        raise HTTPException(status_code=500, detail=data)
                     df = pd.json_normalize(data['value'], sep='/')
                     df.columns = [col.split('/')[-1] for col in df.columns]
                     
@@ -203,6 +203,7 @@ async def fetch_form_questions(db: StandardDatabase):
 
             return ResponseMainModel(data=[], message="Questions fetched successfully", total=count)
     except Exception as e:
+        print(e)
         raise e
 
 async def insert_data_to_arangodb(data: dict):
