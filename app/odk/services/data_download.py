@@ -210,6 +210,7 @@ async def fetch_form_questions(db: StandardDatabase):
             questions = { question['name']: question for question in questions} if len(questions) else []
             return ResponseMainModel(data=questions, message="Questions fetched successfully", total=count)
     except Exception as e:
+        print(e)
         raise e
 
 async def insert_data_to_arangodb(data: dict):
