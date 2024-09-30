@@ -53,18 +53,19 @@ async def fetch_charts_statistics(paging: bool = True, page_number: int = 1, lim
                 ]
 
                 LET results = (
+                   
                     FOR doc IN {collection.name}
                     {filter_query}
-                    LET ageGroup = FIRST(
-                        FOR key IN ["adult", "child", "neonatal"]
-                            FILTER (key == "adult" AND TO_BOOL(doc.{is_adult_field})) OR 
-                                (key == "child" AND TO_BOOL(doc.{is_child_field})) OR 
-                                (key == "neonatal" AND TO_BOOL(doc.{is_neonate_field}))
-                            RETURN key
-                    ) || "unknown"
+    LET ageGroup = FIRST(
+        FOR key IN ["adult", "child", "neonatal"]
+            FILTER (key == "adult" AND doc.{is_adult_field} == '1') OR 
+                   (key == "child" AND doc.{is_child_field} == '1') OR 
+                   (key == "neonatal" AND doc.{is_neonate_field} == '1')
+            RETURN key
+    ) || "unknown"
 
-                    COLLECT group = ageGroup WITH COUNT INTO count
-                    RETURN {{ group, count }}
+    COLLECT group = ageGroup WITH COUNT INTO count
+    RETURN {{ group, count }}
                 )
 
                 RETURN MERGE(

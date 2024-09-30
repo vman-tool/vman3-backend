@@ -6,7 +6,7 @@ import jwt
 from arango.database import StandardDatabase
 from passlib.context import CryptContext
 
-from app.shared.configs.constants import db_collections
+from app.shared.configs.constants import AccessPrivileges, db_collections
 from app.shared.configs.settings import get_settings
 
 # from sqlalchemy.orm import Session

@@ -80,75 +80,96 @@ def replace_object_values(new_dict: Dict, old_dict: Dict, force: bool = False):
     
 def add_query_filters(filters: Dict = None, bind_vars: Dict = None, document_name: str = 'doc'):
     """
-    This function creates a string of query filters for ArangoDB as well as bind variables
+    Function to build ArangoDB AQL filters and bind variables.
+    
+    :param filters: Input dictionary of fields and their values.
+    :param bind_vars: Bind variable dictionary to be updated.
+    :param document_name: AQL document name, default is 'doc'.
+    
+    :return: aql_filters, bind_vars
 
-    :param filters: Input dictionary of fields and their values (Use actual names of collection fields)
-    :param bind_vars: Input dictionary to hold bind variables, input yours to update the already available values
-    :param document_name: Input string of the doc variable eg: FOR v in documents, in this case v is the input, by default doc is used
-
-    include array of object inside or_conditions key in filters object to incorporate OR filter
-    include array of object inside in_conditions key in filters object to incorporate IN filter
-    include field with object that key is in ['==', '!=', '<', '<=', '>', '>=', "$gt", "$lt", "$lte", "$eq", "$ne", "$gte"] for comparison fields
-
-    Returns
-    :aql_filters: A list of string filters arranges accordingly
-    :bind_vars: A dictionary of bind variables, updated with the values from input filters
+    Example:
+        > Use `and_conditions` for fields that are actually the same with multiple filters to be able to use some thing like BETWEEN for dates and numbers especially 
+        ```
+        filters = {
+            'and_conditions': [
+                {'date': {'>=': '2024-01-01'}},
+                {'date': {'<=': '2024-12-31'}} 
+            ],
+            'or_conditions': [
+                {'status': {'==': 'active'}},
+                {'type': {'==': 'internal'}},
+                {'role': "admin"},
+            ],
+            'in_conditions': [
+                {'role': ['admin', 'manager']},
+            ]
+        }
+        ```
     """
     aql_filters = []
         
+    and_conditions = filters.pop("and_conditions", [])
     or_conditions = filters.pop("or_conditions", [])
     in_conditions = filters.pop("in_conditions", [])
 
-    def add_comparison_filter(field: str, value: Any, op: str):
-        aql_filters.append(f"{document_name}.{field} {op} @{field}")
-        bind_vars[field] = value
+    def add_comparison_filter(field: str, value: Any, op: str, condition_type: str, i: int):
+        bind_var_key = f"{field}_{condition_type}_{i}"
+        aql_filters.append(f"{document_name}.{field} {op} @{bind_var_key}")
+        bind_vars[bind_var_key] = value
 
     def reassign_operation(op):
-        if op == '$gt':
-            op = '>'
-        if op == "$lt":
-            op = '<'
-        if op == "$lte":
-            op = '<='
-        if op == "$eq":
-            op = '=='
-        if op == "$ne":
-            op = '!='
-        if op == "$gte":
-            op = '>='        
-        return op
-    
+        operations = {
+            '$gt': '>',
+            "$lt": '<',
+            "$lte": '<=',
+            "$eq": '==',
+            "$ne": '!=',
+            "$gte": '>='
+        }
+        return operations.get(op, op)
+
     for field, value in filters.items():
-        if isinstance(value, list):
-            or_conditions.append({field: v} for v in value)
+        if isinstance(value, dict):
+            for op, comp_value in value.items():
+                op = reassign_operation(op)
+                add_comparison_filter(field, comp_value, op, 'field', 0)
         else:
-            if isinstance(value, dict):
-                for op, comp_value in value.items():
-                    if op in ['==', '!=', '<', '<=', '>', '>=', "$gt", "$lt", "$lte", "$eq", "$ne", "$gte"]:
+            add_comparison_filter(field, value, '==', 'field', 0)
+
+    if and_conditions:
+        for i, condition_set in enumerate(and_conditions):
+            for field, value in condition_set.items():
+                if isinstance(value, dict):
+                    for op, comp_value in value.items():
                         op = reassign_operation(op)
-                        add_comparison_filter(field, comp_value, op)
-                    else:
-                        raise ValueError(f"Unsupported operator: {op}")
-            else:
-                add_comparison_filter(field, value, '==')
+                        add_comparison_filter(field, comp_value, op, 'and', i)
+                else:
+                    add_comparison_filter(field, value, '==', 'and', i)
 
     if or_conditions:
         or_clauses = []
         for i, condition_set in enumerate(or_conditions):
             sub_conditions = []
-            for sub_field, sub_value in condition_set.items():
-                bind_var_key = f"{sub_field}_or_{i}"
-                sub_conditions.append(f"{document_name}.{sub_field} == @{bind_var_key}")
-                bind_vars[bind_var_key] = sub_value
-            or_clauses.append(" AND ".join(sub_conditions))
+            for field, value in condition_set.items():
+                if isinstance(value, dict):
+                    for op, comp_value in value.items():
+                        op = reassign_operation(op)
+                        sub_conditions.append(f"{document_name}.{field} {op} @{field}_or_{i}")
+                        bind_vars[f"{field}_or_{i}"] = comp_value
+                else:
+                    sub_conditions.append(f"{document_name}.{field} == @{field}_or_{i}")
+                    bind_vars[f"{field}_or_{i}"] = value
+            or_clauses.append(f"({' AND '.join(sub_conditions)})")
         aql_filters.append(f"({' OR '.join(or_clauses)})")
-    
+
     if in_conditions:
         in_clauses = []
-        for field, values in in_conditions.items():
-            bind_var_key = f"{field}_in_values"
-            in_clauses.append(f"{document_name}.{field} IN @{bind_var_key}")
-            bind_vars[bind_var_key] = values
-        aql_filters.append(" AND ".join(in_clauses))
-    
+        for condition in in_conditions:
+            for field, values in condition.items():
+                bind_var_key = f"{field}_in_values"
+                in_clauses.append(f"{document_name}.{field} IN @{bind_var_key}")
+                bind_vars[bind_var_key] = values
+            aql_filters.append(" AND ".join(in_clauses))
+
     return aql_filters, bind_vars

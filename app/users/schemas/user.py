@@ -1,6 +1,6 @@
 
 
-from typing import Optional, Union
+from typing import List, Optional, Union
 
 from pydantic import BaseModel, EmailStr
 
@@ -23,4 +23,13 @@ class ResetRequest(BaseModel):
     token: str
     email: EmailStr
     password: str
+
+class RoleRequest(BaseModel):
+    uuid: Union[str, None] = None
+    name: str
+    privileges: Union[List[str], None] = None
+
+class AssignRolesRequest(BaseModel):
+    user: str
+    roles: Union[List[str], None] = None
     
