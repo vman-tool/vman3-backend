@@ -34,10 +34,6 @@ class User(VManBaseModel):
 
         user = await super().save(db)
 
-        # cursor = collection.find({'email': self.email}, limit=1)
-        # user = [doc for doc in cursor]
-        
-        # check if user exist with new data
         data={
             "id": user["_key"],
             "uuid": user["uuid"],
