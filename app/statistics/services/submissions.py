@@ -8,7 +8,7 @@ from app.shared.configs.constants import db_collections
 from app.shared.configs.models import ResponseMainModel
 
 
-async def fetch_submissions_statistics(paging: bool = True, page_number: int = 1, limit: int = 10, start_date: Optional[date] = None, end_date: Optional[date] = None, locations: Optional[List[str]] = None, db: StandardDatabase = None) -> ResponseMainModel:
+async def fetch_submissions_statistics(paging: bool = True, page_number: int = 1, limit: int = 10, start_date: Optional[date] = None, end_date: Optional[date] = None, locations: Optional[List[str]] = None,date_type:Optional[str]=None, db: StandardDatabase = None) -> ResponseMainModel:
     try:
         config = await fetch_odk_config(db)
         region_field = config.field_mapping.location_level1
@@ -16,7 +16,22 @@ async def fetch_submissions_statistics(paging: bool = True, page_number: int = 1
         is_adult_field = config.field_mapping.is_adult
         is_child_field = config.field_mapping.is_child
         is_neonte_field = config.field_mapping.is_neonate
-        today_field = config.field_mapping.date
+        # 
+        
+        if date_type is not None:
+            if date_type == 'submission_date':
+                today_field = 'submissiondate'
+            elif date_type == 'death_date':
+                today_field = 'Id10022'
+            elif date_type == 'interview_date':
+                today_field = 'Id10012'
+            else:
+                today_field = config.field_mapping.date 
+        else:
+            today_field = config.field_mapping.date 
+
+            
+        # today_field = config.field_mapping.date
         deceased_gender = config.field_mapping.deceased_gender
         
         collection = db.collection(db_collections.VA_TABLE)  # Use the actual collection name here
