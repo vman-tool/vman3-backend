@@ -193,7 +193,7 @@ class VManBaseModel(BaseModel):
         
         original_doc = replace_object_values(doc, original_doc)
         
-        return collection.update({'_key': original_doc['_key'], **original_doc}, return_new=True)["new"]
+        return collection.update(original_doc, return_new=True)["new"]
 
     @classmethod
     async def delete(cls, doc_id: str = None, doc_uuid: str = None, deleted_by: str = None, hard_delete: bool = False, db: StandardDatabase = None):

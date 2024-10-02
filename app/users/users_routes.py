@@ -40,8 +40,11 @@ guest_router = APIRouter(
 @auth_router.post("/", status_code=status.HTTP_201_CREATED, response_model=UserResponse)
 
 async def register_user(data: RegisterUserRequest, background_tasks: BackgroundTasks, current_user = Depends(get_current_user), db: StandardDatabase = Depends(get_arangodb_session)):
-    data.created_by = current_user['_key']
-    return await user.create_user_account(data, db, background_tasks)
+    return await user.create_or_update_user_account(data, current_user, db, background_tasks)
+
+@auth_router.put("/", status_code=status.HTTP_200_OK, response_model=UserResponse)
+async def update_user(data: RegisterUserRequest, background_tasks: BackgroundTasks, current_user = Depends(get_current_user), db: StandardDatabase = Depends(get_arangodb_session)):
+    return await user.create_or_update_user_account(data, current_user, db, background_tasks)
 
 @user_router.post("/verify", status_code=status.HTTP_200_OK)
 async def verify_user_account(data: VerifyUserRequest, background_tasks: BackgroundTasks, session = Depends(get_arangodb_session)):
