@@ -29,11 +29,12 @@ async def get_submissions_statistics(
     limit: Optional[int] = Query(10, alias="limit"),
     start_date: Optional[date] = Query(None, alias="start_date"),
     end_date: Optional[date] = Query(None, alias="end_date"),
+    date_type: Optional[str]=Query(None, alias="date_type"),
     locations: Optional[List[str]] = Query(None, alias="locations"),
     db: StandardDatabase = Depends(get_arangodb_session)):
 
     allow_paging = False if paging is not None and paging.lower() == 'false' else True
-    response = await fetch_submissions_statistics(paging=allow_paging, page_number=page_number, limit=limit, start_date=start_date, end_date=end_date, locations=locations, db=db)
+    response = await fetch_submissions_statistics(paging=allow_paging, page_number=page_number, limit=limit, start_date=start_date, end_date=end_date, locations=locations,date_type=date_type, db=db)
     return response
 
 
@@ -44,10 +45,14 @@ async def get_charts_statistics(
     limit: Optional[int] = Query(10, alias="limit"),
     start_date: Optional[date] = Query(None, alias="start_date"),
     end_date: Optional[date] = Query(None, alias="end_date"),
+    date_type: Optional[str]=Query(None, alias="date_type"),
     locations: Optional[List[str]] = Query(None, alias="locations"),
     db: StandardDatabase = Depends(get_arangodb_session)):
+    
+    
+    print(date_type,start_date,end_date,locations,'12-------\n')
 
     allow_paging = False if paging is not None and paging.lower() == 'false' else True
-    response = await fetch_charts_statistics(paging=allow_paging, page_number=page_number, limit=limit, start_date=start_date, end_date=end_date, locations=locations, db=db)
+    response = await fetch_charts_statistics(paging=allow_paging, page_number=page_number, limit=limit, start_date=start_date, end_date=end_date, locations=locations,date_type=date_type, db=db)
     return response
 

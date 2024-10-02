@@ -38,19 +38,48 @@ from app.utilits.data_validation import validate_privileges
 settings = get_settings()
 
 
-async def create_user_account(data: RegisterUserRequest, db: StandardDatabase, background_tasks: BackgroundTasks):
-    if not is_password_strong_enough(data.password):
-            raise HTTPException(status_code=400, detail="Please provide a strong password.")
-    user_data = {
-            "name": data.name,
-            "email": data.email,
-            "password": hash_password(data.password),
-            "is_active": True, # TODO: Change to false if you want to verify email first
-            "verified_at":datetime.now().isoformat(), # TODO: Change to None if you want to verify email first
-            "created_by": data.created_by, # TODO: Change to the user id of the user creating the account
-        }
+async def create_or_update_user_account(data: RegisterUserRequest, current_user: User,  db: StandardDatabase, background_tasks: BackgroundTasks):
+    if data.password != data.confirm_password:
+            raise HTTPException(status_code=400, detail="Password mismatch.")
     
-    return await User(**user_data).save(db)
+    if data.confirm_password and not is_password_strong_enough(data.confirm_password):
+            raise HTTPException(status_code=400, detail="Please provide a strong password.")
+    
+    if not data.uuid and not (data.password or data.confirm_password):
+        raise HTTPException(status_code=400, detail="Provide password to create new user or uuid to update user.")
+    
+    existing_user = None
+    if data.uuid:
+        existing_user = await User.get(doc_uuid=data.uuid, db=db)
+
+        if existing_user:
+            hashed_password = None
+            if data.confirm_password:
+                hashed_password = hash_password(data.confirm_password)
+
+            user_data = data.model_dump()
+
+            if hashed_password:
+                user_data['password'] = hashed_password
+
+            update_user_data = replace_object_values(user_data, existing_user)
+            
+            return await User(**update_user_data).update(updated_by = current_user['uuid'], db = db)
+        else:
+            raise HTTPException(status_code=404, detail="User not found.")
+
+
+
+    user_data = {
+        "name": data.name,
+        "email": data.email,
+        "password": hash_password(data.confirm_password),
+        "is_active": data.is_active, # TODO: Change to false if you want to verify email first
+        "verified_at":datetime.now().isoformat(), # TODO: Change to None if you want to verify email first
+        "created_by": current_user["_key"], # TODO: Change to the user id of the user creating the account
+    }
+    
+    return await User(**user_data).save(db = db)
     
     
 async def activate_user_account(data: VerifyUserRequest, db, background_tasks: BackgroundTasks):
