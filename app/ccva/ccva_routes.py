@@ -1,10 +1,10 @@
 import uuid
 from datetime import date
-from typing import Optional
+from typing import List, Optional
 
 from arango.database import StandardDatabase
 from fastapi import (APIRouter, BackgroundTasks, Body, Depends, HTTPException,
-                     status)
+                     Query, status)
 
 from app.ccva.services.ccva_data_services import (
     delete_ccva_entry, fetch_all_processed_ccva_graphs,
@@ -46,6 +46,7 @@ async def run_internal_ccva(
 
         if records is None :
             raise   HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No records found to run CCVA")
+        
         background_tasks.add_task(run_ccva, db, records,task_id, task_results, start_date, end_date, malaria_status, hiv_status, ccva_algorithm)
         return ResponseMainModel(data={"task_id": task_id,"total_recors":len(records.data)}, message="CCVA Is running ...")
     except Exception as e:
@@ -62,8 +63,10 @@ async def get_processed_ccva_graphs(
     paging: bool = True,
     page_number: int = 1,
     limit: int = 30,
-    start_date: Optional[date] = None,
-    end_date: Optional[date] = None,
+    start_date: Optional[date] = Query(None, alias="start_date"),
+    end_date: Optional[date] = Query(None, alias="end_date"),
+    date_type: Optional[str]=Query(None, alias="date_type"),
+    locations: Optional[List[str]] = Query(None, alias="locations"),
     oauth = Depends(oauth2_scheme), 
     current_user = Depends(get_current_user),
     db: StandardDatabase = Depends(get_arangodb_session)
@@ -81,6 +84,8 @@ async def get_processed_ccva_graphs(
             limit=limit,
             start_date=start_date,
             end_date=end_date,
+            locations=locations,
+            date_type=date_type,
             db=db
         )
         return response

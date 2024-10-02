@@ -76,7 +76,85 @@ async def fetch_processed_ccva_graphs(
     limit: int = 30, 
     start_date: Optional[date] = None, 
     end_date: Optional[date] = None, 
-    locations: Optional[List[str]] = None, 
+    locations: Optional[List[str]] = None,
+    date_type:Optional[str]=None,
+    db: StandardDatabase = None
+) -> ResponseMainModel:
+    try:
+        collection = db.collection(db_collections.CCVA_RESULTS)  # Use the actual collection name here
+        query = f"FOR doc IN {collection.name} "
+        bind_vars = {}
+        filters = []
+
+        # If fetching by CCVA ID
+        if ccva_id:
+            filters.append("doc._key == @ccva_id")
+            bind_vars["ccva_id"] = ccva_id
+        
+        # If fetching by isDefault
+        if is_default is not None or ccva_id is None:
+            filters.append("doc.isDefault == @is_default")
+            bind_vars["is_default"] = True
+        
+        # Filtering by start and end dates
+        if start_date:
+            filters.append("doc.range.start >= @start_date")
+            bind_vars["start_date"] = str(start_date)
+        
+        if end_date:
+            filters.append("doc.range.end <= @end_date")
+            bind_vars["end_date"] = str(end_date)
+
+        # Apply filters if any
+        if filters:
+            query += "FILTER " + " AND ".join(filters) + " "
+
+        # Sorting by created date
+        query += "SORT doc.created_at DESC "
+
+        # Apply pagination if needed
+        if paging and page_number and limit:
+            query += "LIMIT @offset, @size "
+            bind_vars.update({
+                "offset": (page_number - 1) * limit,
+                "size": limit
+            })
+
+        query += """
+        RETURN doc
+        """
+
+        cursor = db.aql.execute(query, bind_vars=bind_vars)
+        data = [document for document in cursor]
+
+        if not data:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No records found")
+
+        # Return response
+        return ResponseMainModel(
+            data=data,
+            message="Processed CCVA fetched successfully",
+            total=len(data)
+        )
+    
+    except ArangoError as e:
+        print(e)
+        raise BadRequestException("Failed to fetch records", str(e))
+    except Exception as e:
+        print(e)
+        raise BadRequestException(f"Failed to fetch records: {str(e)}", str(e))   
+    
+    
+async def fetch_processed_individual_ccva_graphs(
+    ccva_id: Optional[str] = None, 
+    is_default: Optional[bool] = None, 
+    paging: bool = True, 
+    page_number: int = 1, 
+    limit: int = 30, 
+    start_date: Optional[date] = None, 
+    end_date: Optional[date] = None, 
+    locations: Optional[List[str]] = None,
+    date_type:Optional[str]=None,
     db: StandardDatabase = None
 ) -> ResponseMainModel:
     try:
@@ -142,7 +220,7 @@ async def fetch_processed_ccva_graphs(
     except Exception as e:
         print(e)
         raise BadRequestException(f"Failed to fetch records: {str(e)}", str(e))   
-    
+  
 # async def fetch_processed_ccva_graphs(paging: bool = True, page_number: int = 1, limit: int = 1, start_date: Optional[date] = None, end_date: Optional[date] = None, locations: Optional[List[str]] = None, db: StandardDatabase = None) -> ResponseMainModel:
 #     try:
 

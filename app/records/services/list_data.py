@@ -11,12 +11,23 @@ from app.shared.configs.models import ResponseMainModel
 from app.shared.middlewares.exceptions import BadRequestException
 
 
-async def fetch_va_records(paging: bool = True, page_number: int = 1, limit: int = 10, start_date: Optional[date] = None, end_date: Optional[date] = None, locations: Optional[List[str]] = None, db: StandardDatabase = None) -> ResponseMainModel:
+async def fetch_va_records(paging: bool = True, page_number: int = 1, limit: int = 10, start_date: Optional[date] = None, end_date: Optional[date] = None, locations: Optional[List[str]] = None,  date_type:Optional[str]=None,  db: StandardDatabase = None) -> ResponseMainModel:
     try:
         config = await fetch_odk_config(db)
         region_field = config.field_mapping.location_level1
 
-        today_field = config.field_mapping.date
+        if date_type is not None:
+            if date_type == 'submission_date':
+                today_field = 'submissiondate'
+            elif date_type == 'death_date':
+                today_field = 'Id10022'
+            elif date_type == 'interview_date':
+                today_field = 'Id10012'
+            else:
+                today_field = config.field_mapping.date 
+        else:
+            today_field = config.field_mapping.date 
+
         collection = db.collection(db_collections.VA_TABLE)  # Use the actual collection name here
         query = f"FOR doc IN {collection.name} "
         bind_vars = {}
@@ -73,12 +84,22 @@ async def fetch_va_records(paging: bool = True, page_number: int = 1, limit: int
 
 
 
-async def fetch_va_records_json(paging: bool = True, page_number: int = 1, limit: int = 10, start_date: Optional[date] = None, end_date: Optional[date] = None, locations: Optional[List[str]] = None, db: StandardDatabase = None) -> ResponseMainModel:
+async def fetch_va_records_json(paging: bool = True, page_number: int = 1, limit: int = 10, start_date: Optional[date] = None, end_date: Optional[date] = None, locations: Optional[List[str]] = None,date_type:Optional[str]=None, db: StandardDatabase = None) -> ResponseMainModel:
     try:
         config = await fetch_odk_config(db)
         region_field = config.field_mapping.location_level1
 
-        today_field = config.field_mapping.date
+        if date_type is not None:
+            if date_type == 'submission_date':
+                today_field = 'submissiondate'
+            elif date_type == 'death_date':
+                today_field = 'Id10022'
+            elif date_type == 'interview_date':
+                today_field = 'Id10012'
+            else:
+                today_field = config.field_mapping.date 
+        else:
+            today_field = config.field_mapping.date 
         collection = db.collection(db_collections.VA_TABLE)  # Use the actual collection name here
         query = f"FOR doc IN {collection.name} "
         bind_vars = {}
