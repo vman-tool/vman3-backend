@@ -8,6 +8,7 @@ from passlib.context import CryptContext
 
 from app.shared.configs.constants import AccessPrivileges, db_collections
 from app.shared.configs.settings import get_settings
+from app.users.models.user import User, UserToken
 
 # from sqlalchemy.orm import Session
 
@@ -78,30 +79,23 @@ async def get_token_user(token: str, db:StandardDatabase ):
         user_token_id = str_decode(payload.get('r'))
         user_id = str_decode(payload.get('sub'))
         access_key = payload.get('a')
-
-        aql_query = f"""
-        FOR token IN {db_collections.USER_TOKENS}
-            FILTER token.access_key == @access_key
-            FILTER token._key == @user_token_id
-            FILTER token.user_id == @user_id
-            FILTER token.expires_at > DATE_NOW()
-            RETURN token
-        """
-        bind_vars = {
+        
+        filters = {
             'access_key': access_key,
-            'user_token_id': user_token_id,
-            'user_id': user_id
+            '_key': user_token_id,
+            'user_id': user_id,
+            'expires_at': {'$gte': datetime.now().isoformat()}
         }
-  
-        cursor = db.aql.execute(aql_query, bind_vars=bind_vars)
 
-        user_token = [doc for doc in cursor][0]
+        user_token_cursor = await UserToken.get_many(
+            limit=1,
+            filters = filters, 
+            db = db
+        )
 
-
-        if user_token:
-            user_collection = db.collection(db_collections.USERS)
-            user = user_collection.get(user_token['user_id'])
-            return user
+        if user_token_cursor:
+            user_token = user_token_cursor[0]
+            return await User.get(doc_id=user_token['user_id'], db=db)
     return None
 
 

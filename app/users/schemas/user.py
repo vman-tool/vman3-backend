@@ -6,10 +6,13 @@ from pydantic import BaseModel, EmailStr
 
 
 class RegisterUserRequest(BaseModel):
-    name: str
-    email: str
-    password: str
+    uuid: Union[str, None] = None
+    name: Union[str, None] = None
+    email: Union[str, None] = None
+    password: Union[str, None] = None
+    confirm_password: Union[str, None] = None
     created_by: Union[str, None] = None
+    is_active: Union[bool, None] = True
     
     
 class VerifyUserRequest(BaseModel):

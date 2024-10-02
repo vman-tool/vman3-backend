@@ -68,7 +68,7 @@ def replace_object_values(new_dict: Dict, old_dict: Dict, force: bool = False):
     """
     try:
         for key, value in new_dict.items():
-                if value and not force:
+                if (value or type(value) == bool) and not force:
                     old_dict[key] = value
                 elif force:
                     old_dict[key] = value
