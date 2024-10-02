@@ -12,13 +12,13 @@ from app.users.models.role import Role
 
 
 class User(VManBaseModel):
-    # id: Optional[str] = None
+    # id: Union[str, None] = None
     name: str
     email: EmailStr
     is_active: bool
     verified_at: Optional[Union[str, datetime]] = None
-    tokens: Optional[str] = None
-    roles: Optional[List[Role]] = None
+    tokens: Union[str, None] = None
+    roles: Union[List[Role], None] = None
     password: str
     
    
@@ -27,7 +27,7 @@ class User(VManBaseModel):
         return db_collections.USERS
     
     async def save(self, db: StandardDatabase):
-        user_exist =  await record_exists(db_collections.USERS, custom_fields={"email": self.email})
+        user_exist =  await record_exists(db_collections.USERS, custom_fields={"email": self.email}, db=db)
         
         if user_exist:
             raise HTTPException(status_code=400, detail="Email already exists.")
@@ -38,6 +38,20 @@ class User(VManBaseModel):
         # user = [doc for doc in cursor]
         
         # check if user exist with new data
+        data={
+            "id": user["_key"],
+            "uuid": user["uuid"],
+            "name": user["name"],
+            "email": user["email"],
+            "is_active": user["is_active"],
+            "created_at":user["created_at"]
+        }
+        return data
+    
+    async def update(self, updated_by: str, db: StandardDatabase):
+        
+        user = await super().update(updated_by, db)
+
         data={
             "id": user["_key"],
             "uuid": user["uuid"],
