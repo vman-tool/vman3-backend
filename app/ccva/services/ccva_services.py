@@ -1,8 +1,10 @@
 
 import asyncio
 import json
-from datetime import datetime, timedelta
-from typing import Dict
+import os
+import re
+from datetime import date, datetime, timedelta
+from typing import Dict, Optional
 
 import numpy as np
 import pandas as pd
@@ -13,10 +15,11 @@ from pycrossva.transform import transform
 
 from app.ccva.models.ccva_models import InterVA5Progress
 from app.ccva.utilits.interva.interva5 import InterVA5
+from app.records.services.list_data import fetch_va_records_json
 from app.settings.services.odk_configs import fetch_odk_config
 from app.shared.configs.arangodb import null_convert_data
 from app.shared.configs.constants import db_collections
-from app.shared.services.va_records import shared_fetch_va_records
+from app.shared.configs.models import ResponseMainModel
 
 
 # The websocket_broadcast function for broadcasting progress updates
@@ -24,10 +27,107 @@ async def websocket_broadcast(task_id: str, progress_data: dict):
     from app.main import \
         websocket__manager  # Ensure this points to your actual WebSocket manager instance
     await websocket__manager.broadcast(task_id, json.dumps(progress_data))
+async def get_record_to_run_ccva(db: StandardDatabase, task_id: str, task_results: Dict,start_date: Optional[date] = None, end_date: Optional[date] = None,):
+    try:
+        records= await fetch_va_records_json(paging=False, start_date=start_date, end_date=end_date,  db=db)
+        if records.data == []:
+            raise Exception("No records found")
+        
+        return records
+    except Exception as e:
+        print(e)
+        pass
+        
+# # The main run_ccva function that integrates everything
+# async def run_ccvass(db: StandardDatabase, records:ResponseMainModel, task_id: str, task_results: Dict,start_date: Optional[date] = None, end_date: Optional[date] = None):
+#     try:
+#                 # Define the async callback to send progress updates
+#         async def update_callback(progress):
+#             await websocket_broadcast(task_id, progress)
+#                 # Initial update for task start
+#         start_time = datetime.now()
+
+
+#         await websocket_broadcast(task_id=task_id, progress_data= InterVA5Progress(
+#             progress=1,
+#             total_records=0,
+#             message="Collecting data.",
+#             status="running",
+#             elapsed_time=f"{(datetime.now() - start_time).seconds // 3600}:{(datetime.now() - start_time).seconds // 60 % 60}:{(datetime.now() - start_time).seconds % 60}",
+#             task_id=task_id,
+#             error=False
+#         ).model_dump_json())
+        
+#         # config = await fetch_odk_config(db)
+#         # today_field = config.field_mapping.date
+#         # Fetch records from the database asynchronously
+#         # filters = {}
+
+#         # # Add filters based on start_date and end_date if they exist
+#         # if start_date:
+#         #     filters[today_field] = {'>=': str(start_date) }
+#         #     # filters[today_field] = {'$gte': str(start_date) } # Alternative approach to use less that or greater than
+
+#         # if end_date:
+#         #     filters[today_field] = {'<=': str(end_date) }
+#         #     # filters[end_date] = {'$lte': str(end_date) } # Alternative approach to use less that or greater than
 
         
+#         # print(filters)
+#         # records= await fetch_va_records_json( paging=False, start_date=start_date, end_date=end_date,  db=db)
+        
+        
+
+#         if records.data == []:
+#             # throw error
+#             # wait for 5 seconds
+#             await asyncio.sleep(5)
+#             await update_callback(InterVA5Progress(
+#             progress=100,
+            
+#             message="No records found",
+#             status="error",
+#             elapsed_time=f"{(datetime.now() - start_time).seconds // 3600}:{(datetime.now() - start_time).seconds // 60 % 60}:{(datetime.now() - start_time).seconds % 60}",
+#             task_id=task_id,
+#             error=True
+#         ).model_dump_json())
+#             # raise Exception("No records found")
+#             print("No records found",task_id)
+#             return
+
+#         # records = await shared_fetch_va_records(paging=False, include_assignment=False, format_records=False, db=db, filters=filters)
+#         database_dataframe = pd.read_json(json.dumps(records.data))
+
+       
+#         # Fetch the  configuration
+#         config = await fetch_odk_config(db)
+#         id_col = config.field_mapping.instance_id
+#         date_col = config.field_mapping.date
+#         # Run the CCVA process in a thread pool, with real-time updates
+#         await update_callback(InterVA5Progress(
+#         progress=4,
+#         total_records = len(database_dataframe),
+#         message="Running InterVA5 analysis...",
+#         status="running",
+#         elapsed_time=f"{(datetime.now() - start_time).seconds // 3600}:{(datetime.now() - start_time).seconds // 60 % 60}:{(datetime.now() - start_time).seconds % 60}",
+#         task_id=task_id,
+#         error=False
+#     ).model_dump_json())
+        
+#         await run_in_threadpool(
+#             runCCVA, odk_raw=database_dataframe, file_id=task_id, update_callback=update_callback,db= db, id_col=id_col,date_col=date_col,start_time=start_time
+#         )
+        
+
+#     except Exception as e:
+#         print(e)
+#         error_message = {"progress": 0, "message": str(e), "status":'error',"elapsed_time": f"{(datetime.now() - start_time).seconds // 3600}:{(datetime.now() - start_time).seconds // 60 % 60}:{(datetime.now() - start_time).seconds % 60}", "task_id": task_id, "error": True}
+#         await update_callback(error_message)
+#         task_results[task_id] = error_message
+    
+        
 # The main run_ccva function that integrates everything
-async def run_ccva(db: StandardDatabase, task_id: str, task_results: Dict):
+async def run_ccva(db: StandardDatabase, records:ResponseMainModel, task_id: str, task_results: Dict,start_date: Optional[date] = None, end_date: Optional[date] = None, malaria_status:Optional[str]=None, hiv_status:Optional[str]=None, ccva_algorithm:Optional[str]=None):
     try:
                 # Define the async callback to send progress updates
         async def update_callback(progress):
@@ -35,10 +135,19 @@ async def run_ccva(db: StandardDatabase, task_id: str, task_results: Dict):
                 # Initial update for task start
         start_time = datetime.now()
 
-        initial_message = {"progress": 1, "message": "Collecting data.", "status":'init',"elapsed_time": f"{(datetime.now() - start_time).seconds // 3600}:{(datetime.now() - start_time).seconds // 60 % 60}:{(datetime.now() - start_time).seconds % 60}","task_id": task_id, "error": False}
-        await update_callback(initial_message)
+        # initial_message = {"progress": 1, "message": "Collecting data.", "status":'init',"elapsed_time": f"{(datetime.now() - start_time).seconds // 3600}:{(datetime.now() - start_time).seconds // 60 % 60}:{(datetime.now() - start_time).seconds % 60}","task_id": task_id, "error": False}
+        # await update_callback(initial_message)
+        await websocket_broadcast(task_id=task_id, progress_data= InterVA5Progress(
+            progress=1,
+            total_records=0,
+            message="Collecting data.",
+            status="running",
+            elapsed_time=f"{(datetime.now() - start_time).seconds // 3600}:{(datetime.now() - start_time).seconds // 60 % 60}:{(datetime.now() - start_time).seconds % 60}",
+            task_id=task_id,
+            error=False
+        ).model_dump_json())
         # Fetch records from the database asynchronously
-        records = await shared_fetch_va_records(paging=False, include_assignment=False, format_records=False, db=db)
+        # records = await shared_fetch_va_records(paging=False, include_assignment=False, format_records=False, db=db)
         database_dataframe = pd.read_json(json.dumps(records.data))
 
         
@@ -63,7 +172,8 @@ async def run_ccva(db: StandardDatabase, task_id: str, task_results: Dict):
     ).model_dump_json())
         
         await run_in_threadpool(
-            runCCVA, odk_raw=database_dataframe, file_id=task_id, update_callback=update_callback,db= db, id_col=id_col,date_col=date_col,start_time=start_time
+            runCCVA, odk_raw=database_dataframe, file_id=task_id, update_callback=update_callback,db= db, id_col=id_col,date_col=date_col,start_time=start_time, algorithm= ccva_algorithm,   malaria= malaria_status, hiv= hiv_status,
+            
         )
         
 
@@ -87,6 +197,7 @@ def runCCVA(odk_raw:pd.DataFrame, id_col: str = None,date_col:str =None,start_ti
         
         # Define the output folder
         output_folder = "../ccva_files/"
+        # output_folder = f"../ccva_files/{file_id}/"
         
         # Create an InterVA5 instance with the async callback
         iv5out = InterVA5(input_data, hiv=hiv, malaria=malaria, write=True, directory=output_folder, filename=file_id,start_time=start_time, update_callback=update_callback, return_checked_data=True)
@@ -113,18 +224,26 @@ def runCCVA(odk_raw:pd.DataFrame, id_col: str = None,date_col:str =None,start_ti
         # os.remove(f"{file_id}-dt.csv")
         total_records = len(records)
         rangeDates={"start": odk_raw[date_col].max(), "end":odk_raw[date_col].min()}
-        ccva_results= compile_ccva_results(iv5out, top=top, undetermined=undetermined, task_id=file_id,start_time= start_time,total_records=total_records,  rangeDates =rangeDates, db=db)
+        ## get ccva error logs to be added to the ccva_results
+        error_logs=process_ccva_errorlogs(output_folder)
+        
+        ccva_results= compile_ccva_results(iv5out, error_logs=error_logs, top=top, undetermined=undetermined, task_id=file_id,start_time= start_time,total_records=total_records,  rangeDates =rangeDates, db=db)
+        os.remove(f"{output_folder+'errorlogV5.txt'}.csv")
         return ccva_results
 
     except Exception as e:
+        print(f"Error during CCVA analysis: {e}")
         asyncio.run(update_callback({"progress": 0, "message": f"Error during CCVA analysis: {e}", "status": 'error',"elapsed_time": f"{(datetime.now() - start_time).seconds // 3600}:{(datetime.now() - start_time).seconds // 60 % 60}:{(datetime.now() - start_time).seconds % 60}", "task_id": file_id, "error": True}))
         
-        print(f"Error during CCVA analysis: {e}")
+
+        
 
 # Function to compile the results from InterVA5
 def compile_ccva_results(iv5out, top=10, undetermined=True,start_time:timedelta=None,
                          task_id:str=None,
-                         total_records:int=0, rangeDates: Dict={}, db: StandardDatabase=None):
+                         total_records:int=0, rangeDates: Dict={},
+                         error_logs: Dict=[],
+                         db: StandardDatabase=None):
     # Compile results for all groups
     all_results = {
         "index": csmf(iv5out, top=top, age=None, sex=None).index.tolist(),
@@ -249,6 +368,7 @@ def compile_ccva_results(iv5out, top=10, undetermined=True,start_time:timedelta=
         "adult": adult_results,
         "child": child_results,
         "neonate": neonate_results,
+        "error_logs": error_logs,
         # "merged": merged_results
     }
 
@@ -256,3 +376,31 @@ def compile_ccva_results(iv5out, top=10, undetermined=True,start_time:timedelta=
     asyncio.run(  websocket_broadcast(task_id,{"progress": 100, "message": "Finish CCVA analysis...", "status": 'completed', "data": ccva_results ,"elapsed_time": f"{(datetime.now() - start_time).seconds // 3600}:{(datetime.now() - start_time).seconds // 60 % 60}:{(datetime.now() - start_time).seconds % 60}", "task_id": task_id, "error": False}))
 
     return ccva_results
+
+def process_ccva_errorlogs(output_folder:str):
+    log_file_path = output_folder+'errorlogV5.txt'
+    log_entrys=[]
+
+# Regular expression to capture various error types
+    error_pattern = r'uuid:([\w-]+)\s(Error in (indicators|sex indicator|age indicator)):\s(.+)'
+    with open(log_file_path, 'r') as file:
+            logs = file.readlines()
+
+    for log in logs:
+        # Check if the line matches the error pattern
+        match = re.search(error_pattern, log)
+        if match:
+            uuid = match.group(1)
+            error_type = match.group(2)
+            error_message = match.group(4)
+
+            # Create the log entry for ArangoDB
+            log_entry = {
+                "uuid": uuid,
+                "error_type": error_type,
+                "error_message": error_message
+            }
+            log_entrys.append(log_entry)
+
+            # Insert into ArangoDB
+            return log_entrys

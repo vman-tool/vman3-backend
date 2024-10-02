@@ -1,14 +1,15 @@
 import uuid
 from datetime import date
-from typing import Optional
+from typing import List, Optional
 
 from arango.database import StandardDatabase
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
+from fastapi import (APIRouter, BackgroundTasks, Body, Depends, HTTPException,
+                     Query, status)
 
 from app.ccva.services.ccva_data_services import (
     delete_ccva_entry, fetch_all_processed_ccva_graphs,
     fetch_processed_ccva_graphs, set_ccva_as_default)
-from app.ccva.services.ccva_services import run_ccva
+from app.ccva.services.ccva_services import get_record_to_run_ccva, run_ccva
 from app.shared.configs.arangodb import get_arangodb_session
 from app.shared.configs.models import ResponseMainModel
 from app.users.decorators.user import get_current_user, oauth2_scheme
@@ -27,15 +28,31 @@ task_results = {}
 async def run_internal_ccva(
     background_tasks: BackgroundTasks,
     oauth = Depends(oauth2_scheme), 
-    current_user = Depends(get_current_user),
+    malaria_status = Body(None, alias="malaria_status"),
+    ccva_algorithm: Optional[str] = Body(None, alias="ccva_algorithm"),
+    hiv_status : Optional[str] =Body(None, alias="hiv_status"),
+    current_user: Optional[str] = Depends(get_current_user),
+    start_date: Optional[date] = Body(None, alias="start_date"),
+    end_date: Optional[date] = Body(None, alias="end_date"),
     db: StandardDatabase = Depends(get_arangodb_session)
 ):
+    
     try:
+        if ccva_algorithm is not None and ccva_algorithm not in ["InterVA5",]: ## other "InSilicoVA"
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid CCVA algorithm, or algorithm not yet supported.")
+        
         task_id = str(uuid.uuid4())
-        background_tasks.add_task(run_ccva, db, task_id, task_results)
-        return ResponseMainModel(data={"task_id": task_id}, message="CCVA Is running ...")
+        records=await get_record_to_run_ccva(db, task_id, task_results, start_date, end_date)
+
+        if records is None :
+            raise   HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No records found to run CCVA")
+        
+        background_tasks.add_task(run_ccva, db, records,task_id, task_results, start_date, end_date, malaria_status, hiv_status, ccva_algorithm)
+        return ResponseMainModel(data={"task_id": task_id,"total_recors":len(records.data)}, message="CCVA Is running ...")
     except Exception as e:
         raise e
+    
+   
     
     
 @ccva_router.get("", status_code=status.HTTP_200_OK)
@@ -46,8 +63,10 @@ async def get_processed_ccva_graphs(
     paging: bool = True,
     page_number: int = 1,
     limit: int = 30,
-    start_date: Optional[date] = None,
-    end_date: Optional[date] = None,
+    start_date: Optional[date] = Query(None, alias="start_date"),
+    end_date: Optional[date] = Query(None, alias="end_date"),
+    date_type: Optional[str]=Query(None, alias="date_type"),
+    locations: Optional[List[str]] = Query(None, alias="locations"),
     oauth = Depends(oauth2_scheme), 
     current_user = Depends(get_current_user),
     db: StandardDatabase = Depends(get_arangodb_session)
@@ -65,6 +84,8 @@ async def get_processed_ccva_graphs(
             limit=limit,
             start_date=start_date,
             end_date=end_date,
+            locations=locations,
+            date_type=date_type,
             db=db
         )
         return response
