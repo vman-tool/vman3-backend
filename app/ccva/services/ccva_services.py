@@ -1,6 +1,7 @@
 
 import asyncio
 import json
+import os
 import re
 from datetime import date, datetime, timedelta
 from typing import Dict, Optional
@@ -23,9 +24,8 @@ from app.shared.configs.models import ResponseMainModel
 
 # The websocket_broadcast function for broadcasting progress updates
 async def websocket_broadcast(task_id: str, progress_data: dict):
-    from app.main import (
-        websocket__manager,  # Ensure this points to your actual WebSocket manager instance
-    )
+    from app.main import \
+        websocket__manager  # Ensure this points to your actual WebSocket manager instance
     await websocket__manager.broadcast(task_id, json.dumps(progress_data))
 async def get_record_to_run_ccva(db: StandardDatabase, task_id: str, task_results: Dict,start_date: Optional[date] = None, end_date: Optional[date] = None,):
     try:
@@ -196,7 +196,8 @@ def runCCVA(odk_raw:pd.DataFrame, id_col: str = None,date_col:str =None,start_ti
             input_data = transform((instrument, algorithm), odk_raw, lower=True)
         
         # Define the output folder
-        output_folder = f"ccva_files/{file_id}/"
+        output_folder = "../ccva_files/"
+        # output_folder = f"../ccva_files/{file_id}/"
         
         # Create an InterVA5 instance with the async callback
         iv5out = InterVA5(input_data, hiv=hiv, malaria=malaria, write=True, directory=output_folder, filename=file_id,start_time=start_time, update_callback=update_callback, return_checked_data=True)
@@ -225,7 +226,9 @@ def runCCVA(odk_raw:pd.DataFrame, id_col: str = None,date_col:str =None,start_ti
         rangeDates={"start": odk_raw[date_col].max(), "end":odk_raw[date_col].min()}
         ## get ccva error logs to be added to the ccva_results
         error_logs=process_ccva_errorlogs(output_folder)
+        
         ccva_results= compile_ccva_results(iv5out, error_logs=error_logs, top=top, undetermined=undetermined, task_id=file_id,start_time= start_time,total_records=total_records,  rangeDates =rangeDates, db=db)
+        os.remove(f"{output_folder+'errorlogV5.txt'}.csv")
         return ccva_results
 
     except Exception as e:
