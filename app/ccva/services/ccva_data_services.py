@@ -3,6 +3,7 @@ from typing import List, Optional
 
 from arango import ArangoError
 from arango.database import StandardDatabase
+from fastapi import HTTPException, status
 
 from app.settings.services.odk_configs import fetch_odk_config
 from app.shared.configs.constants import db_collections
@@ -67,9 +68,133 @@ async def fetch_ccva_records(paging: bool = True, page_number: int = 1, limit: i
     
     
     
+async def fetch_processed_ccva_graphs(
+    ccva_id: Optional[str] = None, 
+    is_default: Optional[bool] = None, 
+    paging: bool = True, 
+    page_number: int = 1, 
+    limit: int = 30, 
+    start_date: Optional[date] = None, 
+    end_date: Optional[date] = None, 
+    locations: Optional[List[str]] = None, 
+    db: StandardDatabase = None
+) -> ResponseMainModel:
+    try:
+        collection = db.collection(db_collections.CCVA_GRAPH_RESULTS)  # Use the actual collection name here
+        query = f"FOR doc IN {collection.name} "
+        bind_vars = {}
+        filters = []
+
+        # If fetching by CCVA ID
+        if ccva_id:
+            filters.append("doc._key == @ccva_id")
+            bind_vars["ccva_id"] = ccva_id
+        
+        # If fetching by isDefault
+        if is_default is not None or ccva_id is None:
+            filters.append("doc.isDefault == @is_default")
+            bind_vars["is_default"] = True
+        
+        # Filtering by start and end dates
+        if start_date:
+            filters.append("doc.range.start >= @start_date")
+            bind_vars["start_date"] = str(start_date)
+        
+        if end_date:
+            filters.append("doc.range.end <= @end_date")
+            bind_vars["end_date"] = str(end_date)
+
+        # Apply filters if any
+        if filters:
+            query += "FILTER " + " AND ".join(filters) + " "
+
+        # Sorting by created date
+        query += "SORT doc.created_at DESC "
+
+        # Apply pagination if needed
+        if paging and page_number and limit:
+            query += "LIMIT @offset, @size "
+            bind_vars.update({
+                "offset": (page_number - 1) * limit,
+                "size": limit
+            })
+
+        query += """
+        RETURN doc
+        """
+
+        cursor = db.aql.execute(query, bind_vars=bind_vars)
+        data = [document for document in cursor]
+
+        if not data:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No records found")
+
+        # Return response
+        return ResponseMainModel(
+            data=data,
+            message="Processed CCVA fetched successfully",
+            total=len(data)
+        )
     
+    except ArangoError as e:
+        print(e)
+        raise BadRequestException("Failed to fetch records", str(e))
+    except Exception as e:
+        print(e)
+        raise BadRequestException(f"Failed to fetch records: {str(e)}", str(e))   
     
-async def fetch_processed_ccva_graphs(paging: bool = True, page_number: int = 1, limit: int = 1, start_date: Optional[date] = None, end_date: Optional[date] = None, locations: Optional[List[str]] = None, db: StandardDatabase = None) -> ResponseMainModel:
+# async def fetch_processed_ccva_graphs(paging: bool = True, page_number: int = 1, limit: int = 1, start_date: Optional[date] = None, end_date: Optional[date] = None, locations: Optional[List[str]] = None, db: StandardDatabase = None) -> ResponseMainModel:
+#     try:
+
+#         collection = db.collection(db_collections.CCVA_GRAPH_RESULTS)  # Use the actual collection name here
+#         query = f"FOR doc IN {collection.name} "
+#         bind_vars = {}
+#         filters = []
+
+#         if start_date:
+#             filters.append("doc.range.start >= @start_date")
+#             bind_vars["start_date"] = str(start_date)
+        
+#         if end_date:
+#             filters.append("doc.range.end <= @end_date")
+#             bind_vars["end_date"] = str(end_date)
+
+    
+
+#         if filters:
+#             query += "FILTER " + " AND ".join(filters) + " "
+#         query += "SORT doc.created_at DESC "
+
+#         if paging and page_number and limit:
+#             query += "LIMIT @offset, @size "
+#             bind_vars.update({
+#                 "offset": (page_number - 1) * limit,
+#                 "size": limit
+#             })
+
+#         query += "RETURN doc"
+
+#         cursor = db.aql.execute(query, bind_vars=bind_vars)
+#         data = [document for document in cursor]
+
+
+#         # Fetch total count of documents
+        
+
+#         return ResponseMainModel(
+#             data=data,
+#             message="Processed CCVA fetched successfully",
+#             total=None
+#         )
+#     except ArangoError as e:
+#         print(e)
+#         raise BadRequestException("Failed to fetched records",str(e))
+#     except Exception as e:
+#         print(e)
+#         raise BadRequestException(f"Failed to fetch records: {str(e)}",str(e))
+        
+        
+async def fetch_all_processed_ccva_graphs(paging: bool = True, page_number: int = 1, limit: int = 30, start_date: Optional[date] = None, end_date: Optional[date] = None, locations: Optional[List[str]] = None, db: StandardDatabase = None) -> ResponseMainModel:
     try:
 
         collection = db.collection(db_collections.CCVA_GRAPH_RESULTS)  # Use the actual collection name here
@@ -98,7 +223,18 @@ async def fetch_processed_ccva_graphs(paging: bool = True, page_number: int = 1,
                 "size": limit
             })
 
-        query += "RETURN doc"
+        query += """
+        RETURN {
+            
+            "id": doc._key,
+            "created_at": doc.created_at,
+            "total_records": doc.total_records,
+            "elapsed_time": doc.elapsed_time,
+            "start": doc.range.start,
+            "end": doc.range.end,
+            "isDefault": doc.isDefault
+        }
+        """
 
         cursor = db.aql.execute(query, bind_vars=bind_vars)
         data = [document for document in cursor]
@@ -119,3 +255,110 @@ async def fetch_processed_ccva_graphs(paging: bool = True, page_number: int = 1,
         print(e)
         raise BadRequestException(f"Failed to fetch records: {str(e)}",str(e))
         
+        
+async def update_ccva_entry(ccva_id: str, update_data: dict, db: StandardDatabase) -> ResponseMainModel:
+    try:
+        # Define the collection
+        collection = db.collection(db_collections.CCVA_GRAPH_RESULTS)
+
+        # Fetch the existing document
+        query = f"FOR doc IN {collection.name} FILTER doc._key == @ccva_id RETURN doc"
+        cursor = db.aql.execute(query, bind_vars={"ccva_id": ccva_id})
+        ccva_doc = next(cursor, None)
+
+        if not ccva_doc:
+            raise BadRequestException(f"CCVA entry with id {ccva_id} not found")
+
+        # Perform the update
+        query = f"UPDATE {{ _key: @ccva_id }} WITH @update_data IN {collection.name} RETURN NEW"
+        bind_vars = {
+            "ccva_id": ccva_id,
+            "update_data": update_data
+        }
+        cursor = db.aql.execute(query, bind_vars=bind_vars)
+
+        # Return the updated document
+        updated_doc = next(cursor, None)
+        return ResponseMainModel(
+            data=updated_doc,
+            message=f"CCVA entry with id {ccva_id} updated successfully",
+            total=None
+        )
+    except ArangoError as e:
+        print(e)
+        raise BadRequestException("Failed to update record", str(e))
+    except Exception as e:
+        print(e)
+        raise BadRequestException(f"Failed to update record: {str(e)}", str(e))        
+async def set_ccva_as_default(ccva_id: str, db: StandardDatabase) -> ResponseMainModel:
+    try:
+        # Define the collection
+        collection = db.collection(db_collections.CCVA_GRAPH_RESULTS)
+
+        # Step 1: Find the currently default CCVA and unset it
+        query_unset_default = f"""
+        FOR doc IN {collection.name} 
+        FILTER doc.isDefault == true 
+        UPDATE doc WITH {{ isDefault: false }} IN {collection.name}
+        RETURN NEW
+        """
+        db.aql.execute(query_unset_default)  # Unset the current default entry
+
+        # Step 2: Set the new CCVA as default
+        query_set_default = f"""
+        FOR doc IN {collection.name} 
+        FILTER doc._key == @ccva_id 
+        UPDATE doc WITH {{ isDefault: true }} IN {collection.name}
+        RETURN NEW
+        """
+        bind_vars = {"ccva_id": ccva_id}
+        cursor = db.aql.execute(query_set_default, bind_vars=bind_vars)
+
+        # Fetch the updated document
+        updated_doc = next(cursor, None)
+        if not updated_doc:
+            raise BadRequestException(f"CCVA entry with id {ccva_id} not found")
+
+        # Step 3: Return the updated document as a response
+        return ResponseMainModel(
+            data=updated_doc,
+            message=f"CCVA entry with id {ccva_id} set as default successfully",
+            total=None
+        )
+
+    except ArangoError as e:
+        print(e)
+        raise BadRequestException("Failed to set CCVA as default", str(e))
+    except Exception as e:
+        print(e)
+        raise BadRequestException(f"Failed to set CCVA as default: {str(e)}", str(e))
+          
+async def delete_ccva_entry(ccva_id: str, db: StandardDatabase) -> ResponseMainModel:
+    try:
+        # Define the collection
+        collection = db.collection(db_collections.CCVA_GRAPH_RESULTS)
+
+        # Check if the document exists
+        query = f"FOR doc IN {collection.name} FILTER doc._key == @ccva_id RETURN doc"
+        cursor = db.aql.execute(query, bind_vars={"ccva_id": ccva_id})
+        ccva_doc = next(cursor, None)
+
+        if not ccva_doc:
+            raise BadRequestException(f"CCVA entry with id {ccva_id} not found")
+
+        # Delete the document
+        query = f"REMOVE {{ _key: @ccva_id }} IN {collection.name}"
+        bind_vars = {"ccva_id": ccva_id}
+        db.aql.execute(query, bind_vars=bind_vars)
+
+        return ResponseMainModel(
+            data=None,
+            message=f"CCVA entry with id {ccva_id} deleted successfully",
+            total=None
+        )
+    except ArangoError as e:
+        print(e)
+        raise BadRequestException("Failed to delete record", str(e))
+    except Exception as e:
+        print(e)
+        raise BadRequestException(f"Failed to delete record: {str(e)}", str(e))
