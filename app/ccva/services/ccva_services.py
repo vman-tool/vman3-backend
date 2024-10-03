@@ -38,93 +38,7 @@ async def get_record_to_run_ccva(db: StandardDatabase, task_id: str, task_result
         print(e)
         pass
         
-# # The main run_ccva function that integrates everything
-# async def run_ccvass(db: StandardDatabase, records:ResponseMainModel, task_id: str, task_results: Dict,start_date: Optional[date] = None, end_date: Optional[date] = None):
-#     try:
-#                 # Define the async callback to send progress updates
-#         async def update_callback(progress):
-#             await websocket_broadcast(task_id, progress)
-#                 # Initial update for task start
-#         start_time = datetime.now()
 
-
-#         await websocket_broadcast(task_id=task_id, progress_data= InterVA5Progress(
-#             progress=1,
-#             total_records=0,
-#             message="Collecting data.",
-#             status="running",
-#             elapsed_time=f"{(datetime.now() - start_time).seconds // 3600}:{(datetime.now() - start_time).seconds // 60 % 60}:{(datetime.now() - start_time).seconds % 60}",
-#             task_id=task_id,
-#             error=False
-#         ).model_dump_json())
-        
-#         # config = await fetch_odk_config(db)
-#         # today_field = config.field_mapping.date
-#         # Fetch records from the database asynchronously
-#         # filters = {}
-
-#         # # Add filters based on start_date and end_date if they exist
-#         # if start_date:
-#         #     filters[today_field] = {'>=': str(start_date) }
-#         #     # filters[today_field] = {'$gte': str(start_date) } # Alternative approach to use less that or greater than
-
-#         # if end_date:
-#         #     filters[today_field] = {'<=': str(end_date) }
-#         #     # filters[end_date] = {'$lte': str(end_date) } # Alternative approach to use less that or greater than
-
-        
-#         # print(filters)
-#         # records= await fetch_va_records_json( paging=False, start_date=start_date, end_date=end_date,  db=db)
-        
-        
-
-#         if records.data == []:
-#             # throw error
-#             # wait for 5 seconds
-#             await asyncio.sleep(5)
-#             await update_callback(InterVA5Progress(
-#             progress=100,
-            
-#             message="No records found",
-#             status="error",
-#             elapsed_time=f"{(datetime.now() - start_time).seconds // 3600}:{(datetime.now() - start_time).seconds // 60 % 60}:{(datetime.now() - start_time).seconds % 60}",
-#             task_id=task_id,
-#             error=True
-#         ).model_dump_json())
-#             # raise Exception("No records found")
-#             print("No records found",task_id)
-#             return
-
-#         # records = await shared_fetch_va_records(paging=False, include_assignment=False, format_records=False, db=db, filters=filters)
-#         database_dataframe = pd.read_json(json.dumps(records.data))
-
-       
-#         # Fetch the  configuration
-#         config = await fetch_odk_config(db)
-#         id_col = config.field_mapping.instance_id
-#         date_col = config.field_mapping.date
-#         # Run the CCVA process in a thread pool, with real-time updates
-#         await update_callback(InterVA5Progress(
-#         progress=4,
-#         total_records = len(database_dataframe),
-#         message="Running InterVA5 analysis...",
-#         status="running",
-#         elapsed_time=f"{(datetime.now() - start_time).seconds // 3600}:{(datetime.now() - start_time).seconds // 60 % 60}:{(datetime.now() - start_time).seconds % 60}",
-#         task_id=task_id,
-#         error=False
-#     ).model_dump_json())
-        
-#         await run_in_threadpool(
-#             runCCVA, odk_raw=database_dataframe, file_id=task_id, update_callback=update_callback,db= db, id_col=id_col,date_col=date_col,start_time=start_time
-#         )
-        
-
-#     except Exception as e:
-#         print(e)
-#         error_message = {"progress": 0, "message": str(e), "status":'error',"elapsed_time": f"{(datetime.now() - start_time).seconds // 3600}:{(datetime.now() - start_time).seconds // 60 % 60}:{(datetime.now() - start_time).seconds % 60}", "task_id": task_id, "error": True}
-#         await update_callback(error_message)
-#         task_results[task_id] = error_message
-    
         
 # The main run_ccva function that integrates everything
 async def run_ccva(db: StandardDatabase, records:ResponseMainModel, task_id: str, task_results: Dict,start_date: Optional[date] = None, end_date: Optional[date] = None, malaria_status:Optional[str]=None, hiv_status:Optional[str]=None, ccva_algorithm:Optional[str]=None):
@@ -139,7 +53,7 @@ async def run_ccva(db: StandardDatabase, records:ResponseMainModel, task_id: str
         # await update_callback(initial_message)
         await websocket_broadcast(task_id=task_id, progress_data= InterVA5Progress(
             progress=1,
-            total_records=0,
+            total_records= len(records.data),
             message="Collecting data.",
             status="running",
             elapsed_time=f"{(datetime.now() - start_time).seconds // 3600}:{(datetime.now() - start_time).seconds // 60 % 60}:{(datetime.now() - start_time).seconds % 60}",
@@ -166,6 +80,7 @@ async def run_ccva(db: StandardDatabase, records:ResponseMainModel, task_id: str
         progress=4,
         message="Running InterVA5 analysis...",
         status="running",
+        total_records=len(database_dataframe),
         elapsed_time=f"{(datetime.now() - start_time).seconds // 3600}:{(datetime.now() - start_time).seconds // 60 % 60}:{(datetime.now() - start_time).seconds % 60}",
         task_id=task_id,
         error=False
@@ -206,6 +121,7 @@ def runCCVA(odk_raw:pd.DataFrame, id_col: str = None,date_col:str =None,start_ti
         progress=7,
         message="Running InterVA5 analysis...",
         status="running",
+        total_records=len(input_data),
         elapsed_time=f"{(datetime.now() - start_time).seconds // 3600}:{(datetime.now() - start_time).seconds // 60 % 60}:{(datetime.now() - start_time).seconds % 60}",
         task_id=file_id,
         error=False
