@@ -9,7 +9,6 @@ from typing import Dict, Optional
 import numpy as np
 import pandas as pd
 from arango.database import StandardDatabase
-from fastapi.concurrency import run_in_threadpool
 from interva.utils import csmf
 from pycrossva.transform import transform
 
@@ -60,9 +59,10 @@ async def run_ccva(db: StandardDatabase, records:ResponseMainModel, task_id: str
             task_id=task_id,
             error=False
         ).model_dump_json())
-        # Fetch records from the database asynchronously
-        # records = await shared_fetch_va_records(paging=False, include_assignment=False, format_records=False, db=db)
-        database_dataframe = pd.read_json(json.dumps(records.data))
+
+
+        # Convert records to DataFrame directly
+        database_dataframe = pd.DataFrame.from_records(records.data)
 
         
 
@@ -86,7 +86,7 @@ async def run_ccva(db: StandardDatabase, records:ResponseMainModel, task_id: str
         error=False
     ).model_dump_json())
         
-        await run_in_threadpool(
+        await asyncio.to_thread(
             runCCVA, odk_raw=database_dataframe, file_id=task_id, update_callback=update_callback,db= db, id_col=id_col,date_col=date_col,start_time=start_time, algorithm= ccva_algorithm,   malaria= malaria_status, hiv= hiv_status,
             
         )
