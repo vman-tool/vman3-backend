@@ -81,7 +81,7 @@ async def fetch_processed_ccva_graphs(
     db: StandardDatabase = None
 ) -> ResponseMainModel:
     try:
-        collection = db.collection(db_collections.CCVA_RESULTS)  # Use the actual collection name here
+        collection = db.collection(db_collections.CCVA_GRAPH_RESULTS)  # Use the actual collection name here
         query = f"FOR doc IN {collection.name} "
         bind_vars = {}
         filters = []
@@ -158,7 +158,7 @@ async def fetch_processed_individual_ccva_graphs(
     db: StandardDatabase = None
 ) -> ResponseMainModel:
     try:
-        collection = db.collection(db_collections.CCVA_GRAPH_RESULTS)  # Use the actual collection name here
+        collection = db.collection(db_collections.CCVA_RESULTS)  # Use the actual collection name here
         query = f"FOR doc IN {collection.name} "
         bind_vars = {}
         filters = []
