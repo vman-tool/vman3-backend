@@ -1,5 +1,5 @@
 import uuid
-from datetime import date
+from datetime import date, datetime
 from typing import List, Optional
 
 from arango.database import StandardDatabase
@@ -24,36 +24,86 @@ ccva_router = APIRouter(
 # In-memory store for task results
 task_results = {}
 
+# @ccva_router.post("", status_code=status.HTTP_200_OK,)
+# async def run_internal_ccva(
+#     background_tasks: BackgroundTasks,
+#     oauth = Depends(oauth2_scheme), 
+#     malaria_status = Body('h', alias="malaria_status"),
+#     ccva_algorithm: Optional[str] = Body(None, alias="ccva_algorithm"),
+#     hiv_status : Optional[str] =Body( 'h', alias="hiv_status"),
+#     current_user: Optional[str] = Depends(get_current_user),
+#     start_date: Optional[date] = Body(None, alias="start_date"),
+#     end_date: Optional[date] = Body(None, alias="end_date"),
+#     db: StandardDatabase = Depends(get_arangodb_session)
+# ):
+    
+#     try:
+#         start_time = datetime.now()
+#         if ccva_algorithm is not None and ccva_algorithm not in ["InterVA5",]: ## other "InSilicoVA"
+#             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid CCVA algorithm, or algorithm not yet supported.")
+        
+#         task_id = str(uuid.uuid4())
+#         records=await get_record_to_run_ccva(db, task_id, task_results, start_date, end_date)
+
+#         if records is None :
+#             raise   HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No records found to run CCVA")
+        
+#         background_tasks.add_task(run_ccva, db, records,task_id, task_results, start_date, end_date, malaria_status, hiv_status, ccva_algorithm)
+#         datas={"progress": 1,"total_recors":len(records.data), "message": "Collecting data.", "status":'init',"elapsed_time": f"{(datetime.now() - start_time).seconds // 3600}:{(datetime.now() - start_time).seconds // 60 % 60}:{(datetime.now() - start_time).seconds % 60}","task_id": task_id, "error": False}
+      
+#         return ResponseMainModel(data={"task_id": task_id, "total_recors": len(records.data), **datas}, message="CCVA Is running ...")
+#     except Exception as e:
+#         raise e
+    
+   
 @ccva_router.post("", status_code=status.HTTP_200_OK,)
 async def run_internal_ccva(
     background_tasks: BackgroundTasks,
     oauth = Depends(oauth2_scheme), 
-    malaria_status = Body(None, alias="malaria_status"),
+    malaria_status = Body('h', alias="malaria_status"),
     ccva_algorithm: Optional[str] = Body(None, alias="ccva_algorithm"),
-    hiv_status : Optional[str] =Body(None, alias="hiv_status"),
+    hiv_status: Optional[str] = Body('h', alias="hiv_status"),
     current_user: Optional[str] = Depends(get_current_user),
     start_date: Optional[date] = Body(None, alias="start_date"),
     end_date: Optional[date] = Body(None, alias="end_date"),
     db: StandardDatabase = Depends(get_arangodb_session)
 ):
-    
-    try:
-        if ccva_algorithm is not None and ccva_algorithm not in ["InterVA5",]: ## other "InSilicoVA"
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid CCVA algorithm, or algorithm not yet supported.")
-        
-        task_id = str(uuid.uuid4())
-        records=await get_record_to_run_ccva(db, task_id, task_results, start_date, end_date)
+    start_time = datetime.now()
 
-        if records is None :
-            raise   HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No records found to run CCVA")
-        
-        background_tasks.add_task(run_ccva, db, records,task_id, task_results, start_date, end_date, malaria_status, hiv_status, ccva_algorithm)
-        return ResponseMainModel(data={"task_id": task_id,"total_recors":len(records.data)}, message="CCVA Is running ...")
+    try:
+        # Validate ccva_algorithm
+        if ccva_algorithm is not None and ccva_algorithm not in ["InterVA5"]:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid CCVA algorithm, or algorithm not yet supported.")
+
+        # Generate task ID and fetch records
+        task_id = str(uuid.uuid4())
+        task_results = {}  # Initialize task results storage
+        records = await get_record_to_run_ccva(db, task_id, task_results, start_date, end_date)
+
+        # Handle no records scenario
+        if not records:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No records found to run CCVA")
+        print('before background task')
+        # Add the CCVA task to background
+        background_tasks.add_task(run_ccva, db, records, task_id, task_results, start_date, end_date, malaria_status, hiv_status, ccva_algorithm)
+        print('after background task')
+        # Constructing response
+        datas = {
+            "progress": 1,
+            "total_records": len(records.data),
+            "message": "Collecting data.",
+            "status": 'init',
+            "elapsed_time": f"{(datetime.now() - start_time).seconds // 3600}:{(datetime.now() - start_time).seconds // 60 % 60}:{(datetime.now() - start_time).seconds % 60}",
+            "task_id": task_id,
+            "error": False
+        }
+        print('what is the response')
+
+        return ResponseMainModel(data={"task_id": task_id, "total_records": len(records.data), **datas}, message="CCVA is running...")
+    
     except Exception as e:
-        raise e
-    
-   
-    
+        # Raising the error so FastAPI can handle it
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
     
 @ccva_router.get("", status_code=status.HTTP_200_OK)
 async def get_processed_ccva_graphs(
