@@ -85,6 +85,7 @@ async def run_internal_ccva(
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No records found to run CCVA")
         print('before background task')
         # Add the CCVA task to background
+        
         background_tasks.add_task(run_ccva, db, records, task_id, task_results, start_date, end_date, malaria_status, hiv_status, ccva_algorithm)
         print('after background task')
         # Constructing response
