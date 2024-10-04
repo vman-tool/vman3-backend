@@ -22,10 +22,13 @@ services:
       - .settings.json:/vman3/settings.json
     environment:
       - PYTHONUNBUFFERED=1
+      - REDIS_URL=redis://redis:6379
     env_file:
       - .env
+
     depends_on:
-      - arango-db
+      - arangodb
+      - redis
 
   arango-db:
     image: arangodb/arangodb:12
