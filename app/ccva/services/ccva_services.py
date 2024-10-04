@@ -144,7 +144,7 @@ def runCCVA(odk_raw:pd.DataFrame, id_col: str = None,date_col:str =None,start_ti
         error_logs=process_ccva_errorlogs(output_folder)
         
         ccva_results= compile_ccva_results(iv5out, error_logs=error_logs, top=top, undetermined=undetermined, task_id=file_id,start_time= start_time,total_records=total_records,  rangeDates =rangeDates, db=db)
-        os.remove(f"{output_folder+'errorlogV5.txt'}.csv")
+        os.remove(f"{output_folder+'errorlogV5.txt'}")
         return ccva_results
 
     except Exception as e:
