@@ -132,6 +132,7 @@ def assign_questions_options(field, questions):
 
         :return questions with options
     """
+    
     options = [
         {
             "path": option ,
