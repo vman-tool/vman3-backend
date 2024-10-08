@@ -1,5 +1,6 @@
+from typing import Optional
 from arango.database import StandardDatabase
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Query, status
 
 from app.settings.models.settings import SettingsConfigData
 from app.settings.services.odk_configs import (
@@ -9,6 +10,7 @@ from app.settings.services.odk_configs import (
 )
 from app.shared.configs.arangodb import get_arangodb_session
 from app.shared.configs.models import ResponseMainModel
+from app.shared.services.va_records import get_field_value_from_va_records
 
 # from sqlalchemy.orm import Session
 
@@ -58,5 +60,16 @@ async def get_questioner_fileds(
 
     response = await get_questioners_fields( db=db)
     return response
+
+
+@settings_router.get("/get-field-unique-value", status_code=status.HTTP_200_OK, response_model=ResponseMainModel)
+async def get_field_unique_value(
+    field: Optional[str] = Query(None, alias="field"),
+    db: StandardDatabase = Depends(get_arangodb_session)):
+
+    response = await get_field_value_from_va_records(field=field, db=db)
+    return response
+
+
 
 
