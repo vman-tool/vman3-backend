@@ -2,11 +2,9 @@ from arango.database import StandardDatabase
 from fastapi import APIRouter, Depends, status
 
 from app.settings.models.settings import SettingsConfigData
-from app.settings.services.odk_configs import (
-    add_configs_settings,
-    fetch_configs_settings,
-    get_questioners_fields,
-)
+from app.settings.services.odk_configs import (add_configs_settings,
+                                               fetch_configs_settings,
+                                               get_questioners_fields)
 from app.shared.configs.arangodb import get_arangodb_session
 from app.shared.configs.models import ResponseMainModel
 
