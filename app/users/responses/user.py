@@ -51,27 +51,36 @@ class RoleResponse(BaseResponseModel):
 class UserRolesResponse(BaseResponseModel):
     user: ResponseUser
     roles: Union[List[Dict], None] = None
+    access_limit: Union[Dict, None] = None
 
     @classmethod
     async def get_structured_user_role(cls, user_role_uuid = None, user_role = None, db: StandardDatabase = None):
         user_role = user_role
         if not user_role:
             query = f"""
-            FOR user_role IN {db_collections.USER_ROLES}
-                FILTER user_role.uuid == @user_role_uuid
-                
-                LET role = (
-                    FOR r IN {db_collections.ROLES}
+                LET access_info = (
+                    FOR a IN {db_collections.USER_ACCESS_LIMIT}
+                        FILTER a.user == @user_uuid AND a.is_deleted == false
+                        RETURN a.access_limit
+                    )[0]
+
+                FOR user_role IN {db_collections.USER_ROLES}
+                    FILTER user_role.user == @user_uuid AND user_role.is_deleted == false
+
+                    // Fetch the role associated with the user_role
+                    LET role = (
+                        FOR r IN {db_collections.ROLES}
                         FILTER r.uuid == user_role.role
                         RETURN {{ uuid: r.uuid, name: r.name, privileges: r.privileges }}
-                )[0]
-                
-                COLLECT user = user_role.user INTO roleGroups
-                
-                RETURN MERGE(
-                    FIRST(roleGroups[*].user_role),
-                    {{roles: roleGroups[*].role}}
-                )
+                    )[0]
+
+                    COLLECT user = user_role.user INTO roleGroups
+                    
+                    RETURN MERGE(
+                        FIRST(roleGroups[*].user_role),
+                        {{roles: roleGroups[*].role}},
+                        {{access_limit: access_info}}
+                    )
             """
             bind_vars = {'user_role_uuid': user_role_uuid}
             cursor = db.aql.execute(query, bind_vars=bind_vars)

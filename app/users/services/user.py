@@ -24,7 +24,7 @@ from app.shared.configs.security import (
 from app.shared.configs.settings import get_settings
 from app.shared.utils.database_utilities import record_exists, replace_object_values
 from app.shared.utils.response import populate_user_fields
-from app.users.models.role import Role, UserRole
+from app.users.models.role import Role, UserAccessLimit, UserRole
 from app.users.models.user import User, UserToken
 from app.users.responses.user import RoleResponse, UserResponse, UserRolesResponse
 from app.users.schemas.user import AssignRolesRequest, RegisterUserRequest, RoleRequest, VerifyUserRequest
@@ -428,7 +428,20 @@ async def assign_roles(data: AssignRolesRequest = None, current_user: User = Non
                 user_role = await UserRole(**user_role_json).save(db=db)
             elif len(existing_user_role) == 1:
                 continue
+        
+        existing_access_limit = await UserAccessLimit.get_many(filters={"user": data.user}, db=db)
+        if len(existing_access_limit) == 1:
+            await UserAccessLimit.update(doc_uuid=existing_access_limit[0].get('uuid'), updated_by=current_user['uuid'], db=db)
+        elif not existing_access_limit:
+            await UserAccessLimit(**{
+                "user": data.user, 
+                "access_limit": data.access_limit,
+                "created_by": current_user['uuid']
+            }).save(db=db)
+        
+        
         user_roles = await get_user_roles(data.user, current_user, db=db)
+
         return ResponseMainModel(data = user_roles.data, message="Roles were successfully assigned!")
     except Exception as e:
         raise e
@@ -449,15 +462,22 @@ async def unassign_roles(data: AssignRolesRequest = None, current_user: User = N
             else:
                 raise HTTPException(status_code=404, detail="Could not finish role unassignment due to duplicate records")
         user_roles = await get_user_roles(data.user, current_user, db=db)
+
         return ResponseMainModel(data = user_roles.data, message="Roles were successfully unassigned!")         
     except Exception as e:
         raise e
-
+    
 async def get_user_roles(user_uuid: str  = None, current_user: User = None, db: StandardDatabase = None):
     try:
         if user_uuid is None:
             user_uuid = current_user['uuid']
+        
         query = f"""
+            LET access_limit = (
+                FOR a IN {db_collections.USER_ACCESS_LIMIT}
+                    FILTER a.user == @user_uuid
+                    RETURN {{ access_limit: a.access_limit }}
+            )
             FOR user_role IN {db_collections.USER_ROLES}
                 FILTER user_role.user == @user_uuid AND user_role.is_deleted == false
                 
@@ -471,13 +491,40 @@ async def get_user_roles(user_uuid: str  = None, current_user: User = None, db: 
                 
                 RETURN MERGE(
                     FIRST(roleGroups[*].user_role),
-                    {{roles: roleGroups[*].role}}
+                    {{roles: roleGroups[*].role}},
+                    {{access_limit: access_limit}}
+                )
+        """
+        query = f"""
+            LET access_info = (
+                FOR a IN {db_collections.USER_ACCESS_LIMIT}
+                    FILTER a.user == @user_uuid AND a.is_deleted == false
+                    RETURN a.access_limit
+                )[0]
+
+            FOR user_role IN {db_collections.USER_ROLES}
+                FILTER user_role.user == @user_uuid AND user_role.is_deleted == false
+
+                // Fetch the role associated with the user_role
+                LET role = (
+                    FOR r IN {db_collections.ROLES}
+                    FILTER r.uuid == user_role.role
+                    RETURN {{ uuid: r.uuid, name: r.name, privileges: r.privileges }}
+                )[0]
+
+                COLLECT user = user_role.user INTO roleGroups
+                
+                RETURN MERGE(
+                    FIRST(roleGroups[*].user_role),
+                    {{roles: roleGroups[*].role}},
+                    {{access_limit: access_info}}
                 )
         """
 
         bind_vars = {
             "user_uuid": user_uuid
         }
+
         user_exists = await record_exists(db_collections.USERS, user_uuid, db=db)
         if not user_exists:
             raise HTTPException(status_code=404, detail="User does not exist.")
