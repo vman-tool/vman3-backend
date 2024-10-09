@@ -10,6 +10,7 @@ class db_collections():
     USER_TOKENS: str = 'user_tokens'
     ROLES: str = 'role'
     USER_ROLES: str = 'user_roles'
+    USER_ACCESS_LIMIT: str = 'user_access_limit'
     ICD10_CATEGORY: str = 'icd10_category'
     ICD10: str = 'icd10'
     ASSIGNED_VA: str = 'assigned_va'
@@ -39,6 +40,7 @@ collections_with_indexes = {
     db_collections.USER_ROLES: [],
     db_collections.USER_TOKENS: [],
     db_collections.USER_ROLES: [],
+    db_collections.USER_ACCESS_LIMIT: [],
     db_collections.ICD10_CATEGORY: [],
     db_collections.ICD10: [],
     db_collections.ASSIGNED_VA: [],
