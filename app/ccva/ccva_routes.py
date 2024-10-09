@@ -1,15 +1,19 @@
+import io
 import uuid
+import zipfile
 from datetime import date, datetime
 from typing import List, Optional
 
+import pandas as pd
 from arango.database import StandardDatabase
 from fastapi import (APIRouter, BackgroundTasks, Body, Depends, HTTPException,
-                     Query, status)
+                     Query, Response, status)
 
 from app.ccva.services.ccva_data_services import (
     delete_ccva_entry, fetch_all_processed_ccva_graphs,
     fetch_processed_ccva_graphs, set_ccva_as_default)
-from app.ccva.services.ccva_services import get_record_to_run_ccva, run_ccva
+from app.ccva.services.ccva_services import (fetch_ccva_results_and_errors,
+                                             get_record_to_run_ccva, run_ccva)
 from app.shared.configs.arangodb import get_arangodb_session
 from app.shared.configs.models import ResponseMainModel
 from app.users.decorators.user import get_current_user, oauth2_scheme
@@ -180,3 +184,73 @@ async def delete_ccva(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="CCVA not found or could not be deleted")
     return {"message": "CCVA entry deleted successfully"}
 
+
+
+
+# Endpoint to download the results as JSON or CSV
+@ccva_router.get("/download_ccva_results/{task_id}", status_code=status.HTTP_200_OK)
+async def download_ccva_results(
+    task_id: str,
+    db: StandardDatabase = Depends(get_arangodb_session),
+    file_format: str = "json"
+):
+    print(task_id)
+    try:
+        if task_id is None:
+           raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Task ID is required.")
+        # Fetch the data
+        ccva_data = await fetch_ccva_results_and_errors(db, str(task_id))
+
+        if file_format == "json":
+            # Return JSON response formatted with ResponseMainModel
+            return ResponseMainModel(
+                data=ccva_data, 
+                message="CCVA results fetched successfully", 
+                error=False
+            )
+
+        elif file_format == "csv":
+            # Convert results to DataFrame for CSV export
+            results_df = pd.DataFrame(ccva_data["results"])
+            error_logs_df = pd.DataFrame(ccva_data["error_logs"])
+            
+            # Create an in-memory buffer to store the ZIP file
+            buffer = io.BytesIO()
+
+            # Create a new ZIP file in memory
+            with zipfile.ZipFile(buffer, "w") as zip_file:
+                # Write the results CSV to the ZIP file
+                results_csv = results_df.to_csv(index=False)
+                zip_file.writestr(f"ccva_results_{task_id}.csv", results_csv)
+
+                # Write the error logs CSV to the ZIP file
+                if not error_logs_df.empty:
+                    error_logs_csv = error_logs_df.to_csv(index=False)
+                    zip_file.writestr(f"ccva_error_logs_{task_id}.csv", error_logs_csv)
+
+            # Seek to the start of the buffer
+            buffer.seek(0)
+
+            # Return the ZIP file as a response
+            return Response(
+                content=buffer.getvalue(),
+                media_type="application/zip",
+                headers={
+                    "Content-Disposition": f"attachment; filename=ccva_results_{task_id}.zip"
+                }
+            )
+
+        else:
+            return ResponseMainModel(
+                data=None, 
+                message="Invalid format. Please choose either 'json' or 'csv'.", 
+                error=True
+            )
+
+    except Exception as e:
+        # Handle exceptions and return error response
+        return ResponseMainModel(
+            data=None,
+            message=f"An error occurred: {str(e)}",
+            error=True
+        )
