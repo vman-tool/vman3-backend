@@ -79,7 +79,7 @@ async def get_token_user(token: str, db:StandardDatabase ):
         user_token_id = str_decode(payload.get('r'))
         user_id = str_decode(payload.get('sub'))
         access_key = payload.get('a')
-        
+
         filters = {
             'access_key': access_key,
             '_key': user_token_id,
@@ -95,7 +95,13 @@ async def get_token_user(token: str, db:StandardDatabase ):
 
         if user_token_cursor:
             user_token = user_token_cursor[0]
-            return await User.get(doc_id=user_token['user_id'], db=db)
+            filters = {
+                '_key': user_token['user_id'],
+                'is_active': True,
+            }
+            active_user = await User.get_many(filters, db=db)
+            if len(active_user) > 0:
+                return active_user[0]
     return None
 
 

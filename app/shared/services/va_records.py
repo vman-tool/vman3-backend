@@ -161,4 +161,23 @@ async def shared_fetch_va_records(paging: bool = True,  page_number: int = 1, li
     
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to fetch data: {e}")
+    
+
+async def get_field_value_from_va_records(field: str, db: StandardDatabase = None):
+    try:
+
+        query = f"""
+            FOR doc IN {db_collections.VA_TABLE}
+                FILTER doc.{field} != null
+                COLLECT unique = doc.{field}
+                RETURN unique
+        """
+
+        cursor = db.aql.execute(query)
+        data = [document for document in cursor]
+
+        return ResponseMainModel(data=data, message="Unique data fetched successfully!", total = len(data))
+    
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to fetch data: {e}")
  
