@@ -305,6 +305,7 @@ async def fetch_all_processed_ccva_graphs(paging: bool = True, page_number: int 
         RETURN {
             
             "id": doc._key,
+            "task_id": doc.task_id,
             "created_at": doc.created_at,
             "total_records": doc.total_records,
             "elapsed_time": doc.elapsed_time,
