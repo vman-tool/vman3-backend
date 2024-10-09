@@ -375,7 +375,6 @@ async def save_role(data: RoleRequest = None, current_user: User = None, db: Sta
             if len(existing_role) == 1:
                 existing_role = existing_role[0]
                 role_json = replace_object_values(data.model_dump(), existing_role)
-                print(role_json)
                 role = await Role(**role_json).update(updated_by = current_user['uuid'], db=db)
                 message = "Role updated successfully."
             elif len(existing_role) > 1:
@@ -431,7 +430,8 @@ async def assign_roles(data: AssignRolesRequest = None, current_user: User = Non
         
         existing_access_limit = await UserAccessLimit.get_many(filters={"user": data.user}, db=db)
         if len(existing_access_limit) == 1:
-            await UserAccessLimit.update(doc_uuid=existing_access_limit[0].get('uuid'), updated_by=current_user['uuid'], db=db)
+            access_limit_json = replace_object_values(data.model_dump(), existing_access_limit[0])
+            await UserAccessLimit(**access_limit_json).update(updated_by=current_user['uuid'], db=db)
         elif not existing_access_limit:
             await UserAccessLimit(**{
                 "user": data.user, 
