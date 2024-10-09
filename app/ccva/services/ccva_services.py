@@ -158,7 +158,7 @@ def runCCVA(odk_raw:pd.DataFrame, id_col: str = None,date_col:str =None,start_ti
 def compile_ccva_results(iv5out, top=10, undetermined=True,start_time:timedelta=None,
                          task_id:str=None,
                          total_records:int=0, rangeDates: Dict={},
-                         error_logs: Dict=[],
+                         error_logs: list = [],
                          db: StandardDatabase=None):
     # Compile results for all groups
     all_results = {
