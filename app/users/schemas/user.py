@@ -1,6 +1,6 @@
 
 
-from typing import List, Optional, Union
+from typing import Dict, List, Optional, Union
 
 from pydantic import BaseModel, EmailStr
 
@@ -35,4 +35,5 @@ class RoleRequest(BaseModel):
 class AssignRolesRequest(BaseModel):
     user: str
     roles: Union[List[str], None] = None
+    access_limit: Union[Dict, None] = None
     
