@@ -132,8 +132,14 @@ def runCCVA(odk_raw:pd.DataFrame, id_col: str = None,date_col:str =None,start_ti
         records =  iv5out.get_indiv_prob(
             top=10
         )
+       
+        rcd = records.to_dict(orient='records')
+
+        # Iterate over each dictionary and add the 'task_id' field
+        for record in rcd:
+            record["task_id"] = file_id
         # Insert the records into the database
-        db.collection(db_collections.CCVA_RESULTS).insert_many(null_convert_data(records.to_dict(orient='records')), overwrite=True, overwrite_mode="update")
+        db.collection(db_collections.CCVA_RESULTS).insert_many(null_convert_data(rcd), overwrite=True, overwrite_mode="update")
         print("InterVA5 analysis completed.")
 
         # Remove the temporary CSV file
@@ -142,6 +148,7 @@ def runCCVA(odk_raw:pd.DataFrame, id_col: str = None,date_col:str =None,start_ti
         rangeDates={"start": odk_raw[date_col].max(), "end":odk_raw[date_col].min()}
         ## get ccva error logs to be added to the ccva_results
         error_logs=process_ccva_errorlogs(output_folder)
+        print(error_logs)
         
         ccva_results= compile_ccva_results(iv5out, error_logs=error_logs, top=top, undetermined=undetermined, task_id=file_id,start_time= start_time,total_records=total_records,  rangeDates =rangeDates, db=db)
         os.remove(f"{output_folder+'errorlogV5.txt'}")
@@ -158,7 +165,7 @@ def runCCVA(odk_raw:pd.DataFrame, id_col: str = None,date_col:str =None,start_ti
 def compile_ccva_results(iv5out, top=10, undetermined=True,start_time:timedelta=None,
                          task_id:str=None,
                          total_records:int=0, rangeDates: Dict={},
-                         error_logs: list = [],
+                         error_logs: Optional[any]=None,
                          db: StandardDatabase=None):
     # Compile results for all groups
     all_results = {
@@ -273,6 +280,7 @@ def compile_ccva_results(iv5out, top=10, undetermined=True,start_time:timedelta=
     # Combine all results into a single dictionary
     elapsed_time = datetime.now() - start_time
     ccva_results = {
+        "task_id": task_id,
         "created_at": datetime.now().isoformat(),
         "total_records": total_records,
         "elapsed_time":   f"{elapsed_time.seconds // 3600}:{(elapsed_time.seconds // 60) % 60}:{elapsed_time.seconds % 60}",
@@ -316,7 +324,47 @@ def process_ccva_errorlogs(output_folder:str):
                 "error_type": error_type,
                 "error_message": error_message
             }
+            print(log_entry)
             log_entrys.append(log_entry)
 
             # Insert into ArangoDB
             return log_entrys
+
+
+async def fetch_ccva_results_and_errors(db: StandardDatabase, task_id: str):
+    try:
+        # AQL query to fetch individual results and error logs
+        query = f"""
+        LET graph_results = (
+            FOR g IN ccva_graph_results
+            FILTER g.task_id == "{task_id}"
+            RETURN g.error_logs
+        )
+
+        LET indiv_results = (
+            FOR d IN ccva_results
+            FILTER d.task_id == "{task_id}"
+            RETURN {{
+                ID: d.ID,
+                CAUSE1: d.CAUSE1,
+                CAUSE2: d.CAUSE2
+            }}
+        )
+
+        RETURN {{
+            results: indiv_results,
+            error_logs: LENGTH(graph_results) > 0 ? graph_results[0] : null
+        }}
+        """
+
+        # Execute the AQL query
+        cursor = db.aql.execute(query)
+
+        # Retrieve the result (first result since RETURN only outputs one document)
+        result = cursor.next()
+
+        return result
+
+    except Exception as e:
+        print(f"Error fetching CCVA results and error logs: {e}")
+        return None
