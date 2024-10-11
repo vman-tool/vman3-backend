@@ -40,7 +40,7 @@ def format_va_record(raw_data: dict, config: SettingsConfigData = None) -> DataR
     today_field = config.field_mapping.date
     return DataResponse(
         id=raw_data.get("_key", ""),
-        vaId=raw_data.get(f"{vaid_field}", "vaid"),
+        vaId=raw_data.get(f"instanceid", "vaid"),
         region=raw_data.get(f"{region_field}", "id10005r"),
         district=raw_data.get(f"{district_field}", "id10005d"),
         interviewDay=raw_data.get(f"{today_field}", "today"),
