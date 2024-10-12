@@ -7,7 +7,8 @@ from fastapi import HTTPException, status
 from app.odk.utils.odk_client import ODKClientAsync
 from app.settings.models.settings import SettingsConfigData
 from app.shared.configs.constants import db_collections
-from app.shared.configs.models import ResponseMainModel
+from app.shared.configs.models import ResponseMainModel, VManBaseModel
+from app.shared.utils.database_utilities import replace_object_values
 
 
 async def fetch_odk_config(db: StandardDatabase) -> SettingsConfigData:
@@ -72,6 +73,30 @@ async def add_configs_settings(configData: SettingsConfigData, db: StandardDatab
         
         elif configData.type == 'va_summary' and configData.va_summary:
             data['va_summary'] = configData.va_summary
+        
+        elif configData.type == 'field_labels' and configData.field_labels:
+
+            aql_query = f"""
+            FOR settings in  {db_collections.SYSTEM_CONFIGS}
+            RETURN settings.field_labels[0]
+            """
+            cursor = db.aql.execute(aql_query, bind_vars={})
+            existing_field_labels_settings = [doc for doc in cursor]
+            field_label_data = []
+            if existing_field_labels_settings:
+                existing_field_label_dict = {field['field_id']: field for field in existing_field_labels_settings}
+
+                for field_label in configData.model_dump().get('field_labels', ""):
+                    field_id = field_label['field_id']
+
+                    if field_id in existing_field_label_dict:
+                        existing_field_label_dict[field_id] = replace_object_values(existing_field_label_dict[field_id], field_label)
+                    else:
+                         existing_field_label_dict[field_id] = field_label
+                
+                field_label_data = list(existing_field_label_dict.values())
+                
+            data['field_labels'] = field_label_data
             
 
         else:

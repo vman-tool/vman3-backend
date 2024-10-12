@@ -44,10 +44,15 @@ class FieldMapping(BaseModel):
     interviewer_sex: str  # Optional field
     additional_fields: Optional[Dict[str, Any]] = Field(default_factory=dict)  # For additional fields
 
+class FieldLabels(BaseModel):
+    field_id: str
+    label: Union[str, None] = None
+    options: Union[Dict, None] = None
 
 class SettingsConfigData(BaseModel):
-    type: Optional[str] = 'odk_api_configs'  # Optional field with a default value
-    odk_api_configs: Optional[OdkConfigModel] = None  # Optional field
-    system_configs:     Optional[SystemConfig] = None  # Optional field
-    field_mapping: Optional[FieldMapping] = None  # Optional field
+    type: Union[str, None] = 'odk_api_configs'  # Optional field with a default value
+    odk_api_configs: Union[OdkConfigModel, None] = None  # Optional field
+    system_configs:     Union[SystemConfig, None] = None  # Optional field
+    field_mapping: Union[FieldMapping, None] = None  # Optional field
     va_summary: Union[List[str], None] = None
+    field_labels: Union[List[FieldLabels], None] = None
