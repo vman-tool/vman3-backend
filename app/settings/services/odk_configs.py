@@ -90,7 +90,7 @@ async def add_configs_settings(configData: SettingsConfigData, db: StandardDatab
                     field_id = field_label['field_id']
 
                     if field_id in existing_field_label_dict:
-                        existing_field_label_dict[field_id] = replace_object_values(existing_field_label_dict[field_id], field_label)
+                        existing_field_label_dict[field_id] = replace_object_values(field_label, existing_field_label_dict[field_id])
                     else:
                          existing_field_label_dict[field_id] = field_label
                 
