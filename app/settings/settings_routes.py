@@ -35,9 +35,10 @@ async def get_configs_settings(
 
 @settings_router.post("/system_configs", status_code=status.HTTP_200_OK, response_model=ResponseMainModel)
 async def save_configs_settings(
-configData: SettingsConfigData,
+    configData: SettingsConfigData,
     db: StandardDatabase = Depends(get_arangodb_session)):
-    response = await add_configs_settings( configData,db=db)
+    print(configData)
+    response = await add_configs_settings( configData, db=db)
     return response
 
 
