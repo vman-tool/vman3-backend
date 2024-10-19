@@ -531,6 +531,7 @@ async def get_user_roles(user_uuid: str  = None, current_user: User = None, db: 
             raise HTTPException(status_code=404, detail="User does not exist.")
 
         user_roles_result = await UserRole.run_custom_query(query=query, bind_vars=bind_vars, db=db)
+
         
         if user_roles_result:
             user_roles = user_roles_result.next()            
