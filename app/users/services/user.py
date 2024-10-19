@@ -64,11 +64,9 @@ async def create_or_update_user_account(data: RegisterUserRequest, current_user:
 
             update_user_data = replace_object_values(user_data, existing_user)
             
-            return await User(**update_user_data).update(updated_by = current_user['uuid'], db = db)
+            return await User(**update_user_data).update(updated_by = current_user["_key"] if '_key' in current_user else None, db = db)
         else:
             raise HTTPException(status_code=404, detail="User not found.")
-
-
 
     user_data = {
         "name": data.name,
@@ -76,7 +74,7 @@ async def create_or_update_user_account(data: RegisterUserRequest, current_user:
         "password": hash_password(data.confirm_password),
         "is_active": data.is_active, # TODO: Change to false if you want to verify email first
         "verified_at":datetime.now().isoformat(), # TODO: Change to None if you want to verify email first
-        "created_by": current_user["_key"] if current_user else None,
+        "created_by": current_user["_key"] if '_key' in current_user else None,
     }
     
     return await User(**user_data).save(db = db)
@@ -180,7 +178,8 @@ async def get_refresh_token(refresh_token: str, db: StandardDatabase):
             name=user["name"],
             email=user["email"],
             is_active=user["is_active"],
-            created_at=user.get("created_at")
+            created_at=user.get("created_at"),
+            created_by=user.get("created_by")
         ).model_dump()
 
     return res
@@ -286,7 +285,8 @@ async def fetch_user_detail(pk: str, db):
         name=user["name"],
         email=user["email"],
         is_active=user["is_active"],
-        created_at=user.get("created_at")
+        created_at=user.get("created_at"),
+        created_by=user.get("created_by")
     )
     raise HTTPException(status_code=400, detail="User does not exist.")
 
@@ -306,7 +306,8 @@ async def fetch_users(paging: bool= None, page_number: int = None, limit: int = 
                     name=user["name"],
                     email=user["email"],
                     is_active=user["is_active"],
-                    created_at=user.get("created_at")
+                    created_at=user["created_at"],
+                    created_by=user["created_by"]
                 ) for user in users
             ]
     
