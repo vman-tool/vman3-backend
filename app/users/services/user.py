@@ -38,7 +38,7 @@ from app.utilits.data_validation import validate_privileges
 settings = get_settings()
 
 
-async def create_or_update_user_account(data: RegisterUserRequest, current_user: User,  db: StandardDatabase, background_tasks: BackgroundTasks):
+async def create_or_update_user_account(data: RegisterUserRequest, current_user: User = None,  db: StandardDatabase = None, background_tasks: BackgroundTasks = None):
     if data.password != data.confirm_password:
             raise HTTPException(status_code=400, detail="Password mismatch.")
     
@@ -76,7 +76,7 @@ async def create_or_update_user_account(data: RegisterUserRequest, current_user:
         "password": hash_password(data.confirm_password),
         "is_active": data.is_active, # TODO: Change to false if you want to verify email first
         "verified_at":datetime.now().isoformat(), # TODO: Change to None if you want to verify email first
-        "created_by": current_user["_key"], # TODO: Change to the user id of the user creating the account
+        "created_by": current_user["_key"] if current_user else None,
     }
     
     return await User(**user_data).save(db = db)
@@ -101,8 +101,8 @@ async def activate_user_account(data: VerifyUserRequest, db, background_tasks: B
         raise HTTPException(status_code=400, detail="This link either expired or not valid.")
 
     user['is_active'] = True
-    user['updated_at'] = datetime.utcnow().isoformat()
-    user['verified_at'] = datetime.utcnow().isoformat()
+    user['updated_at'] = datetime.now().isoformat()
+    user['verified_at'] = datetime.now().isoformat()
 
     await collection.update(user)
     
@@ -375,13 +375,13 @@ async def save_role(data: RoleRequest = None, current_user: User = None, db: Sta
             if len(existing_role) == 1:
                 existing_role = existing_role[0]
                 role_json = replace_object_values(data.model_dump(), existing_role)
-                role = await Role(**role_json).update(updated_by = current_user['uuid'], db=db)
+                role = await Role(**role_json).update(updated_by = current_user.get('uuid', '') if 'uuid' in current_user else None, db=db)
                 message = "Role updated successfully."
             elif len(existing_role) > 1:
                 raise HTTPException(status_code=400, detail="Multiple roles found with the same name or UUID.")
             else:
                 role_json = data.model_dump()
-                role_json['created_by'] = current_user['uuid']
+                role_json['created_by'] = current_user.get('uuid', '') if 'uuid' in current_user else None
                 role = await Role(**role_json).save(db=db)
                 message = "Role created successfully"
             return ResponseMainModel(data = await RoleResponse.get_structured_role(role = role, db=db), message=message)
@@ -405,7 +405,8 @@ async def assign_roles(data: AssignRolesRequest = None, current_user: User = Non
             ]
         }
         existing_roles = await Role.get_many(filters=filters, db=db)
-        if not record_exists(db_collections.USERS, data.user):
+        existing_user = await record_exists(collection_name = db_collections.USERS, uuid = data.user, db = db)
+        if not existing_user:
             raise HTTPException(status_code=404, detail="User does not exist.")
         
         if len(existing_roles) != len(data.roles):
@@ -416,27 +417,27 @@ async def assign_roles(data: AssignRolesRequest = None, current_user: User = Non
             if user_role['role'] not in data.roles:
                 await UserRole.delete(doc_uuid=user_role.get('uuid'), deleted_by=current_user['uuid'], db=db)
 
+
         for role in data.roles:
             existing_user_role = await UserRole.get_many(filters={"user": data.user, "role": role}, db=db)
             if len(existing_user_role) == 0:
                 user_role_json = {
                     "user": data.user,
                     "role": role,
-                    "created_by": current_user['uuid']
+                    "created_by": current_user.uuid
                 }
                 user_role = await UserRole(**user_role_json).save(db=db)
             elif len(existing_user_role) == 1:
                 continue
-        
         existing_access_limit = await UserAccessLimit.get_many(filters={"user": data.user}, db=db)
         if len(existing_access_limit) == 1:
             access_limit_json = replace_object_values(data.model_dump(), existing_access_limit[0])
             await UserAccessLimit(**access_limit_json).update(updated_by=current_user['uuid'], db=db)
-        elif not existing_access_limit:
+        elif not existing_access_limit and data.access_limit:
             await UserAccessLimit(**{
                 "user": data.user, 
                 "access_limit": data.access_limit,
-                "created_by": current_user['uuid']
+                "created_by": current_user.uuid
             }).save(db=db)
         
         

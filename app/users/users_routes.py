@@ -39,11 +39,22 @@ guest_router = APIRouter(
 # @created_by_decorator
 @auth_router.post("/", status_code=status.HTTP_201_CREATED, response_model=UserResponse)
 
-async def register_user(data: RegisterUserRequest, background_tasks: BackgroundTasks, current_user = Depends(get_current_user), db: StandardDatabase = Depends(get_arangodb_session)):
+async def register_user(
+    data: RegisterUserRequest, 
+    background_tasks: BackgroundTasks, 
+    current_user = Depends(get_current_user),
+    required_privs: List[str] = Depends(check_privileges([AccessPrivileges.USERS_CREATE_USER])),
+    db: StandardDatabase = Depends(get_arangodb_session)
+):
     return await user.create_or_update_user_account(data, current_user, db, background_tasks)
 
 @auth_router.put("/", status_code=status.HTTP_200_OK, response_model=UserResponse)
-async def update_user(data: RegisterUserRequest, background_tasks: BackgroundTasks, current_user = Depends(get_current_user), db: StandardDatabase = Depends(get_arangodb_session)):
+async def update_user(
+    data: RegisterUserRequest, 
+    background_tasks: BackgroundTasks, 
+    current_user = Depends(get_current_user),
+    required_privs: List[str] = Depends(check_privileges([AccessPrivileges.USERS_UPDATE_USER, AccessPrivileges.USERS_DEACTIVATE_USER])),
+    db: StandardDatabase = Depends(get_arangodb_session)):
     return await user.create_or_update_user_account(data, current_user, db, background_tasks)
 
 @user_router.post("/verify", status_code=status.HTTP_200_OK)
@@ -102,7 +113,7 @@ async def get_privileges(
         privilege: Optional[str] = Query(None, alias="privilege"),
         exact: Optional[bool] = Query(False, alias="exact"),
         current_user = Depends(get_current_user),
-        required_privs: List[str] = Depends(check_privileges([])),
+        required_privs: List[str] = Depends(check_privileges([AccessPrivileges.USERS_VIEW_PRIVILEGES])),
         session = Depends(get_arangodb_session)
     ):
 
@@ -117,7 +128,7 @@ async def get_roles(
         page_number: Optional[int] = Query(1, alias="page_number"),
         limit: Optional[int] = Query(10, alias="limit"), 
         current_user = Depends(get_current_user), 
-        required_privs: List[str] = Depends(check_privileges([])),
+        required_privs: List[str] = Depends(check_privileges([AccessPrivileges.USERS_VIEW_ROLES, AccessPrivileges.USERS_VIEW_PRIVILEGES])),
         session = Depends(get_arangodb_session)
     ):
 
@@ -136,7 +147,8 @@ async def get_roles(
 async def create_or_update_roles(
         data: RoleRequest,
         current_user = Depends(get_current_user), 
-        session = Depends(get_arangodb_session)
+        session = Depends(get_arangodb_session),
+        required_privs: List[str] = Depends(check_privileges([AccessPrivileges.USERS_CREATE_ROLES])),
     ):
     try:
         return await user.save_role(data = data, current_user = current_user, db=session)
@@ -147,7 +159,8 @@ async def create_or_update_roles(
 async def delete_roles(
         data: List[str],
         current_user = Depends(get_current_user), 
-        session = Depends(get_arangodb_session)
+        session = Depends(get_arangodb_session),
+        required_privs: List[str] = Depends(check_privileges([AccessPrivileges.USERS_DELETE_ROLES])),
     ):
     try:
         return await user.delete_role(data = data, current_user = current_user, db=session)
@@ -158,7 +171,8 @@ async def delete_roles(
 async def assign_roles(
         data: AssignRolesRequest,
         current_user = Depends(get_current_user), 
-        session = Depends(get_arangodb_session)
+        session = Depends(get_arangodb_session),
+        required_privs: List[str] = Depends(check_privileges([AccessPrivileges.USERS_ASSIGN_ROLES])),
     ):
     try:
         return await user.assign_roles(data = data, current_user = current_user, db=session)
@@ -169,7 +183,8 @@ async def assign_roles(
 async def unassign_roles(
         data: AssignRolesRequest,
         current_user = Depends(get_current_user), 
-        session = Depends(get_arangodb_session)
+        session = Depends(get_arangodb_session),
+        required_privs: List[str] = Depends(check_privileges([AccessPrivileges.USERS_ASSIGN_ROLES, AccessPrivileges.USERS_VIEW_ROLES])),
     ):
     try:
         return await user.unassign_roles(data = data, current_user = current_user, db=session)
@@ -180,7 +195,8 @@ async def unassign_roles(
 async def get_users_roles(
         user_uuid: Union[str, None] = None,
         current_user = Depends(get_current_user), 
-        session = Depends(get_arangodb_session)
+        session = Depends(get_arangodb_session),
+        required_privs: List[str] = Depends(check_privileges([AccessPrivileges.USERS_VIEW_ROLES])),
     ):
     try:
         return await user.get_user_roles(user_uuid=user_uuid, current_user = current_user, db=session)
