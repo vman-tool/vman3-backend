@@ -350,9 +350,10 @@ class BaseResponseModel(BaseModel):
         """
         bind_vars = {'user_uuid': user_uuid}
         cursor = db.aql.execute(query, bind_vars=bind_vars)
-        user_data = cursor.next()
-        if not user_data:
+        user_data = [user for user in cursor]
+        if len(user_data) == 0:
             return ResponseUser(**{"uuid": "", "name": ""})
+        user_data = user_data[0]
         return ResponseUser(**user_data)
 
     @classmethod
@@ -365,6 +366,7 @@ class BaseResponseModel(BaseModel):
         data['updated_by'] = cls.get_user(data['updated_by'], db) if 'updated_by' in data and data['updated_by'] else None
         
         data['deleted_by'] = cls.get_user(data['deleted_by'], db) if 'deleted_by' in data and data['deleted_by'] else None
+
 
         for field in specific_fields:
             if field in data and data[field]:
