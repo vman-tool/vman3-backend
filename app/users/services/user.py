@@ -531,11 +531,16 @@ async def get_user_roles(user_uuid: str  = None, current_user: User = None, db: 
             raise HTTPException(status_code=404, detail="User does not exist.")
 
         user_roles_result = await UserRole.run_custom_query(query=query, bind_vars=bind_vars, db=db)
-
-        
         if user_roles_result:
-            user_roles = user_roles_result.next()            
-            user_roles_response = await UserRolesResponse.get_structured_user_role(user_role=user_roles, db=db)
+            user_roles = [user_role for user_role in user_roles_result]
+            user_role = user_roles[0]
+            roles = []
+            if 'roles' in user_role:
+                for role in user_role["roles"]:
+                    if role is not None:
+                        roles.append(role)
+            user_role["roles"] = roles            
+            user_roles_response = await UserRolesResponse.get_structured_user_role(user_role=user_role, db=db)
             return ResponseMainModel(data=user_roles_response, message='User Roles Fetched successfully.')
         else:
             return ResponseMainModel(data=[], message='No roles found for this user.')
