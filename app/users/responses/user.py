@@ -86,6 +86,11 @@ class UserRolesResponse(BaseResponseModel):
             bind_vars = {'user_role_uuid': user_role_uuid}
             cursor = db.aql.execute(query, bind_vars=bind_vars)
             user_role = cursor.next()
-        user_role.pop("role", None)
+        roles = []
+        if 'roles' in user_role:
+            for role in user_role["roles"]:
+                if role is not None:
+                    roles.append(role)
+        user_role["roles"] = roles
         populated_role_data = await populate_user_fields(data = user_role, specific_fields=['user'], db=db)
         return cls(**populated_role_data)
