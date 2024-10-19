@@ -292,7 +292,6 @@ async def get_form_questions(
 ) -> ResponseMainModel:
     try:
         fields_to_be_queried = {"name": questions_keys.split(',')} if questions_keys else []
-        Develop
         
         filters = {
             "in_conditions": fields_to_be_queried
