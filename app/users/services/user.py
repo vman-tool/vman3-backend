@@ -166,7 +166,7 @@ async def get_refresh_token(refresh_token: str, db: StandardDatabase):
 
 
     if not user_token_cursor:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Invalid Request.")
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid Request.")
 
     user_token = user_token_cursor[0]
     user_token['expires_at'] = datetime.now().isoformat()
