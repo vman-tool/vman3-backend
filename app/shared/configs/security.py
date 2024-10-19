@@ -99,7 +99,7 @@ async def get_token_user(token: str, db:StandardDatabase ):
                 '_key': user_token['user_id'],
                 'is_active': True,
             }
-            active_user = await User.get_many(filters, db=db)
+            active_user = await User.get_many(filters = filters, db = db)
             if len(active_user) > 0:
                 return active_user[0]
     return None

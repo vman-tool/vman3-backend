@@ -29,7 +29,6 @@ def created_by_decorator(func):
     @wraps(func)
     async def wrapper(*args, **kwargs):
         current_user = await get_current_user()  # Manually call the dependency function
-        print(current_user)
         if 'data' in kwargs and isinstance(kwargs['data'], RegisterUserRequest):
             kwargs['data'].created_by = current_user.id
         else:
@@ -39,7 +38,6 @@ def created_by_decorator(func):
 
 async def get_current_user_privileges(current_user: User =  Depends(get_current_user), db: StandardDatabase = Depends(get_arangodb_session)):
     user_roles_data: ResponseMainModel = await get_user_roles(current_user = current_user, db=db)
-    print(current_user)
     user_roles_data: UserRolesResponse = user_roles_data.data
     privileges = []
     if type(user_roles_data) is list:
@@ -50,7 +48,6 @@ async def get_current_user_privileges(current_user: User =  Depends(get_current_
 
 def check_privileges(required_privileges: List[str]):
     def dependency(user_privileges: str = Depends(get_current_user_privileges)):
-        print(user_privileges)
         missing_privileges = [priv for priv in required_privileges if priv not in user_privileges]
         if missing_privileges:
             raise HTTPException(
