@@ -40,6 +40,7 @@ class User(VManBaseModel):
             "name": user["name"],
             "email": user["email"],
             "is_active": user["is_active"],
+            "created_by":user["created_by"],
             "created_at":user["created_at"]
         }
         return data
@@ -54,6 +55,7 @@ class User(VManBaseModel):
             "name": user["name"],
             "email": user["email"],
             "is_active": user["is_active"],
+            "created_by":user["created_by"],
             "created_at":user["created_at"]
         }
         return data
