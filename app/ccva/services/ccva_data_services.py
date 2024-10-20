@@ -422,13 +422,17 @@ async def delete_ccva_entry(ccva_id: str, db: StandardDatabase) -> ResponseMainM
         cursor = db.aql.execute(query, bind_vars={"ccva_id": ccva_id})
         ccva_doc = next(cursor, None)
 
+
         if not ccva_doc:
             raise BadRequestException(f"CCVA entry with id {ccva_id} not found")
-
+       
         # Delete the document
         query = f"REMOVE {{ _key: @ccva_id }} IN {collection.name}"
         bind_vars = {"ccva_id": ccva_id}
         db.aql.execute(query, bind_vars=bind_vars)
+        db.collection(db_collections.CCVA_RESULTS).delete_match({
+            "task_id": ccva_doc.get("task_id")
+        })
 
         return ResponseMainModel(
             data=None,
