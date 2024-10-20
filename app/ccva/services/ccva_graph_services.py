@@ -11,7 +11,7 @@ from app.shared.middlewares.exceptions import BadRequestException
 
 
 async def fetch_db_processed_ccva_graphs(
-    ccva_task_id: Optional[str] = None, 
+    ccva_id: Optional[str] = None, 
     is_default: Optional[bool] = None, 
     paging: bool = True, 
     page_number: int = 1, 
@@ -25,11 +25,16 @@ async def fetch_db_processed_ccva_graphs(
 ) -> ResponseMainModel:
     try:
         print(locations)
-        
+        print(ccva_id)
         collection_name = db_collections.CCVA_RESULTS  # Use the actual collection name here
-        cursor_cr =db.collection(db_collections().CCVA_GRAPH_RESULTS).find({
+        if ccva_id is not None:
+            cursor_cr = db.collection(db_collections().CCVA_GRAPH_RESULTS).find({
+            "_key": ccva_id
+            })
+        else:
+            cursor_cr = db.collection(db_collections().CCVA_GRAPH_RESULTS).find({
             "isDefault": True
-        })
+            })
 
         defaultsCr = [{key: document.get(key, None) for key in ['task_id', 'isDefault','created_at','total_records','elapsed_time','range']} for document in cursor_cr]
         if not defaultsCr:
@@ -184,7 +189,8 @@ async def fetch_db_processed_ccva_graphs(
                 "created_at": "{created_at}",
             "total_records": allTotalCount,
             "elapsed_time": "{elapsed_time}",
-            "range": {range}
+            "range": {range},
+            "task_id": "{ccva_task_id}"
             }}
         
         """

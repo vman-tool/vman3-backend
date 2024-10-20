@@ -112,11 +112,11 @@ def runCCVA(odk_raw:pd.DataFrame, id_col: str = None,date_col:str =None,start_ti
             input_data = transform((instrument, algorithm), odk_raw, lower=True)
         
         # Define the output folder
-        output_folder = "../ccva_files/"
+        output_folder = "./ccva_files/"
         # output_folder = f"../ccva_files/{file_id}/"
         
         # Create an InterVA5 instance with the async callback
-        iv5out = InterVA5(input_data, hiv=hiv, malaria=malaria, write=True, directory=output_folder, filename=file_id,start_time=start_time, update_callback=update_callback, return_checked_data=True)
+        iv5out = InterVA5(input_data,task_id=file_id, hiv=hiv, malaria=malaria, write=True, directory=output_folder, filename=file_id,start_time=start_time, update_callback=update_callback, return_checked_data=True)
 
         asyncio.run(update_callback(InterVA5Progress(
         progress=7,
@@ -152,11 +152,17 @@ def runCCVA(odk_raw:pd.DataFrame, id_col: str = None,date_col:str =None,start_ti
         total_records = len(records)
         rangeDates={"start": odk_raw[date_col].max(), "end":odk_raw[date_col].min()}
         ## get ccva error logs to be added to the ccva_results
-        error_logs=process_ccva_errorlogs(output_folder)
+        error_logs = process_ccva_errorlogs(output_folder + file_id + "_")
         print(error_logs)
         
         ccva_results= compile_ccva_results(iv5out, error_logs=error_logs, top=top, undetermined=undetermined, task_id=file_id,start_time= start_time,total_records=total_records,  rangeDates =rangeDates, db=db)
-        os.remove(f"{output_folder+'errorlogV5.txt'}")
+        error_log_path = f"{output_folder}{file_id}_errorlogV5.txt"
+        log_path = f"{output_folder}{file_id}.csv"
+        
+        if os.path.exists(error_log_path):
+            os.remove(error_log_path)
+        if os.path.exists(log_path):
+            os.remove(log_path)
         return ccva_results
 
     except Exception as e:
@@ -306,35 +312,68 @@ def compile_ccva_results(iv5out, top=10, undetermined=True,start_time:timedelta=
 
     return ccva_results
 
-def process_ccva_errorlogs(output_folder:str):
-    log_file_path = output_folder+'errorlogV5.txt'
-    log_entrys=[]
+def process_ccva_errorlogs(output_folder: str):
+    # Path to the error log file
+    log_file_path = output_folder + 'errorlogV5.txt'
+    log_entries = []
 
-# Regular expression to capture various error types
+    # Regular expression to capture error logs
     error_pattern = r'uuid:([\w-]+)\s(Error in (indicators|sex indicator|age indicator)):\s(.+)'
-    with open(log_file_path, 'r') as file:
-            logs = file.readlines()
+    discrepancy_pattern = r'uuid:([\w-]+)\s+(.+)'
+    
+    current_group = None  # Track the current group for categorization
 
+    # Read the log file
+    with open(log_file_path, 'r') as file:
+        logs = file.readlines()
+
+    # Process each log entry
     for log in logs:
-        # Check if the line matches the error pattern
-        match = re.search(error_pattern, log)
+        log = log.strip()  # Clean up leading/trailing spaces
+
+        # Detect the group headers
+        if "The following records are incomplete and excluded from further processing:" in log:
+            current_group = "incomplete_records"
+            continue  # Skip to the next log line
+
+        if "The following data discrepancies were identified and handled:" in log:
+            current_group = "data_discrepancies"
+            continue  # Skip to the next log line
+
+        # Match the log entry with the appropriate pattern based on current group
+        if current_group == "incomplete_records":
+            match = re.search(error_pattern, log)
+        elif current_group == "data_discrepancies":
+            match = re.search(discrepancy_pattern, log)
+        else:
+            continue
+
+        # If a match is found, capture relevant information
         if match:
             uuid = match.group(1)
-            error_type = match.group(2)
-            error_message = match.group(4)
+            if current_group == "incomplete_records":
+                error_type = match.group(2)
+                error_message = match.group(4)
+            else:  # data discrepancies
+                error_type = "data discrepancy"
+                error_message = match.group(2)
 
-            # Create the log entry for ArangoDB
+            # Create a log entry for insertion into ArangoDB
             log_entry = {
                 "uuid": uuid,
                 "error_type": error_type,
-                "error_message": error_message
+                "error_message": error_message,
+                "group": current_group  # Add the group/category for identification
             }
-            print(log_entry)
-            log_entrys.append(log_entry)
 
-            # Insert into ArangoDB
-            return log_entrys
+            # Append log entry to the list
+            log_entries.append(log_entry)
 
+
+
+    # Return the processed log entries
+    print(log_entries)
+    return log_entries
 
 async def fetch_ccva_results_and_errors(db: StandardDatabase, task_id: str):
     try:
@@ -379,7 +418,6 @@ async def getVADataAndMergeWithResults(db: StandardDatabase, results: list):
     ###
     
     ###
-    # print(results)
     from app.settings.services.odk_configs import fetch_odk_config
 
 
@@ -398,7 +436,6 @@ async def getVADataAndMergeWithResults(db: StandardDatabase, results: list):
         if data_uid is None:
             continue
         
-        print(data_uid, )
         cursor=db.collection(db_collections.VA_TABLE).find({instance_id: data_uid})
         ind_results = [{key: document.get(key, None) for key in ['id10019', is_adult, is_child,is_neonate,deceased_gender,location_level1,location_level2,date]} for document in cursor]
         # Rename fields in the results and determine the age group
@@ -417,5 +454,5 @@ async def getVADataAndMergeWithResults(db: StandardDatabase, results: list):
         if renamed_results:
             # Merge the results with the original dictionary
             result.update(renamed_results[0] , )
-    print(results)
+
     return results
