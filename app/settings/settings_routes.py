@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import List, Optional
 from arango.database import StandardDatabase
 from fastapi import APIRouter, Depends, Query, status
 
@@ -9,6 +9,8 @@ from app.settings.services.odk_configs import (add_configs_settings,
 from app.shared.configs.arangodb import get_arangodb_session
 from app.shared.configs.models import ResponseMainModel
 from app.shared.services.va_records import get_field_value_from_va_records
+from app.shared.configs.constants import AccessPrivileges
+from app.users.decorators.user import check_privileges, get_current_user
 
 # from sqlalchemy.orm import Session
 
@@ -26,18 +28,25 @@ settings_router = APIRouter(
      
 @settings_router.get("/system_configs", status_code=status.HTTP_200_OK, response_model=ResponseMainModel)
 async def get_configs_settings(
-
     db: StandardDatabase = Depends(get_arangodb_session)):
 
     response = await fetch_configs_settings( db=db)
     return response
 
-
 @settings_router.post("/system_configs", status_code=status.HTTP_200_OK, response_model=ResponseMainModel)
 async def save_configs_settings(
-configData: SettingsConfigData,
+    configData: SettingsConfigData,
+    current_user = Depends(get_current_user), 
+    required_privs: List[str] = Depends(check_privileges(
+        [
+            AccessPrivileges.SETTINGS_CREATE_SYSTEM_CONFIGS, 
+            AccessPrivileges.SETTINGS_CREATE_ODK_DETAILS,
+            AccessPrivileges.SETTINGS_CREATE_FIELD_MAPPING,
+            AccessPrivileges.SETTINGS_CREATE_VA_SUMMARY,
+            AccessPrivileges.USERS_UPDATE_ACCESS_LIMIT_LABELS
+        ])),
     db: StandardDatabase = Depends(get_arangodb_session)):
-    response = await add_configs_settings( configData,db=db)
+    response = await add_configs_settings( configData, db=db)
     return response
 
 
@@ -53,7 +62,7 @@ async def get_download_status(
 
 @settings_router.get("/questioner_fields", status_code=status.HTTP_200_OK, response_model=ResponseMainModel)
 async def get_questioner_fileds(
-
+    current_user = Depends(get_current_user),
     db: StandardDatabase = Depends(get_arangodb_session)):
 
     response = await get_questioners_fields( db=db)
@@ -63,6 +72,7 @@ async def get_questioner_fileds(
 @settings_router.get("/get-field-unique-value", status_code=status.HTTP_200_OK, response_model=ResponseMainModel)
 async def get_field_unique_value(
     field: Optional[str] = Query(None, alias="field"),
+    current_user = Depends(get_current_user),
     db: StandardDatabase = Depends(get_arangodb_session)):
 
     response = await get_field_value_from_va_records(field=field, db=db)
