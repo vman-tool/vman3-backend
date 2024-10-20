@@ -23,8 +23,9 @@ from app.shared.configs.models import ResponseMainModel
 
 # The websocket_broadcast function for broadcasting progress updates
 async def websocket_broadcast(task_id: str, progress_data: dict):
-    from app.main import \
-        websocket__manager  # Ensure this points to your actual WebSocket manager instance
+    from app.main import (
+        websocket__manager,  # Ensure this points to your actual WebSocket manager instance
+    )
     await websocket__manager.broadcast(task_id, json.dumps(progress_data))
 async def get_record_to_run_ccva(db: StandardDatabase, task_id: str, task_results: Dict,start_date: Optional[date] = None, end_date: Optional[date] = None,):
     try:
@@ -139,7 +140,11 @@ def runCCVA(odk_raw:pd.DataFrame, id_col: str = None,date_col:str =None,start_ti
         for record in rcd:
             record["task_id"] = file_id
         # Insert the records into the database
-        db.collection(db_collections.CCVA_RESULTS).insert_many(null_convert_data(rcd), overwrite=True, overwrite_mode="update")
+      
+        
+       # get the ccva form data (individual ones, eg, locations, gender, age_group) from the database and merge with the results
+        results_to_insert = asyncio.run(getVADataAndMergeWithResults(db, null_convert_data(rcd)))
+        db.collection(db_collections.CCVA_RESULTS).insert_many(results_to_insert, overwrite=True, overwrite_mode="update")
         print("InterVA5 analysis completed.")
 
         # Remove the temporary CSV file
@@ -368,3 +373,49 @@ async def fetch_ccva_results_and_errors(db: StandardDatabase, task_id: str):
     except Exception as e:
         print(f"Error fetching CCVA results and error logs: {e}")
         return None
+    
+    
+async def getVADataAndMergeWithResults(db: StandardDatabase, results: list):
+    ###
+    
+    ###
+    # print(results)
+    from app.settings.services.odk_configs import fetch_odk_config
+
+
+    config = await fetch_odk_config(db)
+    is_adult=config.field_mapping.is_adult
+    is_child=config.field_mapping.is_child
+    is_neonate=config.field_mapping.is_neonate
+    deceased_gender=config.field_mapping.deceased_gender
+    location_level1=config.field_mapping.location_level1
+    location_level2=config.field_mapping.location_level2
+    date=config.field_mapping.date
+    instance_id=config.field_mapping.instance_id or 'instanceid'
+
+    for  result in results:
+        data_uid = result.get('ID', None)
+        if data_uid is None:
+            continue
+        
+        print(data_uid, )
+        cursor=db.collection(db_collections.VA_TABLE).find({instance_id: data_uid})
+        ind_results = [{key: document.get(key, None) for key in ['id10019', is_adult, is_child,is_neonate,deceased_gender,location_level1,location_level2,date]} for document in cursor]
+        # Rename fields in the results and determine the age group
+        renamed_results = [
+                {
+                'gender': doc.pop('id10019', None).lower() if doc.get('id10019') else None,
+                'date': doc.pop('today', None).lower() if doc.get('today') else None,
+                'ageGroup': 'adult' if doc.pop(is_adult, None) else 'child' if doc.pop(is_child, None) else 'neonate' if doc.pop(is_neonate, None) else None,
+                'locationLevel1': doc.pop(location_level1, None).lower() if doc.get(location_level1) else None,
+                'locationLevel2': doc.pop(location_level2, None).lower() if doc.get(location_level2) else None
+                }
+                for doc in ind_results
+            ]
+
+        # Check if there are any results to merge
+        if renamed_results:
+            # Merge the results with the original dictionary
+            result.update(renamed_results[0] , )
+    print(results)
+    return results

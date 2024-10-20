@@ -12,6 +12,8 @@ from fastapi import (APIRouter, BackgroundTasks, Body, Depends, HTTPException,
 from app.ccva.services.ccva_data_services import (
     delete_ccva_entry, fetch_all_processed_ccva_graphs,
     fetch_processed_ccva_graphs, set_ccva_as_default)
+from app.ccva.services.ccva_graph_services import \
+    fetch_db_processed_ccva_graphs
 from app.ccva.services.ccva_services import (fetch_ccva_results_and_errors,
                                              get_record_to_run_ccva, run_ccva)
 from app.shared.configs.arangodb import get_arangodb_session
@@ -118,6 +120,7 @@ async def get_processed_ccva_graphs(
     paging: bool = True,
     page_number: int = 1,
     limit: int = 30,
+    ccva_graph_db_source: Optional[bool] = True,
     start_date: Optional[date] = Query(None, alias="start_date"),
     end_date: Optional[date] = Query(None, alias="end_date"),
     date_type: Optional[str]=Query(None, alias="date_type"),
@@ -131,18 +134,33 @@ async def get_processed_ccva_graphs(
     """
     try:
         # Fetch processed CCVA data
-        response = await fetch_processed_ccva_graphs(
-            ccva_id=ccva_id,
-            is_default=is_default,
-            paging=paging,
-            page_number=page_number,
-            limit=limit,
-            start_date=start_date,
-            end_date=end_date,
-            locations=locations,
-            date_type=date_type,
-            db=db
-        )
+        if ccva_graph_db_source:
+            response =  await fetch_db_processed_ccva_graphs (
+                ccva_task_id=ccva_id,
+                is_default=True,
+                paging=paging,
+                page_number=page_number,
+                limit=limit,
+                start_date=start_date,
+                end_date=end_date,
+                locations=locations,
+                date_type=date_type,
+                db=db
+            )
+        else:
+            response = await fetch_processed_ccva_graphs(
+                ccva_id=ccva_id,
+                is_default=is_default,
+                paging=paging,
+                page_number=page_number,
+                limit=limit,
+                start_date=start_date,
+                end_date=end_date,
+                locations=locations,
+                date_type=date_type,
+                db=db
+            )
+ 
         return response
     except Exception as e:
         print(f"Error: {str(e)}")
