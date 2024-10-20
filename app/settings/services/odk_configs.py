@@ -48,7 +48,6 @@ async def add_configs_settings(configData: SettingsConfigData, db: StandardDatab
         # Prepare the base data dictionary with a unique key
         data = {'_key': 'vman_config'}
 
-
         # Determine which configuration to insert based on the 'type' field
         if configData.type == 'odk_api_configs' and configData.odk_api_configs:
             odk_data = configData.odk_api_configs.model_dump()
@@ -83,10 +82,12 @@ async def add_configs_settings(configData: SettingsConfigData, db: StandardDatab
             cursor = db.aql.execute(aql_query, bind_vars={})
             existing_field_labels_settings = [doc for doc in cursor]
             field_label_data = []
-            if existing_field_labels_settings:
+            if len(existing_field_labels_settings) > 0 and existing_field_labels_settings[0] is not None:
                 existing_field_label_dict = {field['field_id']: field for field in existing_field_labels_settings}
 
                 for field_label in configData.model_dump().get('field_labels', ""):
+                    if "field_id" not in field_label:
+                        continue
                     field_id = field_label['field_id']
 
                     if field_id in existing_field_label_dict:
@@ -95,10 +96,11 @@ async def add_configs_settings(configData: SettingsConfigData, db: StandardDatab
                          existing_field_label_dict[field_id] = field_label
                 
                 field_label_data = list(existing_field_label_dict.values())
-                
+            else:
+                field_label_data = configData.model_dump().get('field_labels', "")
+            
             data['field_labels'] = field_label_data
             
-
         else:
             raise ValueError("Invalid type or missing configuration data")
 
