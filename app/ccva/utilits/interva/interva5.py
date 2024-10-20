@@ -25,32 +25,13 @@ from math import isclose
 from os import chdir, getcwd, mkdir, path
 from pkgutil import get_data
 
-from numpy import (
-    argsort,
-    array,
-    concatenate,
-    copy,
-    delete,
-    nan,
-    nanmax,
-    nansum,
-    ndarray,
-    where,
-)
-from pandas import (
-    DataFrame,
-    Index,
-    Series,
-    isna,
-    read_csv,
-    read_excel,
-    set_option,
-    to_numeric,
-)
-from vacheck.datacheck5 import datacheck5
-
 from interva.data.causetext import CAUSETEXTV5
 from interva.utils import _get_dem_groups
+from numpy import (argsort, array, concatenate, copy, delete, nan, nanmax,
+                   nansum, ndarray, where)
+from pandas import (DataFrame, Index, Series, isna, read_csv, read_excel,
+                    set_option, to_numeric)
+from vacheck.datacheck5 import datacheck5
 
 
 class InterVA5:
@@ -101,6 +82,7 @@ class InterVA5:
 
     def __init__(self,
                  va_input: Union[DataFrame, str],
+                 task_id: str,
                  hiv: str,
                  malaria: str,
                  write: bool = True,
@@ -117,6 +99,7 @@ class InterVA5:
                  update_callback: Optional[Callable] = None):  # Correctly define update_callback
 
         self.va_input = va_input
+        self.task_id = task_id
         self.hiv = hiv
         self.malaria = malaria
         self.write = write
@@ -311,10 +294,11 @@ class InterVA5:
             self.causetextV5.drop(self.causetextV5.columns[1],
                                   axis=1, inplace=True)
         logger = None
+        
         if self.write:
             logger = getLogger(__name__)
             logger.setLevel(INFO)
-            file_handler = FileHandler("errorlogV5.txt", mode="w")
+            file_handler = FileHandler(self.task_id + "_" + "errorlogV5.txt", mode="w")
             logger.addHandler(file_handler)
             now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             logger.info(f"Error & warning log built for InterVA5 {now}\n")
