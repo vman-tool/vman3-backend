@@ -136,7 +136,8 @@ async def get_login_token(data, session):
             name=user["name"],
             email=user["email"],
             is_active=user["is_active"],
-            created_at=user.get("created_at")
+            created_at=user.get("created_at"),
+            created_by=user.get("created_by")
         ).model_dump()
     return res
 async def get_refresh_token(refresh_token: str, db: StandardDatabase):
