@@ -89,7 +89,7 @@ async def get_last_processed_timestamp(db: StandardDatabase):
     bind_vars = {'key': 'last_processed'}
     
     try:
-        cursor =  db.aql.execute(query, bind_vars=bind_vars)
+        cursor =  db.aql.execute(query, bind_vars=bind_vars,cache=True)
         doc =  cursor.next()
         print(doc)
         if not doc:
@@ -205,7 +205,7 @@ async def get_incomplete_chunks(db: StandardDatabase):
             FILTER doc.status IN ['started', 'error']
             RETURN doc
         '''
-        cursor = await db.aql.execute(query, bind_vars={'@collection': collection.name})
+        cursor = await db.aql.execute(query, bind_vars={'@collection': collection.name},cache=True)
         return await cursor.to_list()
     except Exception as e:
         print(f" get_incomplete_chunks: Error logging chunk update: {str(e)}")
