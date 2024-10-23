@@ -24,6 +24,7 @@ services:
     command:
       - arangod
       - --server.endpoint=tcp://0.0.0.0:8529
+      # - --rocksdb.block-cache-size=1024MB
   redis:
     image: redis:7
     ports:

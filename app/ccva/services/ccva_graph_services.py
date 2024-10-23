@@ -223,7 +223,7 @@ async def fetch_db_processed_ccva_graphs(
         # if filters:
         #     query = f"FOR doc IN {collection_name} FILTER " + " AND ".join(filters) + " " + query
         print(query)
-        cursor = db.aql.execute(query, bind_vars=bind_vars)
+        cursor = db.aql.execute(query, bind_vars=bind_vars,cache=True)
         data = [document for document in cursor]
         # print(data)
 
