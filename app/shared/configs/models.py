@@ -28,12 +28,12 @@ class VManBaseModel(BaseModel):
     """
 
     uuid: Optional[str] = Field(default=None, unique=True)
-    created_by: Optional[str] = None
-    created_at: Optional[str] = None
-    updated_by: Optional[str] = None
-    updated_at: Optional[str] = None
-    deleted_by: Optional[str] = None
-    deleted_at: Optional[str] = None
+    created_by: Union[str, int, None] = None
+    created_at: Union[str, datetime, None] = None
+    updated_by: Union[str, int, None] = None
+    updated_at: Union[str, datetime, None] = None
+    deleted_by: Union[str, int, None] = None
+    deleted_at: Union[str, datetime, None] = None
     is_deleted: bool = False
 
     @classmethod

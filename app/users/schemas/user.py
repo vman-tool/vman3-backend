@@ -2,6 +2,7 @@
 
 from typing import Dict, List, Optional, Union
 
+from fastapi import UploadFile
 from pydantic import BaseModel, EmailStr
 
 

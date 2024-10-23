@@ -20,6 +20,7 @@ class User(VManBaseModel):
     tokens: Union[str, None] = None
     roles: Union[List[Role], None] = None
     password: str
+    image: Union[str, None] = None
     
    
     @classmethod
@@ -35,13 +36,14 @@ class User(VManBaseModel):
         user = await super().save(db)
 
         data={
-            "id": user["_key"],
-            "uuid": user["uuid"],
-            "name": user["name"],
-            "email": user["email"],
-            "is_active": user["is_active"],
-            "created_by":user["created_by"],
-            "created_at":user["created_at"]
+            "id": user["_key"] if "_key" in user else None,
+            "uuid": user["uuid"] if "uuid" in user else None,
+            "name": user["name"] if "name" in user else None,
+            "email": user["email"] if "email" in user else None,
+            "is_active": user["is_active"] if "is_active" in user else None,
+            "created_by":user["created_by"] if "created_by" in user else None,
+            "created_at":user["created_at"] if "created_at" in user else None,
+            "image": user["image" if "image" in user else None]
         }
         return data
     
@@ -50,13 +52,14 @@ class User(VManBaseModel):
         user = await super().update(updated_by, db)
 
         data={
-            "id": user["_key"],
-            "uuid": user["uuid"],
-            "name": user["name"],
-            "email": user["email"],
-            "is_active": user["is_active"],
-            "created_by":user["created_by"],
-            "created_at":user["created_at"]
+            "id": user["_key"] if "_key" in user else None,
+            "uuid": user["uuid"] if "uuid" in user else None,
+            "name": user["name"] if "name" in user else None,
+            "email": user["email"] if "email" in user else None,
+            "is_active": user["is_active"] if "is_active" in user else None,
+            "created_by":user["created_by"] if "created_by" in user else None,
+            "created_at":user["created_at"] if "created_at" in user else None,
+            "image": user["image"] if "image" in user else None
         }
         return data
 

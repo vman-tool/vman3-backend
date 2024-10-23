@@ -24,6 +24,9 @@ class db_collections():
     CCVA_RESULTS: str = 'ccva_results'
     CCVA_GRAPH_RESULTS: str = 'ccva_graph_results'
     CCVA_ERRORS:str = 'ccva_errors'
+
+class Special_Constants():
+    UPLOAD_FOLDER: str = '/uploads'
    
     
 collections_with_indexes = {

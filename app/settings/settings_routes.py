@@ -1,6 +1,6 @@
 from typing import List, Optional
 from arango.database import StandardDatabase
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
 
 from app.settings.models.settings import SettingsConfigData
 from app.settings.services.odk_configs import (add_configs_settings,
@@ -9,8 +9,9 @@ from app.settings.services.odk_configs import (add_configs_settings,
 from app.shared.configs.arangodb import get_arangodb_session
 from app.shared.configs.models import ResponseMainModel
 from app.shared.services.va_records import get_field_value_from_va_records
-from app.shared.configs.constants import AccessPrivileges
+from app.shared.configs.constants import AccessPrivileges, Special_Constants
 from app.users.decorators.user import check_privileges, get_current_user
+from app.utilits.helpers import save_file
 
 # from sqlalchemy.orm import Session
 
@@ -77,6 +78,36 @@ async def get_field_unique_value(
 
     response = await get_field_value_from_va_records(field=field, db=db)
     return response
+
+@settings_router.post("/system_images/")
+async def upload_image(
+    logo: UploadFile = File(None),
+    login_image: UploadFile = File(None),
+    favicon: UploadFile = File(None),
+):
+    try:
+        valid_image_extensions = ['jpg', 'jpeg', 'png', 'ico', 'svg', 'gif', 'webp']
+        logo_saved_path = None
+        login_image_saved_path = None
+        favicon_saved_path = None
+
+        if logo:
+            logo_saved_path = save_file(logo, valid_file_extensions=valid_image_extensions)
+        
+        if login_image:
+            login_image_saved_path = save_file(login_image, valid_file_extensions=valid_image_extensions)
+        
+        if favicon:
+            favicon_saved_path = save_file(favicon, valid_file_extensions=valid_image_extensions)
+        
+        print(logo_saved_path)
+        print(login_image_saved_path)
+        print(favicon_saved_path)
+
+        return {"message": "Image uploaded successfully"}
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 
