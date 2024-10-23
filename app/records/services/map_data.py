@@ -51,12 +51,12 @@ async def fetch_va_map_records(paging: bool = True, page_number: int = 1, limit:
             }
         """
 
-        cursor = db.aql.execute(query, bind_vars=bind_vars)
+        cursor = db.aql.execute(query, bind_vars=bind_vars,cache=True)
         data = [document for document in cursor]
 
         # Fetch total count of documents
         count_query = f"RETURN LENGTH({collection.name})"
-        total_records_cursor = db.aql.execute(count_query)
+        total_records_cursor = db.aql.execute(count_query,cache=True)
         total_records = total_records_cursor.next()
 
         return ResponseMainModel(

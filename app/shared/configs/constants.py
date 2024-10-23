@@ -1,5 +1,7 @@
 from functools import lru_cache
 
+
+
 class db_collections():
     """
     Constants class for NoSQL database Collections. Use this class to call your collection
@@ -112,6 +114,19 @@ class AccessPrivileges():
     SETTINGS_CREATE_VA_SUMMARY: str = 'SETTINGS_CREATE_VA_SUMMARY'
     SETTINGS_UPDATE_VA_SUMMARY: str = 'SETTINGS_UPDATE_VA_SUMMARY'
     SETTINGS_VIEW_VA_SUMMARY: str = 'SETTINGS_VIEW_VA_SUMMARY'
+    
+    #DASHBOARD
+    DASHBOARD_MODULE_VIEW: str = 'DASHBOARD_MODULE_VIEW'
+
+    #CCVA
+    CCVA_MODULE_VIEW: str = 'CCVA_MODULE_VIEW'
+    CCVA_MODULE_RUN: str = 'CCVA_MODULE_RUN'
+    CCVA_MODULE_CRUD: str = 'CCVA_MODULE_CRUD'
+    CCVA_MODULE_VIEW_RESULTS: str = 'CCVA_MODULE_VIEW_RESULTS'
+    CCVA_MODULE_RESULT_ERROR_DOWNLOAD: str= 'CCVA_MODULE_RESULT_ERROR_DOWNLOAD'
+    
+    
+    
 
 
     @classmethod

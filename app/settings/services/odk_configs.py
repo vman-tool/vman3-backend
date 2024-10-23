@@ -1,4 +1,3 @@
-import json
 from types import SimpleNamespace
 
 from arango.database import StandardDatabase
@@ -7,7 +6,7 @@ from fastapi import HTTPException, status
 from app.odk.utils.odk_client import ODKClientAsync
 from app.settings.models.settings import SettingsConfigData
 from app.shared.configs.constants import db_collections
-from app.shared.configs.models import ResponseMainModel, VManBaseModel
+from app.shared.configs.models import ResponseMainModel
 from app.shared.utils.database_utilities import replace_object_values
 
 
@@ -79,7 +78,7 @@ async def add_configs_settings(configData: SettingsConfigData, db: StandardDatab
             FOR settings in  {db_collections.SYSTEM_CONFIGS}
             RETURN settings.field_labels[0]
             """
-            cursor = db.aql.execute(aql_query, bind_vars={})
+            cursor = db.aql.execute(aql_query, bind_vars={},cache=True)
             existing_field_labels_settings = [doc for doc in cursor]
             field_label_data = []
             if len(existing_field_labels_settings) > 0 and existing_field_labels_settings[0] is not None:

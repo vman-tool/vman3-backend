@@ -46,12 +46,12 @@ async def fetch_ccva_records(paging: bool = True, page_number: int = 1, limit: i
 
         query += "RETURN doc"
         # print(query)
-        cursor = db.aql.execute(query, bind_vars=bind_vars)
+        cursor = db.aql.execute(query, bind_vars=bind_vars,cache=True)
         data = [document for document in cursor]
 
         # Fetch total count of documents
         count_query = f"RETURN LENGTH({collection.name})"
-        total_records_cursor = db.aql.execute(count_query)
+        total_records_cursor = db.aql.execute(count_query,cache=True)
         total_records = total_records_cursor.next()
 
         return ResponseMainModel(
@@ -124,7 +124,7 @@ async def fetch_processed_ccva_graphs(
         RETURN doc
         """
 
-        cursor = db.aql.execute(query, bind_vars=bind_vars)
+        cursor = db.aql.execute(query, bind_vars=bind_vars,cache=True)
         data = [document for document in cursor]
 
         if not data:
@@ -201,7 +201,7 @@ async def fetch_processed_individual_ccva_graphs(
         RETURN doc
         """
 
-        cursor = db.aql.execute(query, bind_vars=bind_vars)
+        cursor = db.aql.execute(query, bind_vars=bind_vars,cache=True)
         data = [document for document in cursor]
 
         if not data:
@@ -315,7 +315,7 @@ async def fetch_all_processed_ccva_graphs(paging: bool = True, page_number: int 
         }
         """
 
-        cursor = db.aql.execute(query, bind_vars=bind_vars)
+        cursor = db.aql.execute(query, bind_vars=bind_vars,cache=True)
         data = [document for document in cursor]
 
 
@@ -342,7 +342,7 @@ async def update_ccva_entry(ccva_id: str, update_data: dict, db: StandardDatabas
 
         # Fetch the existing document
         query = f"FOR doc IN {collection.name} FILTER doc._key == @ccva_id RETURN doc"
-        cursor = db.aql.execute(query, bind_vars={"ccva_id": ccva_id})
+        cursor = db.aql.execute(query, bind_vars={"ccva_id": ccva_id},cache=True)
         ccva_doc = next(cursor, None)
 
         if not ccva_doc:
@@ -354,7 +354,7 @@ async def update_ccva_entry(ccva_id: str, update_data: dict, db: StandardDatabas
             "ccva_id": ccva_id,
             "update_data": update_data
         }
-        cursor = db.aql.execute(query, bind_vars=bind_vars)
+        cursor = db.aql.execute(query, bind_vars=bind_vars,cache=True)
 
         # Return the updated document
         updated_doc = next(cursor, None)
@@ -381,7 +381,7 @@ async def set_ccva_as_default(ccva_id: str, db: StandardDatabase) -> ResponseMai
         UPDATE doc WITH {{ isDefault: false }} IN {collection.name}
         RETURN NEW
         """
-        db.aql.execute(query_unset_default)  # Unset the current default entry
+        db.aql.execute(query_unset_default,cache=True)  # Unset the current default entry
 
         # Step 2: Set the new CCVA as default
         query_set_default = f"""
@@ -391,7 +391,7 @@ async def set_ccva_as_default(ccva_id: str, db: StandardDatabase) -> ResponseMai
         RETURN NEW
         """
         bind_vars = {"ccva_id": ccva_id}
-        cursor = db.aql.execute(query_set_default, bind_vars=bind_vars)
+        cursor = db.aql.execute(query_set_default, bind_vars=bind_vars,cache=True)
 
         # Fetch the updated document
         updated_doc = next(cursor, None)
@@ -419,7 +419,7 @@ async def delete_ccva_entry(ccva_id: str, db: StandardDatabase) -> ResponseMainM
 
         # Check if the document exists
         query = f"FOR doc IN {collection.name} FILTER doc._key == @ccva_id RETURN doc"
-        cursor = db.aql.execute(query, bind_vars={"ccva_id": ccva_id})
+        cursor = db.aql.execute(query, bind_vars={"ccva_id": ccva_id},cache=True)
         ccva_doc = next(cursor, None)
 
 
@@ -429,7 +429,7 @@ async def delete_ccva_entry(ccva_id: str, db: StandardDatabase) -> ResponseMainM
         # Delete the document
         query = f"REMOVE {{ _key: @ccva_id }} IN {collection.name}"
         bind_vars = {"ccva_id": ccva_id}
-        db.aql.execute(query, bind_vars=bind_vars)
+        db.aql.execute(query, bind_vars=bind_vars,cache=True)
         db.collection(db_collections.CCVA_RESULTS).delete_match({
             "task_id": ccva_doc.get("task_id")
         })
