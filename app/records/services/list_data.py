@@ -57,12 +57,12 @@ async def fetch_va_records(paging: bool = True, page_number: int = 1, limit: int
 
         query += "RETURN doc"
         # print(query)
-        cursor = db.aql.execute(query, bind_vars=bind_vars)
+        cursor = db.aql.execute(query, bind_vars=bind_vars,cache=True)
         data = [map_to_data_response(config,document) for document in cursor]
 
         # Fetch total count of documents
         count_query = f"RETURN LENGTH({collection.name})"
-        total_records_cursor = db.aql.execute(count_query)
+        total_records_cursor = db.aql.execute(count_query,cache=True)
         total_records = total_records_cursor.next()
 
         return ResponseMainModel(
@@ -129,12 +129,12 @@ async def fetch_va_records_json(paging: bool = True, page_number: int = 1, limit
 
         query += "RETURN doc"
         print(query)
-        cursor = db.aql.execute(query, bind_vars=bind_vars)
+        cursor = db.aql.execute(query, bind_vars=bind_vars,cache=True)
         data = [document for document in cursor]
 
         # Fetch total count of documents
         count_query = f"RETURN LENGTH({collection.name})"
-        total_records_cursor = db.aql.execute(count_query)
+        total_records_cursor = db.aql.execute(count_query,cache=True)
         total_records = total_records_cursor.next()
 
         return ResponseMainModel(

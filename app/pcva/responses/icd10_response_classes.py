@@ -1,12 +1,11 @@
-from typing import Dict, Optional
-from fastapi import HTTPException
-from pydantic import BaseModel
-from arango.database import StandardDatabase
+from typing import Optional
 
+from arango.database import StandardDatabase
+from pydantic import BaseModel
+
+from app.shared.configs.constants import db_collections
 from app.shared.configs.models import BaseResponseModel
 from app.shared.utils.response import populate_user_fields
-from app.shared.configs.constants import db_collections
-from app.users.models.user import User
 
 
 class ICD10CategoryFieldClass(BaseModel):
@@ -25,7 +24,7 @@ class ICD10CategoryFieldClass(BaseModel):
             }}
         """
         bind_vars = {'category_uuid': category_uuid}
-        cursor = db.aql.execute(query, bind_vars=bind_vars)
+        cursor = db.aql.execute(query, bind_vars=bind_vars,cache=True)
         category_data = cursor.next()
         return cls(**category_data)
 
