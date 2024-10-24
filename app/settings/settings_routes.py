@@ -87,15 +87,15 @@ async def upload_image(
         existing_images = await get_system_images(db)
 
         if logo:
-            existing_logo = existing_images[0]
+            existing_logo = existing_images[0] if len(existing_images) >  0 and existing_images[0] is not None else {}
             logo_saved_path = save_file(logo, valid_file_extensions=valid_image_extensions, delete_extisting=existing_logo["logo"] if "logo" in existing_logo else None)
         
         if login_image:
-            existing_login_image = existing_images[0]
+            existing_login_image = existing_images[0] if len(existing_images) >  0 and existing_images[0] is not None else {}
             login_image_saved_path = save_file(login_image, valid_file_extensions=valid_image_extensions, delete_extisting=existing_login_image["home_image"] if "home_image" in existing_login_image else None)
         
         if favicon:
-            existing_favicon = existing_images[0]
+            existing_favicon = existing_images[0] if len(existing_images) >  0 and existing_images[0] is not None else {}
             favicon_saved_path = save_file(favicon, valid_file_extensions=valid_image_extensions, delete_extisting=existing_favicon["favicon"] if "favicon" in existing_favicon else None)
 
         data = ImagesConfigData(
