@@ -1,9 +1,9 @@
 from datetime import datetime
-from typing import Any, Dict, List, Union
+from typing import Dict, List, Union
 
 from arango import Optional
-from pydantic import BaseModel, EmailStr
 from arango.database import StandardDatabase
+from pydantic import BaseModel, EmailStr
 
 from app.shared.configs.constants import db_collections
 from app.shared.configs.models import BaseResponseModel, ResponseUser
@@ -45,7 +45,7 @@ class RoleResponse(BaseResponseModel):
                 RETURN role
             """
             bind_vars = {'role_uuid': role_uuid}
-            cursor = db.aql.execute(query, bind_vars=bind_vars)
+            cursor = db.aql.execute(query, bind_vars=bind_vars,cache=True)
             role = cursor.next()
         populated_role_data = await populate_user_fields(data = role, db=db)
         return cls(**populated_role_data)
@@ -85,7 +85,7 @@ class UserRolesResponse(BaseResponseModel):
                     )
             """
             bind_vars = {'user_role_uuid': user_role_uuid}
-            cursor = db.aql.execute(query, bind_vars=bind_vars)
+            cursor = db.aql.execute(query, bind_vars=bind_vars,cache=True)
             user_role = cursor.next()
         roles = []
         if 'roles' in user_role:

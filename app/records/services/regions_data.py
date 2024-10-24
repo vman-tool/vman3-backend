@@ -10,7 +10,7 @@ def get_unique_regions(db: StandardDatabase):
           COLLECT uniqueRegion = dt.id10005r
           RETURN uniqueRegion
         """
-        cursor = db.aql.execute(query)
+        cursor = db.aql.execute(query,cache=True)
         unique_regions = [region for region in cursor]
 
         return ResponseMainModel(

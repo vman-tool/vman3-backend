@@ -9,11 +9,9 @@ from fastapi import HTTPException
 from loguru import logger
 
 from app.odk.models.questions_models import VA_Question
-from app.odk.utils.data_transform import (
-    assign_questions_options,
-    filter_non_questions,
-    odk_questions_formatter,
-)
+from app.odk.utils.data_transform import (assign_questions_options,
+                                          filter_non_questions,
+                                          odk_questions_formatter)
 from app.odk.utils.odk_client import ODKClientAsync
 from app.pcva.responses.va_response_classes import VAQuestionResponseClass
 from app.settings.services.odk_configs import fetch_odk_config
@@ -244,7 +242,7 @@ async def get_margin_dates_and_records_count(db: StandardDatabase = None):
                 RETURN earliestRecord
             """
 
-    return db.aql.execute(query=query).next()
+    return db.aql.execute(query=query,cache=True).next()
 
 
 
