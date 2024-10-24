@@ -51,16 +51,6 @@ async def save_configs_settings(
     return response
 
 
-@settings_router.get("/system_configs", status_code=status.HTTP_200_OK, response_model=ResponseMainModel)
-async def get_download_status(
-
-    db: StandardDatabase = Depends(get_arangodb_session)):
-
-    response = await fetch_configs_settings( db=db)
-    return response
-
-
-
 @settings_router.get("/questioner_fields", status_code=status.HTTP_200_OK, response_model=ResponseMainModel)
 async def get_questioner_fileds(
     current_user = Depends(get_current_user),
@@ -84,6 +74,8 @@ async def upload_image(
     logo: UploadFile = File(None),
     login_image: UploadFile = File(None),
     favicon: UploadFile = File(None),
+    current_user = Depends(get_current_user),
+    required_privs: List[str] = Depends(check_privileges([AccessPrivileges.SETTINGS_UPDATE_SYSTEM_IMAGES])),
     db: StandardDatabase = Depends(get_arangodb_session)
 ):
     try:
