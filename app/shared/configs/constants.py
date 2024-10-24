@@ -24,6 +24,9 @@ class db_collections():
     CCVA_RESULTS: str = 'ccva_results'
     CCVA_GRAPH_RESULTS: str = 'ccva_graph_results'
     CCVA_ERRORS:str = 'ccva_errors'
+
+class Special_Constants():
+    UPLOAD_FOLDER: str = '/uploads'
    
     
 collections_with_indexes = {
@@ -114,6 +117,7 @@ class AccessPrivileges():
     SETTINGS_CREATE_VA_SUMMARY: str = 'SETTINGS_CREATE_VA_SUMMARY'
     SETTINGS_UPDATE_VA_SUMMARY: str = 'SETTINGS_UPDATE_VA_SUMMARY'
     SETTINGS_VIEW_VA_SUMMARY: str = 'SETTINGS_VIEW_VA_SUMMARY'
+    SETTINGS_UPDATE_SYSTEM_IMAGES: str = 'SETTINGS_UPDATE_SYSTEM_IMAGES'
     
     #DASHBOARD
     DASHBOARD_MODULE_VIEW: str = 'DASHBOARD_MODULE_VIEW'

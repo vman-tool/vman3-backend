@@ -1,5 +1,5 @@
 
-from fastapi import HTTPException
+from fastapi import File, Form, HTTPException, UploadFile
 from typing import Any, Dict, List, Optional, Union
 from arango.database import StandardDatabase
 from fastapi import APIRouter, BackgroundTasks, Depends, Header, Query, status
@@ -50,12 +50,28 @@ async def register_user(
 
 @auth_router.put("/", status_code=status.HTTP_200_OK, response_model=UserResponse)
 async def update_user(
-    data: RegisterUserRequest, 
-    background_tasks: BackgroundTasks, 
+    uuid: Union[str, None] = Form(None),
+    name: Union[str, None] = Form(None),
+    email: Union[str, None] = Form(None),
+    password: Union[str, None] = Form(None),
+    confirm_password: Union[str, None] = Form(None),
+    created_by: Union[str, None] = Form(None),
+    is_active: Union[bool, None] = Form(True),
+    image: UploadFile = File(None), 
+    background_tasks: BackgroundTasks = None, 
     current_user = Depends(get_current_user),
     required_privs: List[str] = Depends(check_privileges([AccessPrivileges.USERS_UPDATE_USER, AccessPrivileges.USERS_DEACTIVATE_USER])),
     db: StandardDatabase = Depends(get_arangodb_session)):
-    return await user.create_or_update_user_account(data, current_user, db, background_tasks)
+    data = RegisterUserRequest(
+        uuid=uuid,
+        name=name,
+        email=email,
+        password=password,
+        confirm_password=confirm_password,
+        created_by=created_by,
+        is_active=is_active,
+    )
+    return await user.create_or_update_user_account(data = data, image = image, current_user = current_user, db = db, background_tasks = background_tasks)
 
 @user_router.post("/verify", status_code=status.HTTP_200_OK)
 async def verify_user_account(data: VerifyUserRequest, background_tasks: BackgroundTasks, session = Depends(get_arangodb_session)):
