@@ -17,8 +17,9 @@ class UserResponse(BaseResponse):
     name: str
     email: EmailStr
     is_active: bool
-    created_by: Union[str, None, datetime] = None
     created_at: Union[str, None, datetime] = None
+    created_by: Union[str, int, None] = None
+    image: Union[str, None] = None
     
     
 
