@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 from typing import Dict, List
 
 from arango.database import StandardDatabase
-from fastapi import BackgroundTasks, HTTPException, status
+from fastapi import BackgroundTasks, HTTPException, UploadFile, status
 from fastapi.security import OAuth2PasswordRequestForm
 from pydantic import BaseModel
 
@@ -34,11 +34,12 @@ from app.users.services.email import (
 )
 from app.users.utils.string import unique_string
 from app.utilits.data_validation import validate_privileges
+from app.utilits.helpers import save_file
 
 settings = get_settings()
 
 
-async def create_or_update_user_account(data: RegisterUserRequest, current_user: User = None,  db: StandardDatabase = None, background_tasks: BackgroundTasks = None):
+async def create_or_update_user_account(data: RegisterUserRequest, image: UploadFile = None, current_user: User = None,  db: StandardDatabase = None, background_tasks: BackgroundTasks = None):
     if data.password != data.confirm_password:
             raise HTTPException(status_code=400, detail="Password mismatch.")
     
@@ -63,7 +64,16 @@ async def create_or_update_user_account(data: RegisterUserRequest, current_user:
                 user_data['password'] = hashed_password
 
             update_user_data = replace_object_values(user_data, existing_user)
-            
+
+            if image:
+                existing_image = user_data['image'] if "image" in update_user_data else None
+                
+                update_user_data['image'] = save_file(
+                    file=image, 
+                    valid_file_extensions = ['jpg', 'jpeg', 'png', 'ico', 'svg', 'gif', 'webp'], 
+                    delete_extisting=existing_image
+                )
+
             return await User(**update_user_data).update(updated_by = current_user["_key"] if '_key' in current_user else None, db = db)
         else:
             raise HTTPException(status_code=404, detail="User not found.")
@@ -137,7 +147,8 @@ async def get_login_token(data, session):
             email=user["email"],
             is_active=user["is_active"],
             created_at=user.get("created_at"),
-            created_by=user.get("created_by")
+            created_by=user.get("created_by") if "created_by" in user else None,
+            image=user.get("image") if "image" in user else None
         ).model_dump()
     return res
 async def get_refresh_token(refresh_token: str, db: StandardDatabase):
@@ -180,7 +191,8 @@ async def get_refresh_token(refresh_token: str, db: StandardDatabase):
             email=user["email"],
             is_active=user["is_active"],
             created_at=user.get("created_at"),
-            created_by=user.get("created_by")
+            created_by=user.get("created_by") if "created_by" in user else None,
+            image=user.get("image") if "image" in user else None
         ).model_dump()
 
     return res
@@ -287,7 +299,8 @@ async def fetch_user_detail(pk: str, db):
         email=user["email"],
         is_active=user["is_active"],
         created_at=user.get("created_at"),
-        created_by=user.get("created_by")
+        created_by=user.get("created_by") if "created_by" in user else None,
+        image=user.get("image") if "image" in user else None
     )
     raise HTTPException(status_code=400, detail="User does not exist.")
 
@@ -308,7 +321,8 @@ async def fetch_users(paging: bool= None, page_number: int = None, limit: int = 
                     email=user["email"],
                     is_active=user["is_active"],
                     created_at=user["created_at"],
-                    created_by=user["created_by"]
+                    created_by=user.get("created_by") if "created_by" in user else None,
+                    image=user.get("image") if "image" in user else None
                 ) for user in users
             ]
     
@@ -439,7 +453,7 @@ async def assign_roles(data: AssignRolesRequest = None, current_user: User = Non
             await UserAccessLimit(**{
                 "user": data.user, 
                 "access_limit": data.access_limit,
-                "created_by": current_user.uuid
+                "created_by": current_user['uuid'] if 'uuid' in current_user else None
             }).save(db=db)
         
         
