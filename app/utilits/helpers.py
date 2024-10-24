@@ -30,8 +30,10 @@ def save_file(file: UploadFile, valid_file_extensions: List[str] = None, delete_
         
     file_location = os.path.join(f"{os.getcwd()}/app{folder}", filename)
 
-    if delete_extisting and os.path.isfile(file_location):
-        os.remove(file_location)
+    existing_location = f"{os.getcwd()}/app{delete_extisting}" if delete_extisting else None
+
+    if delete_extisting and existing_location and os.path.isfile(existing_location):
+        os.remove(existing_location)
     
     with open(file_location, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)

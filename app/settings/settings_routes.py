@@ -2,10 +2,10 @@ from typing import List, Optional
 from arango.database import StandardDatabase
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
 
-from app.settings.models.settings import SettingsConfigData
+from app.settings.models.settings import ImagesConfigData, SettingsConfigData
 from app.settings.services.odk_configs import (add_configs_settings,
                                                fetch_configs_settings,
-                                               get_questioners_fields)
+                                               get_questioners_fields, get_system_images, save_system_images)
 from app.shared.configs.arangodb import get_arangodb_session
 from app.shared.configs.models import ResponseMainModel
 from app.shared.services.va_records import get_field_value_from_va_records
@@ -84,6 +84,7 @@ async def upload_image(
     logo: UploadFile = File(None),
     login_image: UploadFile = File(None),
     favicon: UploadFile = File(None),
+    db: StandardDatabase = Depends(get_arangodb_session)
 ):
     try:
         valid_image_extensions = ['jpg', 'jpeg', 'png', 'ico', 'svg', 'gif', 'webp']
@@ -91,20 +92,45 @@ async def upload_image(
         login_image_saved_path = None
         favicon_saved_path = None
 
+        existing_images = await get_system_images(db)
+
         if logo:
-            logo_saved_path = save_file(logo, valid_file_extensions=valid_image_extensions)
+            existing_logo = existing_images[0]
+            logo_saved_path = save_file(logo, valid_file_extensions=valid_image_extensions, delete_extisting=existing_logo["logo"] if "logo" in existing_logo else None)
         
         if login_image:
-            login_image_saved_path = save_file(login_image, valid_file_extensions=valid_image_extensions)
+            existing_login_image = existing_images[0]
+            login_image_saved_path = save_file(login_image, valid_file_extensions=valid_image_extensions, delete_extisting=existing_login_image["home_image"] if "home_image" in existing_login_image else None)
         
         if favicon:
-            favicon_saved_path = save_file(favicon, valid_file_extensions=valid_image_extensions)
-        
-        print(logo_saved_path)
-        print(login_image_saved_path)
-        print(favicon_saved_path)
+            existing_favicon = existing_images[0]
+            favicon_saved_path = save_file(favicon, valid_file_extensions=valid_image_extensions, delete_extisting=existing_favicon["favicon"] if "favicon" in existing_favicon else None)
 
-        return {"message": "Image uploaded successfully"}
+        data = ImagesConfigData(
+            logo=logo_saved_path,
+            favicon=favicon_saved_path,
+            home_image = login_image_saved_path
+        )
+        results = await save_system_images(data, db)
+
+        return ResponseMainModel(
+            data = results,
+            message="System images uploaded successfully"
+        )
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@settings_router.get("/system_images/", description="Get System Images")
+async def get_image(
+    db: StandardDatabase = Depends(get_arangodb_session)
+):
+    try:
+
+        return ResponseMainModel(
+            data = await get_system_images(db),
+            message="System images fetched successfully"
+        )
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
