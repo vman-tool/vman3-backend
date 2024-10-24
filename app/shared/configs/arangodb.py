@@ -70,7 +70,7 @@ class ArangoDBClient:
                 'id': document['__id'],
                 'document': document
             }
-            cursor = self.db.aql.execute(aql_query, bind_vars=bind_vars)
+            cursor = self.db.aql.execute(aql_query, bind_vars=bind_vars,cache=True)
             result = [doc for doc in cursor]
             return result
         except Exception as e:

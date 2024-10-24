@@ -124,7 +124,7 @@ async def fetch_charts_statistics(paging: bool = True, page_number: int = 1, lim
         """
 
         # Execute the combined query
-        cursor = db.aql.execute(combined_query, bind_vars=bind_vars)
+        cursor = db.aql.execute(combined_query, bind_vars=bind_vars,cache=True)
         result = cursor.next()
 
         monthly_submissions_data = result['monthly_submissions']
