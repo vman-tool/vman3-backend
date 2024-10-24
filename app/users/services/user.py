@@ -453,7 +453,7 @@ async def assign_roles(data: AssignRolesRequest = None, current_user: User = Non
             await UserAccessLimit(**{
                 "user": data.user, 
                 "access_limit": data.access_limit,
-                "created_by": current_user.uuid
+                "created_by": current_user['uuid'] if 'uuid' in current_user else None
             }).save(db=db)
         
         
