@@ -1,4 +1,6 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
+import os
+from pathlib import Path
 
 from app.odk import odk_routes
 from app.pcva import pcva_routes
@@ -8,10 +10,17 @@ from app.settings import settings_routes
 from app.statistics import statistics_routes
 from app.users import users_routes
 from app.ccva import ccva_routes
+from fastapi.staticfiles import StaticFiles
+from decouple import config
+
+from app.shared.configs.constants import Special_Constants
+
 
 
 def main_route(application):
-    application.include_router(create_main_router()) 
+    application.include_router(create_main_router())
+    path= os.getcwd()+"/app"+Special_Constants.UPLOAD_FOLDER
+    application.mount(Special_Constants.UPLOAD_FOLDER, StaticFiles(directory=path), name="uploads")
 
 def create_main_router():
     main_router = APIRouter(prefix="/vman/api/v1")
@@ -30,3 +39,4 @@ def create_main_router():
     main_router.include_router(ccva_routes.ccva_router)
 
     return main_router
+    

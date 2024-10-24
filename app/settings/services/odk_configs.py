@@ -4,7 +4,7 @@ from arango.database import StandardDatabase
 from fastapi import HTTPException, status
 
 from app.odk.utils.odk_client import ODKClientAsync
-from app.settings.models.settings import SettingsConfigData
+from app.settings.models.settings import ImagesConfigData, SettingsConfigData
 from app.shared.configs.constants import db_collections
 from app.shared.configs.models import ResponseMainModel
 from app.shared.utils.database_utilities import replace_object_values
@@ -103,21 +103,8 @@ async def add_configs_settings(configData: SettingsConfigData, db: StandardDatab
         else:
             raise ValueError("Invalid type or missing configuration data")
 
-        # Insert the filtered config data into the database
-        aql_query = """
-        UPSERT { _key: @key }
-        INSERT @document
-        UPDATE @document IN @@collection
-        OPTIONS { exclusive: true }
-        """
-        bind_vars = {
-            '@collection': db_collections.SYSTEM_CONFIGS,
-            'key':  data['_key'],
-            'document': data
-        }
-        cursor = db.aql.execute(aql_query, bind_vars=bind_vars)
-        result = [doc for doc in cursor]
         # db.collection(db_collections.SYSTEM_CONFIGS).insert(data, overwrite=False)
+        results = await save_system_settings(data, db)
 
         # Return success response
         return ResponseMainModel(
@@ -133,6 +120,27 @@ async def add_configs_settings(configData: SettingsConfigData, db: StandardDatab
             detail=str(e)
         )
 
+
+async def save_system_settings(data, db: StandardDatabase = None):
+    try:
+        aql_query = """
+        UPSERT { _key: @key }
+        INSERT @document
+        UPDATE @document IN @@collection
+        OPTIONS { exclusive: true }
+        """
+        bind_vars = {
+            '@collection': db_collections.SYSTEM_CONFIGS,
+            'key':  data['_key'],
+            'document': data
+        }
+        cursor = db.aql.execute(aql_query, bind_vars=bind_vars)
+        return [doc for doc in cursor]
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e)
+        )
 
 async def get_questioners_fields(db: StandardDatabase = None):
     try:
@@ -157,3 +165,34 @@ async def get_questioners_fields(db: StandardDatabase = None):
             error=str(e),
             total=None
         )
+    
+async def get_system_images(db: StandardDatabase = None):
+    aql_query = f"""
+        FOR settings in  {db_collections.SYSTEM_CONFIGS}
+        RETURN settings.system_images
+    """
+    cursor = db.aql.execute(aql_query, bind_vars={})
+    data = [doc for doc in cursor]
+    return data
+
+async def save_system_images(data: ImagesConfigData, db: StandardDatabase = None):
+    try:
+        if not data:
+            raise ValueError("No system images provided")
+        saving_data = {'_key': 'vman_config'}
+        saving_data['system_images'] = data.model_dump()
+
+        existing_images = await get_system_images(db)
+        if len(existing_images) > 0 and existing_images[0] is not None:
+            
+            updated_images = replace_object_values(saving_data['system_images'], existing_images[0])
+            saving_data['system_images'] = updated_images
+            await save_system_settings(saving_data, db)
+            
+            return await get_system_images(db)
+        else:
+            await save_system_settings(saving_data, db)
+
+            return await get_system_images(db)
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Couldn't save system images")
