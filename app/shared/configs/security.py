@@ -6,7 +6,7 @@ import jwt
 from arango.database import StandardDatabase
 from passlib.context import CryptContext
 
-from app.shared.configs.constants import AccessPrivileges, db_collections
+from app.shared.configs.constants import db_collections
 from app.shared.configs.settings import get_settings
 from app.users.models.user import User, UserToken
 
@@ -100,8 +100,22 @@ async def get_token_user(token: str, db:StandardDatabase ):
                 'is_active': True,
             }
             active_user = await User.get_many(filters = filters, db = db)
+            ## temporary solution to
+
+            user_id=active_user[0]['uuid']
+            if user_id is not None:
+                cursor_cr = db.collection(db_collections().USER_ACCESS_LIMIT).find({
+                "user": user_id,
+                "is_deleted": False
+                })
+
+
+                defaultsCr = [{key: document.get(key, None) for key in document} for document in cursor_cr]
+       
+
+            print(defaultsCr)
             if len(active_user) > 0:
-                return active_user[0]
+                return  {**active_user[0], 'access_limit': defaultsCr[0]['access_limit']}
     return None
 
 

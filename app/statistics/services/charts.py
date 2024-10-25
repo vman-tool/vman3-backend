@@ -8,7 +8,7 @@ from app.shared.configs.constants import db_collections
 from app.shared.configs.models import ResponseMainModel
 
 
-async def fetch_charts_statistics(paging: bool = True, page_number: int = 1, limit: int = 10, start_date: Optional[date] = None, end_date: Optional[date] = None, locations: Optional[List[str]] = None,  date_type:Optional[str]=None, db: StandardDatabase = None) -> ResponseMainModel:
+async def fetch_charts_statistics( current_user: dict,paging: bool = True, page_number: int = 1, limit: int = 10, start_date: Optional[date] = None, end_date: Optional[date] = None, locations: Optional[List[str]] = None,  date_type:Optional[str]=None, db: StandardDatabase = None) -> ResponseMainModel:
     try:
         config = await fetch_odk_config(db)
         region_field = config.field_mapping.location_level1
@@ -29,10 +29,19 @@ async def fetch_charts_statistics(paging: bool = True, page_number: int = 1, lim
             today_field = config.field_mapping.date 
 
         deceased_gender = config.field_mapping.deceased_gender
+        locationKey=current_user['access_limit']['field'] or None ## locationLevel1
+
+        locationLimitValues = [item['value'] for item in current_user['access_limit']['limit_by']] if current_user['access_limit']['limit_by'] else None
+    
+        
         collection = db.collection(db_collections.VA_TABLE)   # Use the actual collection name here
         bind_vars = {}
         filters = []
-
+        ## filter by location limits
+        if locationLimitValues and locationKey:
+            filters.append(f"doc.{locationKey} IN @locationValues")
+            bind_vars["locationValues"] = locationLimitValues
+        ##
         if start_date:
             filters.append(f"DATE_TIMESTAMP(doc.{today_field}) >= @start_date")
             bind_vars["start_date"] = str(start_date)
