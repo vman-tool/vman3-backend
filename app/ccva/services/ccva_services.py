@@ -23,12 +23,14 @@ from app.shared.configs.models import ResponseMainModel
 
 # The websocket_broadcast function for broadcasting progress updates
 async def websocket_broadcast(task_id: str, progress_data: dict):
-    from app.main import \
-        websocket__manager  # Ensure this points to your actual WebSocket manager instance
+    from app.main import (
+        websocket__manager,  # Ensure this points to your actual WebSocket manager instance
+    )
     await websocket__manager.broadcast(task_id, json.dumps(progress_data))
-async def get_record_to_run_ccva(db: StandardDatabase, task_id: str, task_results: Dict,start_date: Optional[date] = None, end_date: Optional[date] = None,):
+
+async def get_record_to_run_ccva(current_user:dict,db: StandardDatabase, task_id: str, task_results: Dict,start_date: Optional[date] = None, end_date: Optional[date] = None,):
     try:
-        records= await fetch_va_records_json(paging=False, start_date=start_date, end_date=end_date,  db=db)
+        records= await fetch_va_records_json(current_user=current_user,paging=False, start_date=start_date, end_date=end_date,  db=db)
         if records.data == []:
             raise Exception("No records found")
         

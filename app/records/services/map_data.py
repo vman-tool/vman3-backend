@@ -7,16 +7,24 @@ from app.shared.configs.constants import db_collections
 from app.shared.configs.models import ResponseMainModel
 
 
-async def fetch_va_map_records(paging: bool = True, page_number: int = 1, limit: int = 10, start_date: Optional[date] = None, end_date: Optional[date] = None, locations: Optional[List[str]] = None, db: StandardDatabase = None) -> ResponseMainModel:
+async def fetch_va_map_records(current_user:dict,paging: bool = True, page_number: int = 1, limit: int = 10, start_date: Optional[date] = None, end_date: Optional[date] = None, locations: Optional[List[str]] = None, db: StandardDatabase = None) -> ResponseMainModel:
     try:
         collection = db.collection(db_collections.VA_TABLE)  # Use the actual collection name here
+        locationKey=current_user['access_limit']['field'] or None ## 
+
+        locationLimitValues = [item['value'] for item in current_user['access_limit']['limit_by']] if current_user['access_limit']['limit_by'] else None
+    
         query = f"""
             FOR doc IN {collection.name}
             FILTER doc.coordinates != null AND LENGTH(doc.coordinates) == 3
         """
         bind_vars = {}
         filters = []
-
+        ## filter by location limits
+        if locationLimitValues and locationKey:
+            filters.append(f"doc.{locationKey} IN @locationValues")
+            bind_vars["locationValues"] = locationLimitValues
+        ##
         if start_date:
             filters.append("doc.today >= @start_date")
             bind_vars["start_date"] = str(start_date)
