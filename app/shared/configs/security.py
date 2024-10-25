@@ -115,7 +115,17 @@ async def get_token_user(token: str, db:StandardDatabase ):
 
             print(defaultsCr)
             if len(active_user) > 0:
-                return  {**active_user[0], 'access_limit': defaultsCr[0]['access_limit']}
+                return {
+                    "uuid": active_user[0]["uuid"],
+                    "id": active_user[0]["_key"],
+                    "name": active_user[0]["name"],
+                    "email": active_user[0]["email"],
+                    "is_active": active_user[0]["is_active"],
+                    "created_at": active_user[0].get("created_at"),
+                    "created_by": active_user[0].get("created_by") if "created_by" in active_user[0] else None,
+                    "image": active_user[0].get("image") if "image" in active_user[0] else None,
+                    'access_limit': defaultsCr[0]['access_limit']
+                }
     return None
 
 
