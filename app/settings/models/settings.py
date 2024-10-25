@@ -56,3 +56,8 @@ class SettingsConfigData(BaseModel):
     field_mapping: Union[FieldMapping, None] = None  # Optional field
     va_summary: Union[List[str], None] = None
     field_labels: Union[List[FieldLabels], None] = None
+
+class ImagesConfigData(BaseModel):
+    logo: Union[str, None] = None
+    favicon: Union[str, None] = None
+    home_image: Union[str, None] = None
