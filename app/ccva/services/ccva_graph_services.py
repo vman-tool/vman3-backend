@@ -25,7 +25,7 @@ async def fetch_db_processed_ccva_graphs(
     db: StandardDatabase = None
 ) -> ResponseMainModel:
     try:
-        print(start_date, end_date, locations, date_type,'dated')
+        # print(start_date, end_date, locations, date_type,'dated')
         # date_type= submission_date death_date interview_date
         locationKey=current_user['access_limit']['field'] or None ## locationLevel1
         if locationKey == 'id10005r':
@@ -84,7 +84,7 @@ async def fetch_db_processed_ccva_graphs(
         elapsed_time= defaultsCr[0].get('elapsed_time')
         range= defaultsCr[0].get('range')
         
-        print(ccva_task_id,defaultsCr)
+
         query = f"""
              LET allTotalCount = LENGTH(
                     FOR cc IN {collection_name}
@@ -163,7 +163,7 @@ async def fetch_db_processed_ccva_graphs(
 
         LET neonateCauses = (
             FOR cr IN {collection_name}
-                FILTER cr.task_id == @taskId AND cr.CAUSE1 != "" AND cr.age_group == "neonate" AND cr.ID != null
+                FILTER cr.task_id == @taskId AND cr.CAUSE1 != "" AND (cr.isneonatal == "1" OR cr.age_group == "neonate")  AND cr.ID != null
                 {f"AND cr.locationLevel1 == '{locations[0].lower()}'"  if locations else  ""}
                  {f'AND cr.{locationKey} IN {locationLimitValues}' if locationKey and locationLimitValues else ''}
                      {f'AND DATE_TIMESTAMP(cr.date) >= DATE_TIMESTAMP("{start_date}")' if start_date else ''} 
@@ -171,7 +171,7 @@ async def fetch_db_processed_ccva_graphs(
                 COLLECT cause = cr.CAUSE1 WITH COUNT INTO count
                 LET totalCount = LENGTH(
                     FOR cr2 IN {collection_name}
-                        FILTER cr2.task_id == @taskId AND cr2.CAUSE1 != "" AND cr2.age_group == "neonate" AND cr2.ID != null
+                        FILTER cr2.task_id == @taskId AND cr2.CAUSE1 != "" AND (cr2.isneonatal == "1" OR cr2.age_group == "neonate")  AND cr2.ID != null
                         {f"AND cr2.locationLevel1 == '{locations[0].lower()}'"  if locations else  ""}
                          {f'AND cr2.{locationKey} IN {locationLimitValues}' if locationKey and locationLimitValues else ''}
                             {f'AND DATE_TIMESTAMP(cr2.date) >= DATE_TIMESTAMP("{start_date}")' if start_date else ''} 
@@ -185,7 +185,7 @@ async def fetch_db_processed_ccva_graphs(
 
         LET childCauses = (
             FOR cr IN {collection_name}
-                FILTER cr.task_id == @taskId AND cr.CAUSE1 != "" AND cr.age_group == "child" AND cr.ID != null
+                FILTER cr.task_id == @taskId AND cr.CAUSE1 != "" AND (cr.ischild == "1" OR cr.age_group == "child")  AND cr.ID != null
                 {f"AND cr.locationLevel1 == '{locations[0].lower()}'"  if locations else  ""}
                  {f'AND cr.{locationKey} IN {locationLimitValues}' if locationKey and locationLimitValues else ''}
                      {f'AND DATE_TIMESTAMP(cr.date) >= DATE_TIMESTAMP("{start_date}")' if start_date else ''} 
@@ -193,7 +193,7 @@ async def fetch_db_processed_ccva_graphs(
                 COLLECT cause = cr.CAUSE1 WITH COUNT INTO count
                 LET totalCount = LENGTH(
                     FOR cr2 IN {collection_name}
-                        FILTER cr2.task_id == @taskId AND cr2.CAUSE1 != "" AND cr2.age_group == "child" AND cr2.ID != null
+                        FILTER cr2.task_id == @taskId AND cr2.CAUSE1 != "" AND (cr2.ischild == "1" OR cr2.age_group == "child")  AND cr2.ID != null
                         {f"AND cr2.locationLevel1 == '{locations[0].lower()}'"  if locations else  ""}
                            {f'AND cr2.{locationKey} IN {locationLimitValues}' if locationKey and locationLimitValues else ''}
                            {f'AND DATE_TIMESTAMP(cr2.date) >= DATE_TIMESTAMP("{start_date}")' if start_date else ''} 
@@ -207,7 +207,7 @@ async def fetch_db_processed_ccva_graphs(
 
         LET adultCauses = (
             FOR cr IN {collection_name}
-                FILTER cr.task_id == @taskId AND cr.CAUSE1 != "" AND cr.age_group == "adult" AND cr.ID != null
+                FILTER cr.task_id == @taskId AND cr.CAUSE1 != "" AND (cr.isadult == "1" OR cr.age_group == "adult")  AND cr.ID != null
                  {f"AND cr.locationLevel1 == '{locations[0].lower()}'"  if locations else  ""}
                     {f'AND cr.{locationKey} IN {locationLimitValues}' if locationKey and locationLimitValues else ''}
                         {f'AND DATE_TIMESTAMP(cr.date) >= DATE_TIMESTAMP("{start_date}")' if start_date else ''}
@@ -215,7 +215,7 @@ async def fetch_db_processed_ccva_graphs(
                 COLLECT cause = cr.CAUSE1 WITH COUNT INTO count
                 LET totalCount = LENGTH(
                     FOR cr2 IN {collection_name}
-                        FILTER cr2.task_id == @taskId AND cr2.CAUSE1 != "" AND cr2.age_group == "adult" AND cr2.ID != null
+                        FILTER cr2.task_id == @taskId AND cr2.CAUSE1 != "" AND (cr2.isadult == "1" OR cr2.age_group == "adult")  AND cr2.ID != null
                          {f"AND cr2.locationLevel1 == '{locations[0].lower()}'"  if locations else  ""}
                             {f'AND cr2.{locationKey} IN {locationLimitValues}' if locationKey and locationLimitValues else ''}
                            {f'AND DATE_TIMESTAMP(cr2.date) >= DATE_TIMESTAMP("{start_date}")' if start_date else ''}
@@ -267,38 +267,16 @@ async def fetch_db_processed_ccva_graphs(
             }}
         
         """
-        print(query, 'ccva_task_id',ccva_task_id)
+
         bind_vars = {
             "taskId": ccva_task_id,
             # "locationLevel1": locations[0].lower() if locations else None  # Assuming one location for simplicity
         }
 
-        # # Filtering logic for ccva_id, is_default, date range
-        # filters = []
 
-        # if ccva_id:
-        #     filters.append("doc._key == @ccva_id")
-        #     bind_vars["ccva_id"] = ccva_id
-
-        # if is_default is not None or ccva_id is None:
-        #     filters.append("doc.isDefault == @is_default")
-        #     bind_vars["is_default"] = is_default if is_default is not None else True
-
-        # if start_date:
-        #     filters.append("doc.range.start >= @start_date")
-        #     bind_vars["start_date"] = str(start_date)
-
-        # if end_date:
-        #     filters.append("doc.range.end <= @end_date")
-        #     bind_vars["end_date"] = str(end_date)
-
-        # # Apply the filters to the query
-        # if filters:
-        #     query = f"FOR doc IN {collection_name} FILTER " + " AND ".join(filters) + " " + query
-        print(query)
         cursor = db.aql.execute(query, bind_vars=bind_vars,cache=True)
         data = [document for document in cursor]
-        # print(data)
+
 
         if not data:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No records found")
