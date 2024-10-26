@@ -25,7 +25,7 @@ async def fetch_db_processed_ccva_graphs(
     db: StandardDatabase = None
 ) -> ResponseMainModel:
     try:
-        print(start_date, end_date, locations, date_type,'dated')
+
         # date_type= submission_date death_date interview_date
         locationKey=current_user['access_limit']['field'] or None ## locationLevel1
         if locationKey == 'id10005r':
@@ -84,7 +84,7 @@ async def fetch_db_processed_ccva_graphs(
         elapsed_time= defaultsCr[0].get('elapsed_time')
         range= defaultsCr[0].get('range')
         
-        print(ccva_task_id,defaultsCr)
+
         query = f"""
              LET allTotalCount = LENGTH(
                     FOR cc IN {collection_name}
@@ -267,38 +267,16 @@ async def fetch_db_processed_ccva_graphs(
             }}
         
         """
-        print(query, 'ccva_task_id',ccva_task_id)
+
         bind_vars = {
             "taskId": ccva_task_id,
             # "locationLevel1": locations[0].lower() if locations else None  # Assuming one location for simplicity
         }
 
-        # # Filtering logic for ccva_id, is_default, date range
-        # filters = []
 
-        # if ccva_id:
-        #     filters.append("doc._key == @ccva_id")
-        #     bind_vars["ccva_id"] = ccva_id
-
-        # if is_default is not None or ccva_id is None:
-        #     filters.append("doc.isDefault == @is_default")
-        #     bind_vars["is_default"] = is_default if is_default is not None else True
-
-        # if start_date:
-        #     filters.append("doc.range.start >= @start_date")
-        #     bind_vars["start_date"] = str(start_date)
-
-        # if end_date:
-        #     filters.append("doc.range.end <= @end_date")
-        #     bind_vars["end_date"] = str(end_date)
-
-        # # Apply the filters to the query
-        # if filters:
-        #     query = f"FOR doc IN {collection_name} FILTER " + " AND ".join(filters) + " " + query
-        print(query)
         cursor = db.aql.execute(query, bind_vars=bind_vars,cache=True)
         data = [document for document in cursor]
-        # print(data)
+
 
         if not data:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No records found")
