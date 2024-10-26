@@ -96,9 +96,9 @@ async def fetch_va_records_json(current_user:dict,paging: bool = True, page_numb
     try:
         config = await fetch_odk_config(db)
         region_field = config.field_mapping.location_level1
-        locationKey=current_user['access_limit']['field'] or None ## locationLevel1
+        # locationKey=current_user['access_limit']['field'] or None ## locationLevel1
 
-        locationLimitValues = [item['value'] for item in current_user['access_limit']['limit_by']] if current_user['access_limit']['limit_by'] else None
+        # locationLimitValues = [item['value'] for item in current_user['access_limit']['limit_by']] if current_user['access_limit']['limit_by'] else None
     
         if date_type is not None:
             if date_type == 'submission_date':
@@ -116,10 +116,10 @@ async def fetch_va_records_json(current_user:dict,paging: bool = True, page_numb
         bind_vars = {}
         filters = []
         ## filter by location limits
-        if locationLimitValues and locationKey:
-            filters.append(f"doc.{locationKey} IN @locationValues")
-            bind_vars["locationValues"] = locationLimitValues
-        ##
+        # if locationLimitValues and locationKey:
+        #     filters.append(f"doc.{locationKey} IN @locationValues")
+        #     bind_vars["locationValues"] = locationLimitValues
+        # ##
         if start_date:
             filters.append(f"doc.{today_field} >= @start_date")
             bind_vars["start_date"] = str(start_date)
