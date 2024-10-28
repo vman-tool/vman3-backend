@@ -494,55 +494,40 @@ async def get_user_roles(user_uuid: str  = None, current_user: User = None, db: 
     try:
         if user_uuid is None:
             user_uuid = current_user['uuid']
-        
-        query = f"""
-            LET access_limit = (
-                FOR a IN {db_collections.USER_ACCESS_LIMIT}
-                    FILTER a.user == @user_uuid
-                    RETURN {{ access_limit: a.access_limit }}
-            )
-            FOR user_role IN {db_collections.USER_ROLES}
-                FILTER user_role.user == @user_uuid AND user_role.is_deleted == false
-                
-                LET role = (
-                    FOR r IN {db_collections.ROLES}
-                        FILTER r.uuid == user_role.role
-                        RETURN {{ uuid: r.uuid, name: r.name, privileges: r.privileges }}
-                )[0]
-                
-                COLLECT user = user_role.user INTO roleGroups
-                
-                RETURN MERGE(
-                    FIRST(roleGroups[*].user_role),
-                    {{roles: roleGroups[*].role}},
-                    {{access_limit: access_limit}}
-                )
-        """
+
         query = f"""
             LET access_info = (
                 FOR a IN {db_collections.USER_ACCESS_LIMIT}
                     FILTER a.user == @user_uuid AND a.is_deleted == false
                     RETURN a.access_limit
-                )[0]
+            )[0]
 
-            FOR user_role IN {db_collections.USER_ROLES}
-                FILTER user_role.user == @user_uuid AND user_role.is_deleted == false
+            LET user_role_object = (
+                FOR user_role IN {db_collections.USER_ROLES}
+                    FILTER user_role.user == @user_uuid AND user_role.is_deleted == false
 
-                // Fetch the role associated with the user_role
-                LET role = (
-                    FOR r IN {db_collections.ROLES}
-                    FILTER r.uuid == user_role.role
-                    RETURN {{ uuid: r.uuid, name: r.name, privileges: r.privileges }}
-                )[0]
+                    // Fetch the role associated with each user_role
+                    LET role = (
+                        FOR r IN {db_collections.ROLES}
+                            FILTER r.uuid == user_role.role
+                            RETURN {{ uuid: r.uuid, name: r.name, privileges: r.privileges }}
+                    )[0]
 
-                COLLECT user = user_role.user INTO roleGroups
-                
-                RETURN MERGE(
-                    FIRST(roleGroups[*].user_role),
-                    {{roles: roleGroups[*].role}},
-                    {{access_limit: access_info}}
-                )
-        """
+                    COLLECT user = user_role.user INTO roleGroups
+
+                    RETURN {{
+                        user: user,
+                        roles: roleGroups[*].role,
+                        access_limit: access_info
+                    }}
+            )
+
+            // If user_role_object is empty, return a default structure
+            RETURN LENGTH(user_role_object) > 0 
+                ? user_role_object[0]
+                : {{ user: @user_uuid, roles: [], access_limit: access_info }}
+
+            """
 
         bind_vars = {
             "user_uuid": user_uuid
@@ -557,11 +542,11 @@ async def get_user_roles(user_uuid: str  = None, current_user: User = None, db: 
             user_roles = [user_role for user_role in user_roles_result]
             user_role = user_roles[0]
             roles = []
-            if 'roles' in user_role:
+            if 'roles' in user_role and len(user_role['roles']) > 0:
                 for role in user_role["roles"]:
                     if role is not None:
                         roles.append(role)
-            user_role["roles"] = roles            
+                user_role["roles"] = roles            
             user_roles_response = await UserRolesResponse.get_structured_user_role(user_role=user_role, db=db)
             return ResponseMainModel(data=user_roles_response, message='User Roles Fetched successfully.')
         else:
