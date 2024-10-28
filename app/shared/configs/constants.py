@@ -40,16 +40,33 @@ collections_with_indexes = {
         # {"fields": ["age_group"], "unique": False, "type": "persistent", "name": "idx_age_group"},
         {"fields": ["id10007"], "unique": False, "type": "persistent", "name": "idx_interviewer"}
     ],
-    db_collections.USERS: [],
-    db_collections.ROLES: [],
-    db_collections.USER_ROLES: [],
-    db_collections.USER_TOKENS: [],
-    db_collections.USER_ROLES: [],
-    db_collections.USER_ACCESS_LIMIT: [],
-    db_collections.ICD10_CATEGORY: [],
-    db_collections.ICD10: [],
-    db_collections.ASSIGNED_VA: [],
-    db_collections.CODED_VA: [],
+    db_collections.USERS: [
+         {"fields": ["is_active"], "type": "persistent", "name": "u_is_active"}
+    ],
+    db_collections.ROLES: [
+        {"fields": ["is_deleted"], "type": "persistent", "name": "r_is_active"}
+    ],
+    db_collections.USER_ROLES: [
+        {"fields": ["is_deleted"], "type": "persistent", "name": "ur_is_active"}
+    ],
+    db_collections.USER_TOKENS: [
+        {"fields": ["is_deleted"], "type": "persistent", "name": "ut_is_active"}
+    ],
+    db_collections.USER_ACCESS_LIMIT: [
+        {"fields": ["is_deleted"], "type": "persistent", "name": "ucl_is_active"}
+    ],
+    db_collections.ICD10_CATEGORY: [
+        {"fields": ["is_deleted"], "type": "persistent", "name": "ic_is_active"}
+    ],
+    db_collections.ICD10: [
+        {"fields": ["is_deleted"], "type": "persistent", "name": "i_is_active"}
+    ],
+    db_collections.ASSIGNED_VA: [
+        {"fields": ["is_deleted"], "type": "persistent", "name": "av_is_active"}
+    ],
+    db_collections.CODED_VA: [
+        {"fields": ["is_deleted"], "type": "persistent", "name": "cv_is_active"}
+    ],
     db_collections.DOWNLOAD_TRACKER: [],
     db_collections.DOWNLOAD_PROCESS_TRACKER: [],
     db_collections.SYSTEM_CONFIGS: [],
