@@ -243,7 +243,8 @@ async def _generate_tokens(user, db: StandardDatabase):
     return {
         "access_token": access_token,
         "refresh_token": refresh_token,
-        "expires_in": at_expires.seconds
+        "expires_in": at_expires.seconds,
+        "refresh_token_expiries_in": rt_expires.seconds
     }
     
 async def email_forgot_password_link(data, background_tasks, session):

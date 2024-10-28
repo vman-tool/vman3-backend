@@ -105,8 +105,8 @@ async def get_token_user(token: str, db:StandardDatabase ):
             user_id=active_user[0]['uuid']
             if user_id is not None:
                 cursor_cr = db.collection(db_collections().USER_ACCESS_LIMIT).find({
-                "user": user_id,
-                "is_deleted": False
+                    "user": user_id,
+                    "is_deleted": False
                 })
 
 
@@ -122,7 +122,7 @@ async def get_token_user(token: str, db:StandardDatabase ):
                     "created_at": active_user[0].get("created_at"),
                     "created_by": active_user[0].get("created_by") if "created_by" in active_user[0] else None,
                     "image": active_user[0].get("image") if "image" in active_user[0] else None,
-                    'access_limit': defaultsCr[0]['access_limit']
+                    'access_limit': defaultsCr[0]['access_limit'] if len(defaultsCr) > 0 else None
                 }
     return None
 
