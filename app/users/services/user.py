@@ -47,12 +47,18 @@ async def create_or_update_user_account(data: RegisterUserRequest, image: Upload
             raise HTTPException(status_code=400, detail="Please provide a strong password.")
     
     if not data.uuid and not (data.password or data.confirm_password):
-        raise HTTPException(status_code=400, detail="Provide password to create new user or uuid to update user.")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Provide password to create new user or uuid to update user.")
     
-    existing_user = None
-    if data.uuid:
-        existing_user = await User.get(doc_uuid=data.uuid, db=db)
+    existing_user = await User.get_many(filters={"email": data.email}, db=db)
+    if not data.uuid and len(existing_user) > 0:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="This email address already exists.")
 
+    
+    if data.uuid:
+        existing_users = await User.get_many(filters={"or_conditions": [{"uuid": data.uuid}, {"email": data.email}]}, db=db)
+        if len(existing_users) > 1:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="This email address can't belong to more than one user.")
+        existing_user = existing_users[0]
         if existing_user:
             hashed_password = None
             if data.confirm_password:
@@ -237,7 +243,8 @@ async def _generate_tokens(user, db: StandardDatabase):
     return {
         "access_token": access_token,
         "refresh_token": refresh_token,
-        "expires_in": at_expires.seconds
+        "expires_in": at_expires.seconds,
+        "refresh_token_expiries_in": rt_expires.seconds
     }
     
 async def email_forgot_password_link(data, background_tasks, session):
@@ -448,8 +455,11 @@ async def assign_roles(data: AssignRolesRequest = None, current_user: User = Non
         existing_access_limit = await UserAccessLimit.get_many(filters={"user": data.user}, db=db)
         if len(existing_access_limit) == 1:
             access_limit_json = replace_object_values(data.model_dump(), existing_access_limit[0])
-            await UserAccessLimit(**access_limit_json).update(updated_by=current_user['uuid'] if 'uuid' in current_user else None, db=db)
-        elif not existing_access_limit and data.access_limit:
+            if data.access_limit:
+                await UserAccessLimit(**access_limit_json).update(updated_by=current_user['uuid'] if 'uuid' in current_user else None, db=db, force_update=True)
+            else:
+                await UserAccessLimit.delete(doc_uuid = access_limit_json["uuid"], db=db)
+        elif not existing_access_limit:
             await UserAccessLimit(**{
                 "user": data.user, 
                 "access_limit": data.access_limit,
@@ -488,55 +498,40 @@ async def get_user_roles(user_uuid: str  = None, current_user: User = None, db: 
     try:
         if user_uuid is None:
             user_uuid = current_user['uuid']
-        
-        query = f"""
-            LET access_limit = (
-                FOR a IN {db_collections.USER_ACCESS_LIMIT}
-                    FILTER a.user == @user_uuid
-                    RETURN {{ access_limit: a.access_limit }}
-            )
-            FOR user_role IN {db_collections.USER_ROLES}
-                FILTER user_role.user == @user_uuid AND user_role.is_deleted == false
-                
-                LET role = (
-                    FOR r IN {db_collections.ROLES}
-                        FILTER r.uuid == user_role.role
-                        RETURN {{ uuid: r.uuid, name: r.name, privileges: r.privileges }}
-                )[0]
-                
-                COLLECT user = user_role.user INTO roleGroups
-                
-                RETURN MERGE(
-                    FIRST(roleGroups[*].user_role),
-                    {{roles: roleGroups[*].role}},
-                    {{access_limit: access_limit}}
-                )
-        """
+
         query = f"""
             LET access_info = (
                 FOR a IN {db_collections.USER_ACCESS_LIMIT}
                     FILTER a.user == @user_uuid AND a.is_deleted == false
                     RETURN a.access_limit
-                )[0]
+            )[0]
 
-            FOR user_role IN {db_collections.USER_ROLES}
-                FILTER user_role.user == @user_uuid AND user_role.is_deleted == false
+            LET user_role_object = (
+                FOR user_role IN {db_collections.USER_ROLES}
+                    FILTER user_role.user == @user_uuid AND user_role.is_deleted == false
 
-                // Fetch the role associated with the user_role
-                LET role = (
-                    FOR r IN {db_collections.ROLES}
-                    FILTER r.uuid == user_role.role
-                    RETURN {{ uuid: r.uuid, name: r.name, privileges: r.privileges }}
-                )[0]
+                    // Fetch the role associated with each user_role
+                    LET role = (
+                        FOR r IN {db_collections.ROLES}
+                            FILTER r.uuid == user_role.role
+                            RETURN {{ uuid: r.uuid, name: r.name, privileges: r.privileges }}
+                    )[0]
 
-                COLLECT user = user_role.user INTO roleGroups
-                
-                RETURN MERGE(
-                    FIRST(roleGroups[*].user_role),
-                    {{roles: roleGroups[*].role}},
-                    {{access_limit: access_info}}
-                )
-        """
+                    COLLECT user = user_role.user INTO roleGroups
+
+                    RETURN {{
+                        user: user,
+                        roles: roleGroups[*].role,
+                        access_limit: access_info
+                    }}
+            )
+
+            // If user_role_object is empty, return a default structure
+            RETURN LENGTH(user_role_object) > 0 
+                ? user_role_object[0]
+                : {{ user: @user_uuid, roles: [], access_limit: access_info }}
+
+            """
 
         bind_vars = {
             "user_uuid": user_uuid
@@ -551,11 +546,11 @@ async def get_user_roles(user_uuid: str  = None, current_user: User = None, db: 
             user_roles = [user_role for user_role in user_roles_result]
             user_role = user_roles[0]
             roles = []
-            if 'roles' in user_role:
+            if 'roles' in user_role and len(user_role['roles']) > 0:
                 for role in user_role["roles"]:
                     if role is not None:
                         roles.append(role)
-            user_role["roles"] = roles            
+                user_role["roles"] = roles            
             user_roles_response = await UserRolesResponse.get_structured_user_role(user_role=user_role, db=db)
             return ResponseMainModel(data=user_roles_response, message='User Roles Fetched successfully.')
         else:
