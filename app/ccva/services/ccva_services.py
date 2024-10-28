@@ -26,9 +26,10 @@ async def websocket_broadcast(task_id: str, progress_data: dict):
     from app.main import \
         websocket__manager  # Ensure this points to your actual WebSocket manager instance
     await websocket__manager.broadcast(task_id, json.dumps(progress_data))
-async def get_record_to_run_ccva(db: StandardDatabase, task_id: str, task_results: Dict,start_date: Optional[date] = None, end_date: Optional[date] = None,):
+
+async def get_record_to_run_ccva(current_user:dict,db: StandardDatabase, task_id: str, task_results: Dict,start_date: Optional[date] = None, end_date: Optional[date] = None,):
     try:
-        records= await fetch_va_records_json(paging=False, start_date=start_date, end_date=end_date,  db=db)
+        records= await fetch_va_records_json(current_user=current_user,paging=False, start_date=start_date, end_date=end_date,  db=db)
         if records.data == []:
             raise Exception("No records found")
         
@@ -134,7 +135,11 @@ def runCCVA(odk_raw:pd.DataFrame, id_col: str = None,date_col:str =None,start_ti
         )
        
         rcd = records.to_dict(orient='records')
-
+        print(len(rcd))
+        # print(rcd)
+        if rcd == [] or rcd is None:
+            ensure_task(update_callback({"progress": 0, "message": "No records found", "status": 'error',"elapsed_time": f"{(datetime.now() - start_time).seconds // 3600}:{(datetime.now() - start_time).seconds // 60 % 60}:{(datetime.now() - start_time).seconds % 60}", "task_id": file_id, "error": True}))
+            return
         # Iterate over each dictionary and add the 'task_id' field
         for record in rcd:
             record["task_id"] = file_id
@@ -143,20 +148,26 @@ def runCCVA(odk_raw:pd.DataFrame, id_col: str = None,date_col:str =None,start_ti
         
        # get the ccva form data (individual ones, eg, locations, gender, age_group) from the database and merge with the results
         results_to_insert = asyncio.run(getVADataAndMergeWithResults(db, null_convert_data(rcd)))
+        if results_to_insert is None:
+            print("No records found")
+            ensure_task(update_callback({"progress": 0, "message": "No records found", "status": 'error',"elapsed_time": f"{(datetime.now() - start_time).seconds // 3600}:{(datetime.now() - start_time).seconds // 60 % 60}:{(datetime.now() - start_time).seconds % 60}", "task_id": file_id, "error": True}))
+            return
+        print("InterVA5 analysis completed.",len(results_to_insert))
         db.collection(db_collections.CCVA_RESULTS).insert_many(results_to_insert, overwrite=True, overwrite_mode="update")
-        print("InterVA5 analysis completed.")
+        print("CCVA results inserted into the database.")
 
-        # Remove the temporary CSV file
-        # os.remove(f"{file_id}-dt.csv")
+
         total_records = len(records)
         rangeDates={"start": odk_raw[date_col].max(), "end":odk_raw[date_col].min()}
         ## get ccva error logs to be added to the ccva_results
         error_logs = process_ccva_errorlogs(output_folder + file_id + "_")
-        print(error_logs)
-        
+        print("Processing error logs...")
+
         ccva_results= compile_ccva_results(iv5out, error_logs=error_logs, top=top, undetermined=undetermined, task_id=file_id,start_time= start_time,total_records=total_records,  rangeDates =rangeDates, db=db)
+        print("CCVA run is completed.")
         error_log_path = f"{output_folder}{file_id}_errorlogV5.txt"
         log_path = f"{output_folder}{file_id}.csv"
+
         
         if os.path.exists(error_log_path):
             os.remove(error_log_path)
@@ -166,7 +177,7 @@ def runCCVA(odk_raw:pd.DataFrame, id_col: str = None,date_col:str =None,start_ti
 
     except Exception as e:
         print(f"Error during CCVA analysis: {e}")
-        asyncio.run(update_callback({"progress": 0, "message": f"Error during CCVA analysis: {e}", "status": 'error',"elapsed_time": f"{(datetime.now() - start_time).seconds // 3600}:{(datetime.now() - start_time).seconds // 60 % 60}:{(datetime.now() - start_time).seconds % 60}", "task_id": file_id, "error": True}))
+        ensure_task(update_callback({"progress": 0, "message": f"Error during CCVA analysis: {e}", "status": 'error',"elapsed_time": f"{(datetime.now() - start_time).seconds // 3600}:{(datetime.now() - start_time).seconds // 60 % 60}:{(datetime.now() - start_time).seconds % 60}", "task_id": file_id, "error": True}))
         
 
         
@@ -302,12 +313,14 @@ def compile_ccva_results(iv5out, top=10, undetermined=True,start_time:timedelta=
         "adult": adult_results,
         "child": child_results,
         "neonate": neonate_results,
-        "error_logs": error_logs,
+        # "error_logs": error_logs,
         # "merged": merged_results
     }
 
     db.collection(db_collections.CCVA_GRAPH_RESULTS).insert(ccva_results)
-    asyncio.run(  websocket_broadcast(task_id,{"progress": 100, "message": "Finish CCVA analysis...", "status": 'completed', "data": ccva_results ,"elapsed_time": f"{(datetime.now() - start_time).seconds // 3600}:{(datetime.now() - start_time).seconds // 60 % 60}:{(datetime.now() - start_time).seconds % 60}", "task_id": task_id, "error": False}))
+    db.collection(db_collections.CCVA_ERRORS).insert(error_logs, overwrite=True, overwrite_mode="update")
+    
+    ensure_task(  websocket_broadcast(task_id,{"progress": 100, "message": "Finish CCVA analysis...", "status": 'completed', "data": ccva_results ,"elapsed_time": f"{(datetime.now() - start_time).seconds // 3600}:{(datetime.now() - start_time).seconds // 60 % 60}:{(datetime.now() - start_time).seconds % 60}", "task_id": task_id, "error": False}))
 
     return ccva_results
 
@@ -371,7 +384,7 @@ def process_ccva_errorlogs(output_folder: str):
 
 
     # Return the processed log entries
-    print(log_entries)
+
     return log_entries
 
 async def fetch_ccva_results_and_errors(db: StandardDatabase, task_id: str):
@@ -412,46 +425,73 @@ async def fetch_ccva_results_and_errors(db: StandardDatabase, task_id: str):
         print(f"Error fetching CCVA results and error logs: {e}")
         return None
     
-    
 async def getVADataAndMergeWithResults(db: StandardDatabase, results: list):
-    ###
-    
-    ###
     from app.settings.services.odk_configs import fetch_odk_config
 
-
+    # Fetch configurations asynchronously
     config = await fetch_odk_config(db)
-    is_adult=config.field_mapping.is_adult
-    is_child=config.field_mapping.is_child
-    is_neonate=config.field_mapping.is_neonate
-    deceased_gender=config.field_mapping.deceased_gender
-    location_level1=config.field_mapping.location_level1
-    location_level2=config.field_mapping.location_level2
-    date=config.field_mapping.date
-    instance_id=config.field_mapping.instance_id or 'instanceid'
 
-    for  result in results:
-        data_uid = result.get('ID', None)
-        if data_uid is None:
-            continue
-        
-        cursor=db.collection(db_collections.VA_TABLE).find({instance_id: data_uid})
-        ind_results = [{key: document.get(key, None) for key in ['id10019', is_adult, is_child,is_neonate,deceased_gender,location_level1,location_level2,date]} for document in cursor]
-        # Rename fields in the results and determine the age group
-        renamed_results = [
-                {
-                'gender': doc.pop('id10019', None).lower() if doc.get('id10019') else None,
-                'date': doc.pop('today', None).lower() if doc.get('today') else None,
-                'ageGroup': 'adult' if doc.pop(is_adult, None) else 'child' if doc.pop(is_child, None) else 'neonate' if doc.pop(is_neonate, None) else None,
-                'locationLevel1': doc.pop(location_level1, None).lower() if doc.get(location_level1) else None,
-                'locationLevel2': doc.pop(location_level2, None).lower() if doc.get(location_level2) else None
-                }
-                for doc in ind_results
-            ]
+    # Extract field mappings from the configuration
+    is_adult = config.field_mapping.is_adult
+    is_child = config.field_mapping.is_child
+    is_neonate = config.field_mapping.is_neonate
+    deceased_gender = config.field_mapping.deceased_gender
+    location_level1 = config.field_mapping.location_level1
+    location_level2 = config.field_mapping.location_level2
+    date = config.field_mapping.date
+    instance_id = config.field_mapping.instance_id or 'instanceid'
 
-        # Check if there are any results to merge
-        if renamed_results:
-            # Merge the results with the original dictionary
-            result.update(renamed_results[0] , )
+    # Extract all data UIDs for a batch query
+    data_uids = [result.get('ID') for result in results if result.get('ID')]
+
+    # Return early if there are no valid data_uids
+    if not data_uids:
+        return results
+
+    # Define a batch AQL query for all data_uids at once
+    collection = db.collection(db_collections.VA_TABLE)
+    data_uids_str = ', '.join(f'"{uid}"' for uid in data_uids)
+    query = f"""
+    FOR doc IN {collection.name}
+    FILTER doc.{instance_id} IN [{data_uids_str}]
+    RETURN {{
+        uid: doc.{instance_id},
+        gender: LOWER(doc.{deceased_gender}),
+        date: LOWER(doc.{date}),
+        ageGroup: 
+            doc.{is_adult} ? "adult" :
+            doc.{is_child} ? "child" :
+            doc.{is_neonate} ? "neonate" : null,
+        locationLevel1: LOWER(doc.{location_level1}),
+        locationLevel2: LOWER(doc.{location_level2})
+    }}
+    """
+
+    # Execute the query with caching
+    cursor = db.aql.execute(query, cache=True)
+
+    # Convert the cursor to a dictionary keyed by UID for easy lookup
+    va_data_map = {doc['uid']: doc for doc in cursor}
+
+    # Merge the fetched data with the original results
+    for result in results:
+        data_uid = result.get('ID')
+        if data_uid in va_data_map:
+            result.update(va_data_map[data_uid])
 
     return results
+
+
+def ensure_task(task):
+    try:
+        # Check if an event loop is running
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        # If no running loop, create a new one and run the task
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        loop.run_until_complete(task)
+        loop.close()
+    else:
+        # If a running loop is available, create a task in the existing loop
+        loop.create_task(websocket_broadcast(task))

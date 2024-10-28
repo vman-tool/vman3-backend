@@ -28,4 +28,4 @@ COPY . /vman3
 EXPOSE 8080
 
 # Command to run the FastAPI app with gunicorn using uvicorn workers for production
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8080", "--workers", "2"]
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8080", "--workers", "1"]

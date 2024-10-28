@@ -422,7 +422,7 @@ class InterVA5:
             if k == N:
                 print("100% completed -----")
                 if self.update_callback:
-                    asyncio.run(self.update_callback({"progress": 99,"message": "Complete InterVA5 analysis...","elapsed_time": elapsed_time,"total_records":self.va_input.shape[0], "error": False}))
+                    asyncio.run(self.update_callback({"progress": 90,"message": "Running InterVA5 analysis...","elapsed_time": elapsed_time,"total_records":self.va_input.shape[0], "error": False}))
 
  
 
