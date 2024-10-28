@@ -454,8 +454,11 @@ async def assign_roles(data: AssignRolesRequest = None, current_user: User = Non
         existing_access_limit = await UserAccessLimit.get_many(filters={"user": data.user}, db=db)
         if len(existing_access_limit) == 1:
             access_limit_json = replace_object_values(data.model_dump(), existing_access_limit[0])
-            await UserAccessLimit(**access_limit_json).update(updated_by=current_user['uuid'] if 'uuid' in current_user else None, db=db)
-        elif not existing_access_limit and data.access_limit:
+            if data.access_limit:
+                await UserAccessLimit(**access_limit_json).update(updated_by=current_user['uuid'] if 'uuid' in current_user else None, db=db, force_update=True)
+            else:
+                await UserAccessLimit.delete(doc_uuid = access_limit_json["uuid"], db=db)
+        elif not existing_access_limit:
             await UserAccessLimit(**{
                 "user": data.user, 
                 "access_limit": data.access_limit,
