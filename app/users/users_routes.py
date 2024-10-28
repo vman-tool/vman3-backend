@@ -46,7 +46,7 @@ async def register_user(
     required_privs: List[str] = Depends(check_privileges([AccessPrivileges.USERS_CREATE_USER])),
     db: StandardDatabase = Depends(get_arangodb_session)
 ):
-    return await user.create_or_update_user_account(data, current_user, db, background_tasks)
+    return await user.create_or_update_user_account(data = data, current_user=current_user, db = db, background_tasks = background_tasks)
 
 @auth_router.put("/", status_code=status.HTTP_200_OK, response_model=UserResponse)
 async def update_user(

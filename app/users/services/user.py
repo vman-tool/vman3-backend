@@ -47,12 +47,18 @@ async def create_or_update_user_account(data: RegisterUserRequest, image: Upload
             raise HTTPException(status_code=400, detail="Please provide a strong password.")
     
     if not data.uuid and not (data.password or data.confirm_password):
-        raise HTTPException(status_code=400, detail="Provide password to create new user or uuid to update user.")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Provide password to create new user or uuid to update user.")
     
-    existing_user = None
-    if data.uuid:
-        existing_user = await User.get(doc_uuid=data.uuid, db=db)
+    existing_user = await User.get_many(filters={"email": data.email}, db=db)
+    if not data.uuid and len(existing_user) > 0:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="This email address already exists.")
 
+    
+    if data.uuid:
+        existing_users = await User.get_many(filters={"or_conditions": [{"uuid": data.uuid}, {"email": data.email}]}, db=db)
+        if len(existing_users) > 1:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="This email address can't belong to more than one user.")
+        existing_user = existing_users[0]
         if existing_user:
             hashed_password = None
             if data.confirm_password:
