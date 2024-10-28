@@ -333,7 +333,7 @@ class BaseResponseModel(BaseModel):
     """
     Use this class to standardize the response of your API endpoints.
     """
-    uuid: str
+    uuid: Union[str, None] = None
     created_by: Union[ResponseUser, None] = None
     updated_by: Union[ResponseUser, None] = None
     deleted_by: Union[ResponseUser, None] = None

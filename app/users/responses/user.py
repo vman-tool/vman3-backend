@@ -28,6 +28,7 @@ class LoginResponse(BaseModel):
     refresh_token: str
     expires_in: int
     token_type: str = "Bearer"
+    refresh_token_expiries_in: int
     user: Optional[UserResponse] = None
 
 
@@ -56,7 +57,7 @@ class UserRolesResponse(BaseResponseModel):
     access_limit: Union[Dict, None] = None
 
     @classmethod
-    async def get_structured_user_role(cls, user_role_uuid = None, user_role = None, db: StandardDatabase = None):
+    async def get_structured_user_role(cls, user_uuid = None, user_role = None, db: StandardDatabase = None):
         user_role = user_role
         if not user_role:
             query = f"""
@@ -64,34 +65,42 @@ class UserRolesResponse(BaseResponseModel):
                     FOR a IN {db_collections.USER_ACCESS_LIMIT}
                         FILTER a.user == @user_uuid AND a.is_deleted == false
                         RETURN a.access_limit
-                    )[0]
+                )[0]
 
-                FOR user_role IN {db_collections.USER_ROLES}
-                    FILTER user_role.user == @user_uuid AND user_role.is_deleted == false
+                LET user_role_object = (
+                    FOR user_role IN {db_collections.USER_ROLES}
+                        FILTER user_role.user == @user_uuid AND user_role.is_deleted == false
 
-                    // Fetch the role associated with the user_role
-                    LET role = (
-                        FOR r IN {db_collections.ROLES}
-                        FILTER r.uuid == user_role.role
-                        RETURN {{ uuid: r.uuid, name: r.name, privileges: r.privileges }}
-                    )[0]
+                        // Fetch the role associated with each user_role
+                        LET role = (
+                            FOR r IN {db_collections.ROLES}
+                                FILTER r.uuid == user_role.role
+                                RETURN {{ uuid: r.uuid, name: r.name, privileges: r.privileges }}
+                        )[0]
 
-                    COLLECT user = user_role.user INTO roleGroups
-                    
-                    RETURN MERGE(
-                        FIRST(roleGroups[*].user_role),
-                        {{roles: roleGroups[*].role}},
-                        {{access_limit: access_info}}
-                    )
+                        COLLECT user = user_role.user INTO roleGroups
+
+                        RETURN {{
+                            user: user,
+                            roles: roleGroups[*].role,
+                            access_limit: access_info
+                        }}
+                )
+
+                // If user_role_object is empty, return a default structure
+                RETURN LENGTH(user_role_object) > 0 
+                    ? user_role_object
+                    : [{{ user: @user_uuid, roles: [], access_limit: access_info }}]
+
             """
-            bind_vars = {'user_role_uuid': user_role_uuid}
+            bind_vars = {'user_uuid': user_uuid}
             cursor = db.aql.execute(query, bind_vars=bind_vars,cache=True)
             user_role = cursor.next()
         roles = []
-        if 'roles' in user_role:
+        if 'roles' in user_role and len(user_role['roles']) > 0:
             for role in user_role["roles"]:
                 if role is not None:
                     roles.append(role)
-        user_role["roles"] = roles
+            user_role["roles"] = roles
         populated_role_data = await populate_user_fields(data = user_role, specific_fields=['user'], db=db)
         return cls(**populated_role_data)
