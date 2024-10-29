@@ -28,7 +28,7 @@ class LoginResponse(BaseModel):
     refresh_token: str
     expires_in: int
     token_type: str = "Bearer"
-    refresh_token_expiries_in: int
+    refresh_token_expires_in: int
     user: Optional[UserResponse] = None
 
 
