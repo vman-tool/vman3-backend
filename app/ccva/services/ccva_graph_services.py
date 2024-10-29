@@ -7,6 +7,7 @@ from fastapi import HTTPException, status
 
 from app.shared.configs.constants import db_collections
 from app.shared.configs.models import ResponseMainModel
+from app.shared.configs.security import get_location_limit_values
 from app.shared.middlewares.exceptions import BadRequestException
 
 
@@ -27,14 +28,14 @@ async def fetch_db_processed_ccva_graphs(
     try:
         # print(start_date, end_date, locations, date_type,'dated')
         # date_type= submission_date death_date interview_date
-        locationKey=current_user['access_limit']['field'] or None ## locationLevel1
+
+        locationKey, locationLimitValues = get_location_limit_values(current_user)
         if locationKey == 'id10005r':
             locationKey = 'locationLevel1'
         elif locationKey == 'id10005d':
             locationKey = 'locationLevel2'
 
-        locationLimitValues = [item['value'] for item in current_user['access_limit']['limit_by']] if current_user['access_limit']['limit_by'] else None
-    
+        
     
         # config = await fetch_odk_config(db)
         # region_field = config.field_mapping.location_level1

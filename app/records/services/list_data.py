@@ -8,6 +8,7 @@ from app.records.responses.data import map_to_data_response
 from app.settings.services.odk_configs import fetch_odk_config
 from app.shared.configs.constants import db_collections
 from app.shared.configs.models import ResponseMainModel
+from app.shared.configs.security import get_location_limit_values
 from app.shared.middlewares.exceptions import BadRequestException
 
 
@@ -15,10 +16,9 @@ async def fetch_va_records(current_user:dict,paging: bool = True, page_number: i
     try:
         config = await fetch_odk_config(db)
         region_field = config.field_mapping.location_level1
-        locationKey=current_user['access_limit']['field'] or None ## locationLevel1
+        locationKey, locationLimitValues = get_location_limit_values(current_user)
 
-        locationLimitValues = [item['value'] for item in current_user['access_limit']['limit_by']] if current_user['access_limit']['limit_by'] else None
-    
+
 
         if date_type is not None:
             if date_type == 'submission_date':
@@ -96,10 +96,7 @@ async def fetch_va_records_json(current_user:dict,paging: bool = True, page_numb
     try:
         config = await fetch_odk_config(db)
         region_field = config.field_mapping.location_level1
-        # locationKey=current_user['access_limit']['field'] or None ## locationLevel1
-
-        # locationLimitValues = [item['value'] for item in current_user['access_limit']['limit_by']] if current_user['access_limit']['limit_by'] else None
-    
+        # locationKey, locationLimitValues = get_location_limit_values(current_user)
         if date_type is not None:
             if date_type == 'submission_date':
                 today_field = 'submissiondate'
