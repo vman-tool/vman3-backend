@@ -1,13 +1,12 @@
 from arango.database import StandardDatabase
 
 from app.shared.configs.models import ResponseMainModel
+from app.shared.configs.security import get_location_limit_values
 
 
 def get_unique_regions(db: StandardDatabase, current_user:dict):
-    locationKey=current_user['access_limit']['field'] or None ## locationLevel1
+    locationKey, locationLimitValues = get_location_limit_values(current_user)
 
-    # locationLimitValues =current_user['access_limit']['limit_by'] or None ## [{value: "value", label: "label"}]
-    locationLimitValues = [item['value'] for item in current_user['access_limit']['limit_by']] if current_user['access_limit']['limit_by'] else None
 
         
     try:

@@ -111,21 +111,30 @@ async def get_token_user(token: str, db:StandardDatabase ):
 
 
                 defaultsCr = [{key: document.get(key, None) for key in document} for document in cursor_cr]
-
+            ac= defaultsCr[0] or None
             if len(active_user) > 0:
                 return {
-                    "uuid": active_user[0]["uuid"],
-                    "id": active_user[0]["_key"],
-                    "name": active_user[0]["name"],
-                    "email": active_user[0]["email"],
-                    "is_active": active_user[0]["is_active"],
+                    "uuid": active_user[0].get("uuid"),
+                    "id": active_user[0].get("_key"),
+                    "name": active_user[0].get("name"),
+                    "email": active_user[0].get("email"),
+                    "is_active": active_user[0].get("is_active"),
                     "created_at": active_user[0].get("created_at"),
-                    "created_by": active_user[0].get("created_by") if "created_by" in active_user[0] else None,
-                    "image": active_user[0].get("image") if "image" in active_user[0] else None,
-                    'access_limit': defaultsCr[0]['access_limit'] if len(defaultsCr) > 0 else None
+                    "created_by": active_user[0].get("created_by"),
+                    "image": active_user[0].get("image"),
+                    'access_limit': ac.get('access_limit') if ac is not None else None
                 }
     return None
 
+def get_location_limit_values(current_user):
+    try:
+        access_limit = current_user.get('access_limit', {}) or {}
+        locationKey = access_limit.get('field', '')
+        locationLimitValues = [item.get('value') for item in access_limit.get('limit_by', [])]
+        return locationKey, locationLimitValues
+    except Exception as e:
+        print(f"Error processing location limit values: {e}")
+        return None, None
 
 async def load_user(email: str, db:StandardDatabase):
     collection = db.collection(db_collections.USERS)
