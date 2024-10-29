@@ -11,7 +11,7 @@ from app.shared.configs.models import ResponseMainModel
 from app.shared.services.va_records import get_field_value_from_va_records
 from app.shared.configs.constants import AccessPrivileges, Special_Constants
 from app.users.decorators.user import check_privileges, get_current_user
-from app.utilits.helpers import save_file
+from app.utilits.helpers import delete_file, save_file
 
 # from sqlalchemy.orm import Session
 
@@ -84,26 +84,26 @@ async def upload_image(
         login_image_saved_path = None
         favicon_saved_path = None
 
-        existing_images = await get_system_images(db)
+        existing_images_record = await get_system_images(db)
+
+        existing_images = existing_images_record[0] if len(existing_images_record) >  0 and existing_images_record[0] is not None else {}
 
         if logo:
-            existing_logo = existing_images[0] if len(existing_images) >  0 and existing_images[0] is not None else {}
-            logo_saved_path = save_file(logo, valid_file_extensions=valid_image_extensions, delete_extisting=existing_logo["logo"] if "logo" in existing_logo else None)
+            logo_saved_path = save_file(logo, valid_file_extensions=valid_image_extensions, delete_extisting=existing_images["logo"] if "logo" in existing_images else None)
         
         if login_image:
-            existing_login_image = existing_images[0] if len(existing_images) >  0 and existing_images[0] is not None else {}
-            login_image_saved_path = save_file(login_image, valid_file_extensions=valid_image_extensions, delete_extisting=existing_login_image["home_image"] if "home_image" in existing_login_image else None)
+            login_image_saved_path = save_file(login_image, valid_file_extensions=valid_image_extensions, delete_extisting=existing_images["home_image"] if "home_image" in existing_images else None)
         
         if favicon:
-            existing_favicon = existing_images[0] if len(existing_images) >  0 and existing_images[0] is not None else {}
-            favicon_saved_path = save_file(favicon, valid_file_extensions=valid_image_extensions, delete_extisting=existing_favicon["favicon"] if "favicon" in existing_favicon else None)
+            favicon_saved_path = save_file(favicon, valid_file_extensions=valid_image_extensions, delete_extisting=existing_images["favicon"] if "favicon" in existing_images else None)
+
 
         data = ImagesConfigData(
             logo=logo_saved_path,
             favicon=favicon_saved_path,
             home_image = login_image_saved_path
         )
-        results = await save_system_images(data, db)
+        results = await save_system_images(data = data, db = db)
 
         return ResponseMainModel(
             data = results,
@@ -114,7 +114,7 @@ async def upload_image(
         raise HTTPException(status_code=500, detail=str(e))
 
 @settings_router.get("/system_images/", description="Get System Images")
-async def get_image(
+async def get_images(
     db: StandardDatabase = Depends(get_arangodb_session)
 ):
     try:
@@ -122,6 +122,37 @@ async def get_image(
         return ResponseMainModel(
             data = await get_system_images(db),
             message="System images fetched successfully"
+        )
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@settings_router.delete("/system_images/", description="Get System Images")
+async def delete_system_images(
+    db: StandardDatabase = Depends(get_arangodb_session)
+):
+    try:
+        existing_images_record = await get_system_images(db)
+
+
+        existing_images = existing_images_record[0] if len(existing_images_record) >  0 and existing_images_record[0] is not None else {}
+        if existing_images:
+            for image in existing_images.keys():
+                try:
+                    delete_file(existing_images[image])
+                except:
+                    print(f"Could not delete {image}")
+
+        data = ImagesConfigData(
+            logo=None,
+            favicon=None,
+            home_image = None
+        )
+        results = await save_system_images(data = data, reset=True, db = db)
+
+        return ResponseMainModel(
+            data = results,
+            message="System images reset successfully"
         )
 
     except Exception as e:
