@@ -111,7 +111,7 @@ async def get_token_user(token: str, db:StandardDatabase ):
 
 
                 defaultsCr = [{key: document.get(key, None) for key in document} for document in cursor_cr]
-            ac= defaultsCr[0] or None
+            ac= defaultsCr[0] if len(defaultsCr) > 0 else None
             if len(active_user) > 0:
                 return {
                     "uuid": active_user[0].get("uuid"),
