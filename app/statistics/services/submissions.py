@@ -6,6 +6,7 @@ from arango.database import StandardDatabase
 from app.settings.services.odk_configs import fetch_odk_config
 from app.shared.configs.constants import db_collections
 from app.shared.configs.models import ResponseMainModel
+from app.shared.configs.security import get_location_limit_values
 
 
 async def fetch_submissions_statistics( current_user: dict,paging: bool = True, page_number: int = 1, limit: int = 10, start_date: Optional[date] = None, end_date: Optional[date] = None, locations: Optional[List[str]] = None,date_type:Optional[str]=None, db: StandardDatabase = None) -> ResponseMainModel:
@@ -33,11 +34,10 @@ async def fetch_submissions_statistics( current_user: dict,paging: bool = True, 
             
         # today_field = config.field_mapping.date
         deceased_gender = config.field_mapping.deceased_gender
-        locationKey=current_user['access_limit']['field'] or None ## locationLevel1
 
-        locationLimitValues = [item['value'] for item in current_user['access_limit']['limit_by']] if current_user['access_limit']['limit_by'] else None
-    
-        
+
+        locationKey, locationLimitValues = get_location_limit_values(current_user)
+
         collection = db.collection(db_collections.VA_TABLE)  # Use the actual collection name here
         query = f"""
             FOR doc IN {collection.name}

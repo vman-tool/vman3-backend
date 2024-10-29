@@ -5,15 +5,16 @@ from arango.database import StandardDatabase
 
 from app.shared.configs.constants import db_collections
 from app.shared.configs.models import ResponseMainModel
+from app.shared.configs.security import get_location_limit_values
 
 
 async def fetch_va_map_records(current_user:dict,paging: bool = True, page_number: int = 1, limit: int = 10, start_date: Optional[date] = None, end_date: Optional[date] = None, locations: Optional[List[str]] = None, db: StandardDatabase = None) -> ResponseMainModel:
     try:
         collection = db.collection(db_collections.VA_TABLE)  # Use the actual collection name here
-        locationKey=current_user['access_limit']['field'] or None ## 
+        locationKey = current_user['access_limit'].get('field', '')  # locationLevel1
 
-        locationLimitValues = [item['value'] for item in current_user['access_limit']['limit_by']] if current_user['access_limit']['limit_by'] else None
-    
+        locationKey, locationLimitValues = get_location_limit_values(current_user)
+
         query = f"""
             FOR doc IN {collection.name}
             FILTER doc.coordinates != null AND LENGTH(doc.coordinates) == 3
