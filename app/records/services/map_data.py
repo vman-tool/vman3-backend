@@ -11,7 +11,7 @@ from app.shared.configs.security import get_location_limit_values
 async def fetch_va_map_records(current_user:dict,paging: bool = True, page_number: int = 1, limit: int = 10, start_date: Optional[date] = None, end_date: Optional[date] = None, locations: Optional[List[str]] = None, db: StandardDatabase = None) -> ResponseMainModel:
     try:
         collection = db.collection(db_collections.VA_TABLE)  # Use the actual collection name here
-        locationKey = current_user['access_limit'].get('field', '')  # locationLevel1
+          # locationLevel1
 
         locationKey, locationLimitValues = get_location_limit_values(current_user)
 
