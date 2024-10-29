@@ -12,12 +12,11 @@ def get_unique_regions(db: StandardDatabase, current_user:dict):
     try:
         query = f"""
         FOR dt IN form_submissions
-                  {f'FILTER dt.{locationKey} IN {locationLimitValues}' if locationKey and locationLimitValues else ''}
+          {f'FILTER dt.{locationKey} IN {locationLimitValues}' if locationKey and locationLimitValues else ''}
                
-          COLLECT uniqueRegion = dt.id10005r
+          COLLECT uniqueRegion = dt.{locationKey}
           RETURN uniqueRegion
         """
-        print(query, "query")
         cursor = db.aql.execute(query,cache=True)
         unique_regions = [region for region in cursor]
 
