@@ -175,9 +175,9 @@ async def get_system_images(db: StandardDatabase = None):
     data = [doc for doc in cursor]
     return data
 
-async def save_system_images(data: ImagesConfigData, db: StandardDatabase = None):
+async def save_system_images(data: ImagesConfigData, reset: bool = False, db: StandardDatabase = None):
     try:
-        if not data:
+        if not data and not reset:
             raise ValueError("No system images provided")
         saving_data = {'_key': 'vman_config'}
         saving_data['system_images'] = data.model_dump()
@@ -185,7 +185,7 @@ async def save_system_images(data: ImagesConfigData, db: StandardDatabase = None
         existing_images = await get_system_images(db)
         if len(existing_images) > 0 and existing_images[0] is not None:
             
-            updated_images = replace_object_values(saving_data['system_images'], existing_images[0])
+            updated_images = replace_object_values(saving_data['system_images'], existing_images[0], force=reset)
             saving_data['system_images'] = updated_images
             await save_system_settings(saving_data, db)
             
