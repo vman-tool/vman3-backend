@@ -432,7 +432,7 @@ async def assign_roles(data: AssignRolesRequest = None, current_user: User = Non
         if not existing_user:
             raise HTTPException(status_code=404, detail="User does not exist.")
         
-        if len(existing_roles) != len(data.roles):
+        if len(existing_roles) < len(data.roles or []):
             raise HTTPException(status_code=404, detail="Some roles do not exist.")
         
         existing_user_roles = await UserRole.get_many(filters={"user": data.user}, db=db)
@@ -456,7 +456,7 @@ async def assign_roles(data: AssignRolesRequest = None, current_user: User = Non
         if len(existing_access_limit) == 1:
             access_limit_json = replace_object_values(data.model_dump(), existing_access_limit[0])
             if data.access_limit:
-                await UserAccessLimit(**access_limit_json).update(updated_by=current_user['uuid'] if 'uuid' in current_user else None, db=db, force_update=True)
+                await UserAccessLimit(**access_limit_json).update(updated_by=current_user['uuid'] if 'uuid' in current_user else None, db=db)
             else:
                 await UserAccessLimit.delete(doc_uuid = access_limit_json["uuid"], db=db)
         elif not existing_access_limit:
