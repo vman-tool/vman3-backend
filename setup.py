@@ -10,7 +10,7 @@ setup(
     ],
     entry_points={
         "console_scripts": [
-            "vman=app.cli:main",
+            "vman=app.cli.cli:app",
         ],
     },
 )
