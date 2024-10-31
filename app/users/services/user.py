@@ -80,7 +80,7 @@ async def create_or_update_user_account(data: RegisterUserRequest, image: Upload
                     delete_extisting=existing_image
                 )
 
-            return await User(**update_user_data).update(updated_by = current_user["_key"] if current_user and '_key' in current_user else None, db = db)
+            return await User(**update_user_data).update(updated_by = current_user["id"] if current_user and 'id' in current_user else None, db = db)
         else:
             raise HTTPException(status_code=404, detail="User not found.")
 
@@ -90,7 +90,7 @@ async def create_or_update_user_account(data: RegisterUserRequest, image: Upload
         "password": hash_password(data.confirm_password),
         "is_active": data.is_active, # TODO: Change to false if you want to verify email first
         "verified_at":datetime.now().isoformat(), # TODO: Change to None if you want to verify email first
-        "created_by": current_user["_key"] if '_key' in current_user else None,
+        "created_by": current_user["id"] if 'id' in current_user else None,
     }
     
     return await User(**user_data).save(db = db)
@@ -440,31 +440,32 @@ async def assign_roles(data: AssignRolesRequest = None, current_user: User = Non
             if user_role['role'] not in data.roles:
                 await UserRole.delete(doc_uuid=user_role.get('uuid'), deleted_by=current_user['uuid'] if 'uuid' in current_user else None, db=db)
 
-
-        for role in data.roles:
-            existing_user_role = await UserRole.get_many(filters={"user": data.user, "role": role}, db=db)
-            if len(existing_user_role) == 0:
-                user_role_json = {
-                    "user": data.user,
-                    "role": role,
-                    "created_by": current_user["uuid"] if 'uuid' in current_user else None
-                }
-                user_role = await UserRole(**user_role_json).save(db=db)
-            elif len(existing_user_role) == 1:
-                continue
-        existing_access_limit = await UserAccessLimit.get_many(filters={"user": data.user}, db=db)
-        if len(existing_access_limit) == 1:
-            access_limit_json = replace_object_values(data.model_dump(), existing_access_limit[0])
-            if data.access_limit:
-                await UserAccessLimit(**access_limit_json).update(updated_by=current_user['uuid'] if 'uuid' in current_user else None, db=db)
-            else:
-                await UserAccessLimit.delete(doc_uuid = access_limit_json["uuid"], db=db)
-        elif not existing_access_limit:
-            await UserAccessLimit(**{
-                "user": data.user, 
-                "access_limit": data.access_limit,
-                "created_by": current_user['uuid'] if 'uuid' in current_user else None
-            }).save(db=db)
+        if data.roles:
+            for role in data.roles:
+                existing_user_role = await UserRole.get_many(filters={"user": data.user, "role": role}, db=db)
+                if len(existing_user_role) == 0:
+                    user_role_json = {
+                        "user": data.user,
+                        "role": role,
+                        "created_by": current_user["uuid"] if 'uuid' in current_user else None
+                    }
+                    user_role = await UserRole(**user_role_json).save(db=db)
+                elif len(existing_user_role) == 1:
+                    continue
+        if data.access_limit:
+            existing_access_limit = await UserAccessLimit.get_many(filters={"user": data.user}, db=db)
+            if len(existing_access_limit) == 1:
+                access_limit_json = replace_object_values(data.model_dump(), existing_access_limit[0])
+                if data.access_limit:
+                    await UserAccessLimit(**access_limit_json).update(updated_by=current_user['uuid'] if 'uuid' in current_user else None, db=db)
+                else:
+                    await UserAccessLimit.delete(doc_uuid = access_limit_json["uuid"], db=db)
+            elif not existing_access_limit:
+                await UserAccessLimit(**{
+                    "user": data.user, 
+                    "access_limit": data.access_limit,
+                    "created_by": current_user['uuid'] if 'uuid' in current_user else None
+                }).save(db=db)
         
         
         user_roles = await get_user_roles(data.user, current_user, db=db)
