@@ -55,7 +55,6 @@ async def update_user(
     email: Union[str, None] = Form(None),
     password: Union[str, None] = Form(None),
     confirm_password: Union[str, None] = Form(None),
-    created_by: Union[str, None] = Form(None),
     is_active: Union[bool, None] = Form(True),
     image: UploadFile = File(None), 
     background_tasks: BackgroundTasks = None, 
@@ -68,7 +67,6 @@ async def update_user(
         email=email,
         password=password,
         confirm_password=confirm_password,
-        created_by=created_by,
         is_active=is_active,
     )
     return await user.create_or_update_user_account(data = data, image = image, current_user = current_user, db = db, background_tasks = background_tasks)
