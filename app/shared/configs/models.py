@@ -166,7 +166,7 @@ class VManBaseModel(BaseModel):
 
         return cursor.next()
 
-    async def update(self, updated_by: str, db: StandardDatabase):
+    async def update(self, updated_by: str = None, db: StandardDatabase = None):
         """
         Update the record with the provided updated_by.
 

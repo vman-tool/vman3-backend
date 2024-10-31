@@ -57,7 +57,7 @@ async def create_or_update_user_account(data: RegisterUserRequest, image: Upload
     if data.uuid:
         existing_users = await User.get_many(filters={"or_conditions": [{"uuid": data.uuid}, {"email": data.email}]}, db=db)
         if len(existing_users) > 1:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="This email address can't belong to more than one user.")
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="This email address belongs to more than one user.")
         existing_user = existing_users[0]
         if existing_user:
             hashed_password = None
@@ -80,7 +80,7 @@ async def create_or_update_user_account(data: RegisterUserRequest, image: Upload
                     delete_extisting=existing_image
                 )
 
-            return await User(**update_user_data).update(updated_by = current_user["_key"] if '_key' in current_user else None, db = db)
+            return await User(**update_user_data).update(updated_by = current_user["_key"] if current_user and '_key' in current_user else None, db = db)
         else:
             raise HTTPException(status_code=404, detail="User not found.")
 

@@ -47,7 +47,7 @@ class User(VManBaseModel):
         }
         return data
     
-    async def update(self, updated_by: str, db: StandardDatabase):
+    async def update(self, updated_by: str = None, db: StandardDatabase = None):
         
         user = await super().update(updated_by, db)
 
