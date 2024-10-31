@@ -12,7 +12,7 @@ from app.users.services.user import create_or_update_user_account
 
 app = typer.Typer()
 user_app = typer.Typer()
-app.add_typer(user_app, name="update-user")
+app.add_typer(user_app, name="update-password")
 
 @user_app.callback(invoke_without_command=True)
 def details(email: str = typer.Option(..., "--email", "-e", help="User's email")):
