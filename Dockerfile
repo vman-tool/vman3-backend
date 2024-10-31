@@ -16,7 +16,6 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/* \
     && apt-get clean \
     && pip install --no-cache-dir -r requirements.txt \
-    && pip install --no-cache-dir . \
     && apt-get remove -y build-essential  # Remove unnecessary build tools to reduce image size
 
 # Set the working directory in the container
