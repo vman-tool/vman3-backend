@@ -1,9 +1,6 @@
 # my_cli_tool/cli.py
 import asyncio
 import getpass
-from urllib.parse import urlencode
-from fastapi import Depends
-import requests
 import typer
 from app.users.models.user import User
 from app.shared.configs.arangodb import get_arangodb_session
@@ -83,8 +80,7 @@ def details(email: str = typer.Option(..., "--email", "-e", help="User's email")
         typer.echo(f"An error occurred: {str(e)}")
 
 def main():
-    # app()
-    typer.run(details)
+    app()
 
 if __name__ == "__main__":
     main()
