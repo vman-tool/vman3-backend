@@ -23,8 +23,9 @@ from app.shared.configs.models import ResponseMainModel
 
 # The websocket_broadcast function for broadcasting progress updates
 async def websocket_broadcast(task_id: str, progress_data: dict):
-    from app.main import \
-        websocket__manager  # Ensure this points to your actual WebSocket manager instance
+    from app.main import (
+        websocket__manager,  # Ensure this points to your actual WebSocket manager instance
+    )
     await websocket__manager.broadcast(task_id, json.dumps(progress_data))
 
 async def get_record_to_run_ccva(current_user:dict,db: StandardDatabase, task_id: str, task_results: Dict,start_date: Optional[date] = None, end_date: Optional[date] = None,):
@@ -452,18 +453,21 @@ async def getVADataAndMergeWithResults(db: StandardDatabase, results: list):
     collection = db.collection(db_collections.VA_TABLE)
     data_uids_str = ', '.join(f'"{uid}"' for uid in data_uids)
     query = f"""
-    FOR doc IN {collection.name}
+FOR doc IN {collection.name}
     FILTER doc.{instance_id} IN [{data_uids_str}]
+    LET age_group = 
+        (doc.age_group=="neonate" || TO_NUMBER(doc.isneonatal) == 1 || (doc.isneonatal == null && (TO_NUMBER(doc.isneonatal1) == 1 || TO_NUMBER(doc.isneonatal2) == 1))) ? "neonate" :
+        (doc.age_group=="child" || TO_NUMBER(doc.ischild) == 1 || (doc.ischild == null && (TO_NUMBER(doc.ischild1) == 1 || TO_NUMBER(doc.ischild2) == 1))) ? "child" :
+        (doc.age_group=="adult" || TO_NUMBER(doc.isadult) == 1 || (doc.isadult == null && (TO_NUMBER(doc.isadult1) == 1 || TO_NUMBER(doc.isadult2) == 1))) ? "adult" :
+        "Unknown"
     RETURN {{
         uid: doc.{instance_id},
         gender: LOWER(doc.{deceased_gender}),
         date: LOWER(doc.{date}),
-        ageGroup: 
-            doc.{is_adult} ? "adult" :
-            doc.{is_child} ? "child" :
-            doc.{is_neonate} ? "neonate" : null,
+        age_group: age_group,
         locationLevel1: LOWER(doc.{location_level1}),
         locationLevel2: LOWER(doc.{location_level2})
+
     }}
     """
 
