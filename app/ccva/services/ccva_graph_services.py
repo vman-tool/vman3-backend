@@ -273,6 +273,7 @@ async def fetch_db_processed_ccva_graphs(
             "taskId": ccva_task_id,
             # "locationLevel1": locations[0].lower() if locations else None  # Assuming one location for simplicity
         }
+        print(query)
 
 
         cursor = db.aql.execute(query, bind_vars=bind_vars,cache=True)
