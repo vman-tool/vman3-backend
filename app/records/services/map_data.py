@@ -27,7 +27,7 @@ async def fetch_va_map_records(
         region_field = config.field_mapping.location_level1
         district_field = config.field_mapping.location_level2
         interviewer_field = config.field_mapping.interviewer_name
-        print(locations, 10)
+
 
         today_field = config.field_mapping.date
 
@@ -77,7 +77,7 @@ async def fetch_va_map_records(
             deviceid: doc.deviceid
             }}
         """
-        print(query)
+
         cursor = db.aql.execute(query, bind_vars=bind_vars,cache=True)
         data = [document for document in cursor]
         

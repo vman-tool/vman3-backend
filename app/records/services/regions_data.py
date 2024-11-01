@@ -20,7 +20,7 @@ async def get_unique_regions(db: StandardDatabase, current_user:dict):
           COLLECT uniqueRegion = dt.{region_field}
           RETURN uniqueRegion
         """
-        print(query)
+
         cursor = db.aql.execute(query,cache=True)
         unique_regions = [region for region in cursor]
 
