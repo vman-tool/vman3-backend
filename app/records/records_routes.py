@@ -33,11 +33,21 @@ async def get_va_records(
     limit: Optional[int] = Query(10, alias="limit"),
     start_date: Optional[date] = Query(None, alias="start_date"),
     end_date: Optional[date] = Query(None, alias="end_date"),
+    date_type: Optional[str]=Query(None, alias="date_type"),
     locations: Optional[List[str]] = Query(None, alias="locations"),
     db: StandardDatabase = Depends(get_arangodb_session)):
 
     allow_paging = False if paging is not None and paging.lower() == 'false' else True
-    response = await fetch_va_records(current_user=current_user,paging=allow_paging, page_number=page_number, limit=limit, start_date=start_date, end_date=end_date, locations=locations, db=db)
+    response = await fetch_va_records(
+        current_user=current_user,
+        paging=allow_paging,
+        page_number=page_number,
+        limit=limit,   
+        start_date=start_date,
+        end_date=end_date,
+        locations=locations,
+        date_type=date_type,
+        db=db)
     return response
 
 @data_router.get("/maps", status_code=status.HTTP_200_OK, response_model=ResponseMainModel)
@@ -45,14 +55,25 @@ async def get_fetch_va_map_records(
       current_user = Depends(get_current_user),
     paging: Optional[str] = Query(None, alias="paging"),
     page_number: Optional[int] = Query(1, alias="page_number"),
-    limit: Optional[int] = Query(10, alias="limit"),
+    limit: Optional[int] = Query(1000000, alias="limit"),
     start_date: Optional[date] = Query(None, alias="start_date"),
     end_date: Optional[date] = Query(None, alias="end_date"),
+    date_type: Optional[str]=Query(None, alias="date_type"),
     locations: Optional[List[str]] = Query(None, alias="locations"),
     db: StandardDatabase = Depends(get_arangodb_session)):
 
     allow_paging = False if paging is not None and paging.lower() == 'false' else True
-    response = await fetch_va_map_records(current_user=current_user,paging=allow_paging, page_number=page_number, limit=limit, start_date=start_date, end_date=end_date, locations=locations, db=db)
+    response = await fetch_va_map_records(
+        current_user=current_user,
+        paging=allow_paging,
+        page_number=page_number,
+        limit=limit,   
+        start_date=start_date,
+        end_date=end_date,
+        locations=locations,
+        date_type=date_type,
+        db=db)
+
     return response
 
 
