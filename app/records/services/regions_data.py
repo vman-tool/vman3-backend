@@ -1,10 +1,13 @@
 from arango.database import StandardDatabase
 
+from app.settings.services.odk_configs import fetch_odk_config
 from app.shared.configs.models import ResponseMainModel
 from app.shared.configs.security import get_location_limit_values
 
 
-def get_unique_regions(db: StandardDatabase, current_user:dict):
+async def get_unique_regions(db: StandardDatabase, current_user:dict):
+    config = await fetch_odk_config(db)
+    region_field = config.field_mapping.location_level1
     locationKey, locationLimitValues = get_location_limit_values(current_user)
 
 
@@ -14,9 +17,10 @@ def get_unique_regions(db: StandardDatabase, current_user:dict):
         FOR dt IN form_submissions
           {f'FILTER dt.{locationKey} IN {locationLimitValues}' if locationKey and locationLimitValues else ''}
                
-          COLLECT uniqueRegion = dt.{locationKey}
+          COLLECT uniqueRegion = dt.{region_field}
           RETURN uniqueRegion
         """
+        print(query)
         cursor = db.aql.execute(query,cache=True)
         unique_regions = [region for region in cursor]
 

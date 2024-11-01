@@ -59,4 +59,4 @@ async def get_fetch_va_map_records(
 
 @data_router.get("/unique-regions", response_model=ResponseMainModel)
 async def fetch_unique_regions(db: StandardDatabase = Depends(get_arangodb_session), current_user = Depends(get_current_user),):
-    return get_unique_regions(db,current_user)
+    return await get_unique_regions(db,current_user)
