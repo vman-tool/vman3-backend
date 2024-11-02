@@ -16,15 +16,16 @@ from app.ccva.models.ccva_models import InterVA5Progress
 from app.ccva.utilits.interva.interva5 import InterVA5
 from app.records.services.list_data import fetch_va_records_json
 from app.settings.services.odk_configs import fetch_odk_config
-from app.shared.configs.arangodb import null_convert_data
+from app.shared.configs.arangodb import null_convert_data, remove_null_values
 from app.shared.configs.constants import db_collections
 from app.shared.configs.models import ResponseMainModel
 
 
 # The websocket_broadcast function for broadcasting progress updates
 async def websocket_broadcast(task_id: str, progress_data: dict):
-    from app.main import \
-        websocket__manager  # Ensure this points to your actual WebSocket manager instance
+    from app.main import (
+        websocket__manager,  # Ensure this points to your actual WebSocket manager instance
+    )
     await websocket__manager.broadcast(task_id, json.dumps(progress_data))
 
 async def get_record_to_run_ccva(current_user:dict,db: StandardDatabase, task_id: str, task_results: Dict,start_date: Optional[date] = None, end_date: Optional[date] = None,):
@@ -63,7 +64,7 @@ async def run_ccva(db: StandardDatabase, records:ResponseMainModel, task_id: str
 
 
         # Convert records to DataFrame directly
-        database_dataframe = pd.DataFrame.from_records(records.data)
+        database_dataframe = pd.DataFrame.from_records( remove_null_values(records.data))
 
         
 
