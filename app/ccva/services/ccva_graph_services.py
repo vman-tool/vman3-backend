@@ -89,146 +89,92 @@ async def fetch_db_processed_ccva_graphs(
         
 
         query = f"""
-             LET allTotalCount = LENGTH(
-                    FOR cc IN {collection_name}
-                        FILTER cc.task_id == @taskId AND cc.CAUSE1 != "" AND cc.ID != null
-                         {f'AND cc.locationLevel1 IN {locations}'  if locations is not None else  ''}
-        
-                        {f'AND cc.{locationKey} IN {locationLimitValues}' if locationKey and locationLimitValues else ''}
-                        {f'AND DATE_TIMESTAMP(cc.date) >= DATE_TIMESTAMP("{start_date}")' if start_date else ''}
-                       
-                        RETURN cc
-                )
+        LET totalRecords = LENGTH(
+            FOR cc IN {collection_name}
+                FILTER cc.task_id == @taskId AND cc.CAUSE1 != "" AND cc.ID != null
+                {f'AND cc.locationLevel1 IN {locations}' if locations else ''}
+                {f'AND cc.{locationKey} IN {locationLimitValues}' if locationKey and locationLimitValues else ''}
+                {f'AND DATE_TIMESTAMP(cc.date) >= DATE_TIMESTAMP("{start_date}")' if start_date else ''}
+                {f'AND DATE_TIMESTAMP(cc.date) <= DATE_TIMESTAMP("{end_date}")' if end_date else ''}
+            RETURN 1
+        )
+
         LET allCauses = (
             FOR cr IN {collection_name}
-                FILTER cr.task_id == @taskId AND cr.CAUSE1 != "" AND cr.ID != null 
-                {f"AND cr.locationLevel1 IN {locations}"  if locations is not None else  ""}
-                 {f'AND cr.{locationKey} IN {locationLimitValues}' if locationKey and locationLimitValues else ''}
-                     {f'AND DATE_TIMESTAMP(cr.date) >= DATE_TIMESTAMP("{start_date}")' if start_date else ''} {f'AND DATE_TIMESTAMP(cr.date) <= DATE_TIMESTAMP("{end_date}")' if end_date else ''}
-                
-                COLLECT cause = cr.CAUSE1 WITH COUNT INTO count
-                // LET totalCount = LENGTH(
-                //     FOR cr2 IN {collection_name}
-                //         FILTER cr2.task_id == @taskId AND cr2.CAUSE1 != "" AND cr2.ID != null
-                //          {f"AND cr2.locationLevel1 IN {locations}"  if locations is not None else  ""}
-                        
-                       
-                //         RETURN cr2
-                // )
-                LET percent = (count / allTotalCount)
-                SORT percent DESC
-                RETURN {{ cause, count, percent }}
+                FILTER cr.task_id == @taskId AND cr.CAUSE1 != "" AND cr.ID != null
+                {f'AND cr.locationLevel1 IN {locations}' if locations else ''}
+                {f'AND cr.{locationKey} IN {locationLimitValues}' if locationKey and locationLimitValues else ''}
+                {f'AND DATE_TIMESTAMP(cr.date) >= DATE_TIMESTAMP("{start_date}")' if start_date else ''}
+                {f'AND DATE_TIMESTAMP(cr.date) <= DATE_TIMESTAMP("{end_date}")' if end_date else ''}
+            COLLECT cause = cr.CAUSE1 WITH COUNT INTO count
+            LET percent = count / totalRecords
+            SORT percent DESC
+            RETURN {{ cause, count, percent }}
         )
 
         LET maleCauses = (
             FOR cr IN {collection_name}
                 FILTER cr.task_id == @taskId AND cr.CAUSE1 != "" AND cr.gender == "male" AND cr.ID != null
-                  {f"AND cr.locationLevel1 IN {locations}"  if locations is not None else  ""}
-                   {f'AND cr.{locationKey} IN {locationLimitValues}' if locationKey and locationLimitValues else ''}
-                       {f'AND DATE_TIMESTAMP(cr.date) >= DATE_TIMESTAMP("{start_date}")' if start_date else ''}
-                       {f'AND DATE_TIMESTAMP(cr.date) <= DATE_TIMESTAMP("{end_date}")' if end_date else ''}
-                COLLECT cause = cr.CAUSE1 WITH COUNT INTO count
-                LET totalCount = LENGTH(
-                    FOR cr2 IN {collection_name}
-                        FILTER cr2.task_id == @taskId AND cr2.CAUSE1 != "" AND cr2.gender == "male" AND cr2.ID != null
-                           {f"AND cr2.locationLevel1 IN {locations}"  if locations is not None else  ""}
-                            {f'AND cr2.{locationKey} IN {locationLimitValues}' if locationKey and locationLimitValues else ''}
-                           {f'AND DATE_TIMESTAMP(cr2.date) >= DATE_TIMESTAMP("{start_date}")' if start_date else ''} 
-                           {f'AND DATE_TIMESTAMP(cr2.date) <= DATE_TIMESTAMP("{end_date}")' if end_date else ''}
-                        RETURN cr2
-                )
-                LET percent = (count / totalCount)
-                SORT percent DESC
-                RETURN {{ cause, count, percent }}
+                {f'AND cr.locationLevel1 IN {locations}' if locations else ''}
+                {f'AND cr.{locationKey} IN {locationLimitValues}' if locationKey and locationLimitValues else ''}
+                {f'AND DATE_TIMESTAMP(cr.date) >= DATE_TIMESTAMP("{start_date}")' if start_date else ''}
+                {f'AND DATE_TIMESTAMP(cr.date) <= DATE_TIMESTAMP("{end_date}")' if end_date else ''}
+            COLLECT cause = cr.CAUSE1 WITH COUNT INTO count
+            LET percent = count / totalRecords
+            SORT percent DESC
+            RETURN {{ cause, count, percent }}
         )
 
         LET femaleCauses = (
             FOR cr IN {collection_name}
                 FILTER cr.task_id == @taskId AND cr.CAUSE1 != "" AND cr.gender == "female" AND cr.ID != null
-                  {f"AND cr.locationLevel1 IN {locations}"  if locations is not None else  ""}
-                   {f'AND cr.{locationKey} IN {locationLimitValues}' if locationKey and locationLimitValues else ''}
-                       {f'AND DATE_TIMESTAMP(cr.date) >= DATE_TIMESTAMP("{start_date}")' if start_date else ''} 
-                       {f'AND DATE_TIMESTAMP(cr.date) <= DATE_TIMESTAMP("{end_date}")' if end_date else ''}
-                COLLECT cause = cr.CAUSE1 WITH COUNT INTO count
-                LET totalCount = LENGTH(
-                    FOR cr2 IN {collection_name}
-                        FILTER cr2.task_id == @taskId AND cr2.CAUSE1 != "" AND cr2.gender == "female" AND cr2.ID != null
-                        {f"AND cr2.locationLevel1 IN {locations}"  if locations is not None else  ""}
-                         {f'AND cr2.{locationKey} IN {locationLimitValues}' if locationKey and locationLimitValues else ''}
-                          {f'AND DATE_TIMESTAMP(cr2.date) >= DATE_TIMESTAMP("{start_date}")' if start_date else ''}
-                          {f'AND DATE_TIMESTAMP(cr2.date) <= DATE_TIMESTAMP("{end_date}")' if end_date else ''}
-                        RETURN cr2
-                )
-                LET percent = (count / totalCount)
-                SORT percent DESC
-                RETURN {{ cause, count, percent }}
+                {f'AND cr.locationLevel1 IN {locations}' if locations else ''}
+                {f'AND cr.{locationKey} IN {locationLimitValues}' if locationKey and locationLimitValues else ''}
+                {f'AND DATE_TIMESTAMP(cr.date) >= DATE_TIMESTAMP("{start_date}")' if start_date else ''}
+                {f'AND DATE_TIMESTAMP(cr.date) <= DATE_TIMESTAMP("{end_date}")' if end_date else ''}
+            COLLECT cause = cr.CAUSE1 WITH COUNT INTO count
+            LET percent = count / totalRecords
+            SORT percent DESC
+            RETURN {{ cause, count, percent }}
         )
 
         LET neonateCauses = (
             FOR cr IN {collection_name}
-                FILTER cr.task_id == @taskId AND cr.CAUSE1 != "" AND (cr.isneonatal == "1" OR cr.age_group == "neonate")  AND cr.ID != null
-                {f"AND cr.locationLevel1 IN {locations}"  if locations is not None else  ""}
-                 {f'AND cr.{locationKey} IN {locationLimitValues}' if locationKey and locationLimitValues else ''}
-                     {f'AND DATE_TIMESTAMP(cr.date) >= DATE_TIMESTAMP("{start_date}")' if start_date else ''} 
-                     {f'AND DATE_TIMESTAMP(cr.date) <= DATE_TIMESTAMP("{end_date}")' if end_date else ''}
-                COLLECT cause = cr.CAUSE1 WITH COUNT INTO count
-                LET totalCount = LENGTH(
-                    FOR cr2 IN {collection_name}
-                        FILTER cr2.task_id == @taskId AND cr2.CAUSE1 != "" AND (cr2.isneonatal == "1" OR cr2.age_group == "neonate")  AND cr2.ID != null
-                        {f"AND cr2.locationLevel1 IN {locations}"  if locations is not None else  ""}
-                         {f'AND cr2.{locationKey} IN {locationLimitValues}' if locationKey and locationLimitValues else ''}
-                            {f'AND DATE_TIMESTAMP(cr2.date) >= DATE_TIMESTAMP("{start_date}")' if start_date else ''} 
-                            {f'AND DATE_TIMESTAMP(cr2.date) <= DATE_TIMESTAMP("{end_date}")' if end_date else ''}
-                        RETURN cr2
-                )
-                LET percent = (count / totalCount)
-                SORT percent DESC
-                RETURN {{ cause, count, percent }}
+                FILTER cr.task_id == @taskId AND cr.CAUSE1 != "" AND (cr.isneonatal == "1" OR cr.age_group == "neonate") AND cr.ID != null
+                {f'AND cr.locationLevel1 IN {locations}' if locations else ''}
+                {f'AND cr.{locationKey} IN {locationLimitValues}' if locationKey and locationLimitValues else ''}
+                {f'AND DATE_TIMESTAMP(cr.date) >= DATE_TIMESTAMP("{start_date}")' if start_date else ''}
+                {f'AND DATE_TIMESTAMP(cr.date) <= DATE_TIMESTAMP("{end_date}")' if end_date else ''}
+            COLLECT cause = cr.CAUSE1 WITH COUNT INTO count
+            LET percent = count / totalRecords
+            SORT percent DESC
+            RETURN {{ cause, count, percent }}
         )
 
         LET childCauses = (
             FOR cr IN {collection_name}
-                FILTER cr.task_id == @taskId AND cr.CAUSE1 != "" AND (cr.ischild == "1" OR cr.age_group == "child")  AND cr.ID != null
-                {f"AND cr.locationLevel1 IN {locations}"  if locations is not None else  ""}
-                 {f'AND cr.{locationKey} IN {locationLimitValues}' if locationKey and locationLimitValues else ''}
-                     {f'AND DATE_TIMESTAMP(cr.date) >= DATE_TIMESTAMP("{start_date}")' if start_date else ''} 
-                     {f'AND DATE_TIMESTAMP(cr.date) <= DATE_TIMESTAMP("{end_date}")' if end_date else ''}
-                COLLECT cause = cr.CAUSE1 WITH COUNT INTO count
-                LET totalCount = LENGTH(
-                    FOR cr2 IN {collection_name}
-                        FILTER cr2.task_id == @taskId AND cr2.CAUSE1 != "" AND (cr2.ischild == "1" OR cr2.age_group == "child")  AND cr2.ID != null
-                        {f"AND cr2.locationLevel1 IN {locations}"  if locations is not None else  ""}
-                           {f'AND cr2.{locationKey} IN {locationLimitValues}' if locationKey and locationLimitValues else ''}
-                           {f'AND DATE_TIMESTAMP(cr2.date) >= DATE_TIMESTAMP("{start_date}")' if start_date else ''} 
-                           {f'AND DATE_TIMESTAMP(cr2.date) <= DATE_TIMESTAMP("{end_date}")' if end_date else ''}
-                        RETURN cr2
-                )
-                LET percent = (count / totalCount)
-                SORT percent DESC
-                RETURN {{ cause, count, percent }}
+                FILTER cr.task_id == @taskId AND cr.CAUSE1 != "" AND (cr.ischild == "1" OR cr.age_group == "child") AND cr.ID != null
+                {f'AND cr.locationLevel1 IN {locations}' if locations else ''}
+                {f'AND cr.{locationKey} IN {locationLimitValues}' if locationKey and locationLimitValues else ''}
+                {f'AND DATE_TIMESTAMP(cr.date) >= DATE_TIMESTAMP("{start_date}")' if start_date else ''}
+                {f'AND DATE_TIMESTAMP(cr.date) <= DATE_TIMESTAMP("{end_date}")' if end_date else ''}
+            COLLECT cause = cr.CAUSE1 WITH COUNT INTO count
+            LET percent = count / totalRecords
+            SORT percent DESC
+            RETURN {{ cause, count, percent }}
         )
 
         LET adultCauses = (
             FOR cr IN {collection_name}
-                FILTER cr.task_id == @taskId AND cr.CAUSE1 != "" AND (cr.isadult == "1" OR cr.age_group == "adult")  AND cr.ID != null
-                 {f"AND cr.locationLevel1 IN {locations}"  if locations is not None else  ""}
-                    {f'AND cr.{locationKey} IN {locationLimitValues}' if locationKey and locationLimitValues else ''}
-                        {f'AND DATE_TIMESTAMP(cr.date) >= DATE_TIMESTAMP("{start_date}")' if start_date else ''}
-                        {f'AND DATE_TIMESTAMP(cr.date) <= DATE_TIMESTAMP("{end_date}")' if end_date else ''}
-                COLLECT cause = cr.CAUSE1 WITH COUNT INTO count
-                LET totalCount = LENGTH(
-                    FOR cr2 IN {collection_name}
-                        FILTER cr2.task_id == @taskId AND cr2.CAUSE1 != "" AND (cr2.isadult == "1" OR cr2.age_group == "adult")  AND cr2.ID != null
-                         {f"AND cr2.locationLevel1 IN {locations}"  if locations is not None else  ""}
-                            {f'AND cr2.{locationKey} IN {locationLimitValues}' if locationKey and locationLimitValues else ''}
-                           {f'AND DATE_TIMESTAMP(cr2.date) >= DATE_TIMESTAMP("{start_date}")' if start_date else ''}
-                           {f'AND DATE_TIMESTAMP(cr2.date) <= DATE_TIMESTAMP("{end_date}")' if end_date else ''}
-                           
-                        RETURN cr2
-                )
-                LET percent = (count / totalCount)
-                SORT percent DESC
-                RETURN {{ cause, count, percent }}
+                FILTER cr.task_id == @taskId AND cr.CAUSE1 != "" AND (cr.isadult == "1" OR cr.age_group == "adult") AND cr.ID != null
+                {f'AND cr.locationLevel1 IN {locations}' if locations else ''}
+                {f'AND cr.{locationKey} IN {locationLimitValues}' if locationKey and locationLimitValues else ''}
+                {f'AND DATE_TIMESTAMP(cr.date) >= DATE_TIMESTAMP("{start_date}")' if start_date else ''}
+                {f'AND DATE_TIMESTAMP(cr.date) <= DATE_TIMESTAMP("{end_date}")' if end_date else ''}
+            COLLECT cause = cr.CAUSE1 WITH COUNT INTO count
+            LET percent = count / totalRecords
+            SORT percent DESC
+            RETURN {{ cause, count, percent }}
         )
 
         RETURN {{
@@ -262,13 +208,12 @@ async def fetch_db_processed_ccva_graphs(
                 "counts": adultCauses[*].count,
                 "values": adultCauses[*].percent
             }},
-                "created_at": "{created_at}",
-            "total_records": allTotalCount,
+            "total_records": totalRecords,
+            "created_at": "{created_at}",
             "elapsed_time": "{elapsed_time}",
             "range": {range},
             "task_id": "{ccva_task_id}"
-            }}
-        
+        }}
         """
 
         bind_vars = {
@@ -278,10 +223,10 @@ async def fetch_db_processed_ccva_graphs(
 
 
 
-        cursor = db.aql.execute(query, bind_vars=bind_vars)
+        cursor = db.aql.execute(query, bind_vars=bind_vars, cache=True)
         data = [document for document in cursor]
 
-
+        # print(data)
         if not data:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No records found")
 
