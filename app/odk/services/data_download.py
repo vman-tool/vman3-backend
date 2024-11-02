@@ -9,13 +9,19 @@ from fastapi import HTTPException
 from loguru import logger
 
 from app.odk.models.questions_models import VA_Question
-from app.odk.utils.data_transform import (assign_questions_options,
-                                          filter_non_questions,
-                                          odk_questions_formatter)
+from app.odk.utils.data_transform import (
+    assign_questions_options,
+    filter_non_questions,
+    odk_questions_formatter,
+)
 from app.odk.utils.odk_client import ODKClientAsync
 from app.pcva.responses.va_response_classes import VAQuestionResponseClass
 from app.settings.services.odk_configs import fetch_odk_config
-from app.shared.configs.arangodb import ArangoDBClient, get_arangodb_client
+from app.shared.configs.arangodb import (
+    ArangoDBClient,
+    get_arangodb_client,
+    remove_null_values,
+)
 from app.shared.configs.constants import db_collections
 from app.shared.configs.models import ResponseMainModel
 
@@ -214,6 +220,7 @@ async def fetch_form_questions(db: StandardDatabase):
 async def insert_data_to_arangodb(data: dict):
 
     try:
+        data=remove_null_values(data)
         db:ArangoDBClient = await get_arangodb_client()
         await db.replace_one(collection_name=db_collections.VA_TABLE, document=data)
     except Exception as e:

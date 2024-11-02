@@ -6,11 +6,10 @@ from typing import Dict, List
 
 from arango.database import StandardDatabase
 from fastapi import BackgroundTasks, HTTPException, UploadFile, status
-from fastapi.security import OAuth2PasswordRequestForm
 from pydantic import BaseModel
 
-from app.shared.configs.constants import AccessPrivileges, db_collections
-from app.shared.configs.models import BaseResponseModel, Pager, ResponseMainModel
+from app.shared.configs.constants import db_collections
+from app.shared.configs.models import Pager, ResponseMainModel
 from app.shared.configs.security import (
     generate_token,
     get_token_payload,
@@ -23,11 +22,15 @@ from app.shared.configs.security import (
 )
 from app.shared.configs.settings import get_settings
 from app.shared.utils.database_utilities import record_exists, replace_object_values
-from app.shared.utils.response import populate_user_fields
 from app.users.models.role import Role, UserAccessLimit, UserRole
 from app.users.models.user import User, UserToken
 from app.users.responses.user import RoleResponse, UserResponse, UserRolesResponse
-from app.users.schemas.user import AssignRolesRequest, RegisterUserRequest, RoleRequest, VerifyUserRequest
+from app.users.schemas.user import (
+    AssignRolesRequest,
+    RegisterUserRequest,
+    RoleRequest,
+    VerifyUserRequest,
+)
 from app.users.services.email import (
     send_account_activation_confirmation_email,
     send_password_reset_email,
@@ -243,8 +246,8 @@ async def _generate_tokens(user, db: StandardDatabase):
     return {
         "access_token": access_token,
         "refresh_token": refresh_token,
-        "expires_in": at_expires.seconds,
-        "refresh_token_expires_in": rt_expires.seconds
+        "expires_in": at_expires.total_seconds(),
+        "refresh_token_expires_in": rt_expires.total_seconds()
     }
     
 async def email_forgot_password_link(data, background_tasks, session):

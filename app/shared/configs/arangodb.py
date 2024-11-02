@@ -154,3 +154,21 @@ def null_convert_data(data):
     else:
         # Return the original value if it's not NaN or doesn't need conversion
         return data
+    
+def remove_null_values(data):
+    
+    """
+    Recursively removes any None values from dictionaries and lists in the data structure.
+    
+    :param data: Any Python data structure (dict, list, or scalar)
+    :return: Processed data with None values removed
+    """
+    if isinstance(data, dict):
+        # Remove keys with None values in the dictionary
+        return {key: remove_null_values(value) for key, value in data.items() if value is not None}
+    elif isinstance(data, list):
+        # Remove None values from the list
+        return [remove_null_values(element) for element in data if element is not None]
+    else:
+        # Return the original value if it's not None
+        return data

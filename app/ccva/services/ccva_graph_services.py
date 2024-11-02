@@ -84,13 +84,15 @@ async def fetch_db_processed_ccva_graphs(
         # total_records= defaultsCr[0].get('total_records')
         elapsed_time= defaultsCr[0].get('elapsed_time')
         range= defaultsCr[0].get('range')
+        # to lower case for locations
+        locations = [location.lower() for location in locations] if locations else None
         
 
         query = f"""
              LET allTotalCount = LENGTH(
                     FOR cc IN {collection_name}
                         FILTER cc.task_id == @taskId AND cc.CAUSE1 != "" AND cc.ID != null
-                         {f'AND cc.locationLevel1 == "{locations[0].lower()}"'  if locations else  ''}
+                         {f'AND cc.locationLevel1 IN {locations}'  if locations is not None else  ''}
         
                         {f'AND cc.{locationKey} IN {locationLimitValues}' if locationKey and locationLimitValues else ''}
                         {f'AND DATE_TIMESTAMP(cc.date) >= DATE_TIMESTAMP("{start_date}")' if start_date else ''}
@@ -100,7 +102,7 @@ async def fetch_db_processed_ccva_graphs(
         LET allCauses = (
             FOR cr IN {collection_name}
                 FILTER cr.task_id == @taskId AND cr.CAUSE1 != "" AND cr.ID != null 
-                {f"AND cr.locationLevel1 == '{locations[0].lower()}'"  if locations else  ""}
+                {f"AND cr.locationLevel1 IN {locations}"  if locations is not None else  ""}
                  {f'AND cr.{locationKey} IN {locationLimitValues}' if locationKey and locationLimitValues else ''}
                      {f'AND DATE_TIMESTAMP(cr.date) >= DATE_TIMESTAMP("{start_date}")' if start_date else ''} {f'AND DATE_TIMESTAMP(cr.date) <= DATE_TIMESTAMP("{end_date}")' if end_date else ''}
                 
@@ -108,7 +110,7 @@ async def fetch_db_processed_ccva_graphs(
                 // LET totalCount = LENGTH(
                 //     FOR cr2 IN {collection_name}
                 //         FILTER cr2.task_id == @taskId AND cr2.CAUSE1 != "" AND cr2.ID != null
-                //          {f"AND cr2.locationLevel1 == '{locations[0].lower()}'"  if locations else  ""}
+                //          {f"AND cr2.locationLevel1 IN {locations}"  if locations is not None else  ""}
                         
                        
                 //         RETURN cr2
@@ -121,7 +123,7 @@ async def fetch_db_processed_ccva_graphs(
         LET maleCauses = (
             FOR cr IN {collection_name}
                 FILTER cr.task_id == @taskId AND cr.CAUSE1 != "" AND cr.gender == "male" AND cr.ID != null
-                  {f"AND cr.locationLevel1 == '{locations[0].lower()}'"  if locations else  ""}
+                  {f"AND cr.locationLevel1 IN {locations}"  if locations is not None else  ""}
                    {f'AND cr.{locationKey} IN {locationLimitValues}' if locationKey and locationLimitValues else ''}
                        {f'AND DATE_TIMESTAMP(cr.date) >= DATE_TIMESTAMP("{start_date}")' if start_date else ''}
                        {f'AND DATE_TIMESTAMP(cr.date) <= DATE_TIMESTAMP("{end_date}")' if end_date else ''}
@@ -129,7 +131,7 @@ async def fetch_db_processed_ccva_graphs(
                 LET totalCount = LENGTH(
                     FOR cr2 IN {collection_name}
                         FILTER cr2.task_id == @taskId AND cr2.CAUSE1 != "" AND cr2.gender == "male" AND cr2.ID != null
-                           {f"AND cr2.locationLevel1 == '{locations[0].lower()}'"  if locations else  ""}
+                           {f"AND cr2.locationLevel1 IN {locations}"  if locations is not None else  ""}
                             {f'AND cr2.{locationKey} IN {locationLimitValues}' if locationKey and locationLimitValues else ''}
                            {f'AND DATE_TIMESTAMP(cr2.date) >= DATE_TIMESTAMP("{start_date}")' if start_date else ''} 
                            {f'AND DATE_TIMESTAMP(cr2.date) <= DATE_TIMESTAMP("{end_date}")' if end_date else ''}
@@ -143,7 +145,7 @@ async def fetch_db_processed_ccva_graphs(
         LET femaleCauses = (
             FOR cr IN {collection_name}
                 FILTER cr.task_id == @taskId AND cr.CAUSE1 != "" AND cr.gender == "female" AND cr.ID != null
-                  {f"AND cr.locationLevel1 == '{locations[0].lower()}'"  if locations else  ""}
+                  {f"AND cr.locationLevel1 IN {locations}"  if locations is not None else  ""}
                    {f'AND cr.{locationKey} IN {locationLimitValues}' if locationKey and locationLimitValues else ''}
                        {f'AND DATE_TIMESTAMP(cr.date) >= DATE_TIMESTAMP("{start_date}")' if start_date else ''} 
                        {f'AND DATE_TIMESTAMP(cr.date) <= DATE_TIMESTAMP("{end_date}")' if end_date else ''}
@@ -151,7 +153,7 @@ async def fetch_db_processed_ccva_graphs(
                 LET totalCount = LENGTH(
                     FOR cr2 IN {collection_name}
                         FILTER cr2.task_id == @taskId AND cr2.CAUSE1 != "" AND cr2.gender == "female" AND cr2.ID != null
-                        {f"AND cr2.locationLevel1 == '{locations[0].lower()}'"  if locations else  ""}
+                        {f"AND cr2.locationLevel1 IN {locations}"  if locations is not None else  ""}
                          {f'AND cr2.{locationKey} IN {locationLimitValues}' if locationKey and locationLimitValues else ''}
                           {f'AND DATE_TIMESTAMP(cr2.date) >= DATE_TIMESTAMP("{start_date}")' if start_date else ''}
                           {f'AND DATE_TIMESTAMP(cr2.date) <= DATE_TIMESTAMP("{end_date}")' if end_date else ''}
@@ -165,7 +167,7 @@ async def fetch_db_processed_ccva_graphs(
         LET neonateCauses = (
             FOR cr IN {collection_name}
                 FILTER cr.task_id == @taskId AND cr.CAUSE1 != "" AND (cr.isneonatal == "1" OR cr.age_group == "neonate")  AND cr.ID != null
-                {f"AND cr.locationLevel1 == '{locations[0].lower()}'"  if locations else  ""}
+                {f"AND cr.locationLevel1 IN {locations}"  if locations is not None else  ""}
                  {f'AND cr.{locationKey} IN {locationLimitValues}' if locationKey and locationLimitValues else ''}
                      {f'AND DATE_TIMESTAMP(cr.date) >= DATE_TIMESTAMP("{start_date}")' if start_date else ''} 
                      {f'AND DATE_TIMESTAMP(cr.date) <= DATE_TIMESTAMP("{end_date}")' if end_date else ''}
@@ -173,7 +175,7 @@ async def fetch_db_processed_ccva_graphs(
                 LET totalCount = LENGTH(
                     FOR cr2 IN {collection_name}
                         FILTER cr2.task_id == @taskId AND cr2.CAUSE1 != "" AND (cr2.isneonatal == "1" OR cr2.age_group == "neonate")  AND cr2.ID != null
-                        {f"AND cr2.locationLevel1 == '{locations[0].lower()}'"  if locations else  ""}
+                        {f"AND cr2.locationLevel1 IN {locations}"  if locations is not None else  ""}
                          {f'AND cr2.{locationKey} IN {locationLimitValues}' if locationKey and locationLimitValues else ''}
                             {f'AND DATE_TIMESTAMP(cr2.date) >= DATE_TIMESTAMP("{start_date}")' if start_date else ''} 
                             {f'AND DATE_TIMESTAMP(cr2.date) <= DATE_TIMESTAMP("{end_date}")' if end_date else ''}
@@ -187,7 +189,7 @@ async def fetch_db_processed_ccva_graphs(
         LET childCauses = (
             FOR cr IN {collection_name}
                 FILTER cr.task_id == @taskId AND cr.CAUSE1 != "" AND (cr.ischild == "1" OR cr.age_group == "child")  AND cr.ID != null
-                {f"AND cr.locationLevel1 == '{locations[0].lower()}'"  if locations else  ""}
+                {f"AND cr.locationLevel1 IN {locations}"  if locations is not None else  ""}
                  {f'AND cr.{locationKey} IN {locationLimitValues}' if locationKey and locationLimitValues else ''}
                      {f'AND DATE_TIMESTAMP(cr.date) >= DATE_TIMESTAMP("{start_date}")' if start_date else ''} 
                      {f'AND DATE_TIMESTAMP(cr.date) <= DATE_TIMESTAMP("{end_date}")' if end_date else ''}
@@ -195,7 +197,7 @@ async def fetch_db_processed_ccva_graphs(
                 LET totalCount = LENGTH(
                     FOR cr2 IN {collection_name}
                         FILTER cr2.task_id == @taskId AND cr2.CAUSE1 != "" AND (cr2.ischild == "1" OR cr2.age_group == "child")  AND cr2.ID != null
-                        {f"AND cr2.locationLevel1 == '{locations[0].lower()}'"  if locations else  ""}
+                        {f"AND cr2.locationLevel1 IN {locations}"  if locations is not None else  ""}
                            {f'AND cr2.{locationKey} IN {locationLimitValues}' if locationKey and locationLimitValues else ''}
                            {f'AND DATE_TIMESTAMP(cr2.date) >= DATE_TIMESTAMP("{start_date}")' if start_date else ''} 
                            {f'AND DATE_TIMESTAMP(cr2.date) <= DATE_TIMESTAMP("{end_date}")' if end_date else ''}
@@ -209,7 +211,7 @@ async def fetch_db_processed_ccva_graphs(
         LET adultCauses = (
             FOR cr IN {collection_name}
                 FILTER cr.task_id == @taskId AND cr.CAUSE1 != "" AND (cr.isadult == "1" OR cr.age_group == "adult")  AND cr.ID != null
-                 {f"AND cr.locationLevel1 == '{locations[0].lower()}'"  if locations else  ""}
+                 {f"AND cr.locationLevel1 IN {locations}"  if locations is not None else  ""}
                     {f'AND cr.{locationKey} IN {locationLimitValues}' if locationKey and locationLimitValues else ''}
                         {f'AND DATE_TIMESTAMP(cr.date) >= DATE_TIMESTAMP("{start_date}")' if start_date else ''}
                         {f'AND DATE_TIMESTAMP(cr.date) <= DATE_TIMESTAMP("{end_date}")' if end_date else ''}
@@ -217,7 +219,7 @@ async def fetch_db_processed_ccva_graphs(
                 LET totalCount = LENGTH(
                     FOR cr2 IN {collection_name}
                         FILTER cr2.task_id == @taskId AND cr2.CAUSE1 != "" AND (cr2.isadult == "1" OR cr2.age_group == "adult")  AND cr2.ID != null
-                         {f"AND cr2.locationLevel1 == '{locations[0].lower()}'"  if locations else  ""}
+                         {f"AND cr2.locationLevel1 IN {locations}"  if locations is not None else  ""}
                             {f'AND cr2.{locationKey} IN {locationLimitValues}' if locationKey and locationLimitValues else ''}
                            {f'AND DATE_TIMESTAMP(cr2.date) >= DATE_TIMESTAMP("{start_date}")' if start_date else ''}
                            {f'AND DATE_TIMESTAMP(cr2.date) <= DATE_TIMESTAMP("{end_date}")' if end_date else ''}
@@ -271,9 +273,9 @@ async def fetch_db_processed_ccva_graphs(
 
         bind_vars = {
             "taskId": ccva_task_id,
-            # "locationLevel1": locations[0].lower() if locations else None  # Assuming one location for simplicity
+            # "locationLevel1": locations[0].lower() if locations is not None else None  # Assuming one location for simplicity
         }
-        print(query)
+
 
 
         cursor = db.aql.execute(query, bind_vars=bind_vars,cache=True)
