@@ -1,6 +1,6 @@
 
 from datetime import date
-from typing import List, Optional
+from typing import Optional
 
 from arango.database import StandardDatabase
 from fastapi import APIRouter, Depends, Query, status
@@ -32,11 +32,11 @@ async def get_submissions_statistics(
     start_date: Optional[date] = Query(None, alias="start_date"),
     end_date: Optional[date] = Query(None, alias="end_date"),
     date_type: Optional[str]=Query(None, alias="date_type"),
-    locations: Optional[List[str]] = Query(None, alias="locations"),
+    locations: Optional[str] = Query(None, alias="locations"),
     db: StandardDatabase = Depends(get_arangodb_session)):
 
     allow_paging = False if paging is not None and paging.lower() == 'false' else True
-    response = await fetch_submissions_statistics(  current_user=current_user,paging=allow_paging, page_number=page_number, limit=limit, start_date=start_date, end_date=end_date, locations=locations,date_type=date_type, db=db)
+    response = await fetch_submissions_statistics(  current_user=current_user,paging=allow_paging, page_number=page_number, limit=limit, start_date=start_date, end_date=end_date,locations=locations.split(",") if locations else None,date_type=date_type, db=db)
     return response
 
 
@@ -49,13 +49,13 @@ async def get_charts_statistics(
     start_date: Optional[date] = Query(None, alias="start_date"),
     end_date: Optional[date] = Query(None, alias="end_date"),
     date_type: Optional[str]=Query(None, alias="date_type"),
-    locations: Optional[List[str]] = Query(None, alias="locations"),
+    locations: Optional[str] = Query(None, alias="locations"),
     db: StandardDatabase = Depends(get_arangodb_session)):
     
     
 
 
     allow_paging = False if paging is not None and paging.lower() == 'false' else True
-    response = await fetch_charts_statistics( current_user=current_user,paging=allow_paging, page_number=page_number, limit=limit, start_date=start_date, end_date=end_date, locations=locations,date_type=date_type, db=db)
+    response = await fetch_charts_statistics( current_user=current_user,paging=allow_paging, page_number=page_number, limit=limit, start_date=start_date, end_date=end_date,locations=locations.split(",") if locations else None,date_type=date_type, db=db)
     return response
 

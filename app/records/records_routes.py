@@ -1,6 +1,6 @@
 
 from datetime import date
-from typing import List, Optional
+from typing import Optional
 
 from arango.database import StandardDatabase
 from fastapi import APIRouter, Depends, Query, status
@@ -34,7 +34,7 @@ async def get_va_records(
     start_date: Optional[date] = Query(None, alias="start_date"),
     end_date: Optional[date] = Query(None, alias="end_date"),
     date_type: Optional[str]=Query(None, alias="date_type"),
-    locations: Optional[List[str]] = Query(None, alias="locations"),
+    locations: Optional[str] = Query(None, alias="locations"),
     db: StandardDatabase = Depends(get_arangodb_session)):
 
     allow_paging = False if paging is not None and paging.lower() == 'false' else True
@@ -45,7 +45,7 @@ async def get_va_records(
         limit=limit,   
         start_date=start_date,
         end_date=end_date,
-        locations=locations,
+       locations=locations.split(",") if locations else None,
         date_type=date_type,
         db=db)
     return response
@@ -55,11 +55,11 @@ async def get_fetch_va_map_records(
       current_user = Depends(get_current_user),
     paging: Optional[str] = Query(None, alias="paging"),
     page_number: Optional[int] = Query(1, alias="page_number"),
-    limit: Optional[int] = Query(1000000, alias="limit"),
+    limit: Optional[int] = Query(10000000, alias="limit"),
     start_date: Optional[date] = Query(None, alias="start_date"),
     end_date: Optional[date] = Query(None, alias="end_date"),
     date_type: Optional[str]=Query(None, alias="date_type"),
-    locations: Optional[List[str]] = Query(None, alias="locations"),
+    locations: Optional[str] = Query(None, alias="locations"),
     db: StandardDatabase = Depends(get_arangodb_session)):
 
     allow_paging = False if paging is not None and paging.lower() == 'false' else True
@@ -70,7 +70,7 @@ async def get_fetch_va_map_records(
         limit=limit,   
         start_date=start_date,
         end_date=end_date,
-        locations=locations,
+        locations=locations.split(",") if locations else None,
         date_type=date_type,
         db=db)
 
