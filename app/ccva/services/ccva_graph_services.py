@@ -278,7 +278,7 @@ async def fetch_db_processed_ccva_graphs(
 
 
 
-        cursor = db.aql.execute(query, bind_vars=bind_vars,cache=True)
+        cursor = db.aql.execute(query, bind_vars=bind_vars)
         data = [document for document in cursor]
 
 
