@@ -16,7 +16,7 @@ from app.ccva.models.ccva_models import InterVA5Progress
 from app.ccva.utilits.interva.interva5 import InterVA5
 from app.records.services.list_data import fetch_va_records_json
 from app.settings.services.odk_configs import fetch_odk_config
-from app.shared.configs.arangodb import null_convert_data
+from app.shared.configs.arangodb import null_convert_data, remove_null_values
 from app.shared.configs.constants import db_collections
 from app.shared.configs.models import ResponseMainModel
 
@@ -64,7 +64,7 @@ async def run_ccva(db: StandardDatabase, records:ResponseMainModel, task_id: str
 
 
         # Convert records to DataFrame directly
-        database_dataframe = pd.DataFrame.from_records(records.data)
+        database_dataframe = pd.DataFrame.from_records( remove_null_values(records.data))
 
         
 
@@ -439,6 +439,9 @@ async def getVADataAndMergeWithResults(db: StandardDatabase, results: list):
     deceased_gender = config.field_mapping.deceased_gender
     location_level1 = config.field_mapping.location_level1
     location_level2 = config.field_mapping.location_level2
+    death_date = config.field_mapping.death_date or 'id10023'
+    submitted_date = config.field_mapping.submitted_date or 'submissiondate'
+    interview_date = config.field_mapping.interview_date or 'id10012'
     date = config.field_mapping.date
     instance_id = config.field_mapping.instance_id or 'instanceid'
 
@@ -456,9 +459,9 @@ async def getVADataAndMergeWithResults(db: StandardDatabase, results: list):
 FOR doc IN {collection.name}
     FILTER doc.{instance_id} IN [{data_uids_str}]
     LET age_group = 
-        (doc.age_group=="neonate" || TO_NUMBER(doc.isneonatal) == 1 || (doc.isneonatal == null && (TO_NUMBER(doc.isneonatal1) == 1 || TO_NUMBER(doc.isneonatal2) == 1))) ? "neonate" :
-        (doc.age_group=="child" || TO_NUMBER(doc.ischild) == 1 || (doc.ischild == null && (TO_NUMBER(doc.ischild1) == 1 || TO_NUMBER(doc.ischild2) == 1))) ? "child" :
-        (doc.age_group=="adult" || TO_NUMBER(doc.isadult) == 1 || (doc.isadult == null && (TO_NUMBER(doc.isadult1) == 1 || TO_NUMBER(doc.isadult2) == 1))) ? "adult" :
+        (doc.age_group=="neonate" || TO_NUMBER(doc.{is_neonate}) == 1 || ((TO_NUMBER(doc.isneonatal1) == 1 || TO_NUMBER(doc.isneonatal2) == 1))) ? "neonate" :
+        (doc.age_group=="child" || TO_NUMBER(doc.{is_child}) == 1 || ((TO_NUMBER(doc.ischild1) == 1 || TO_NUMBER(doc.ischild2) == 1))) ? "child" :
+        (doc.age_group=="adult" || TO_NUMBER(doc.{is_adult}) == 1 || ((TO_NUMBER(doc.isadult1) == 1 || TO_NUMBER(doc.isadult2) == 1))) ? "adult" :
         "Unknown"
     RETURN {{
         uid: doc.{instance_id},
@@ -466,7 +469,10 @@ FOR doc IN {collection.name}
         date: LOWER(doc.{date}),
         age_group: age_group,
         locationLevel1: LOWER(doc.{location_level1}),
-        locationLevel2: LOWER(doc.{location_level2})
+        locationLevel2: LOWER(doc.{location_level2}),
+        death_date: doc.{death_date},
+        submitted_date: doc.{submitted_date},
+        interview_date: doc.{interview_date}
 
     }}
     """
