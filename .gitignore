@@ -53,7 +53,7 @@ coverage.xml
 .pytest_cache/
 cover/
 /*.csv
-
+/ccva_files/*
 # Jupyter Notebook
 .ipynb_checkpoints
 
