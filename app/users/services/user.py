@@ -56,7 +56,6 @@ async def create_or_update_user_account(data: RegisterUserRequest, image: Upload
     if not data.uuid and len(existing_user) > 0:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="This email address already exists.")
 
-    
     if data.uuid:
         existing_users = await User.get_many(filters={"or_conditions": [{"uuid": data.uuid}, {"email": data.email}]}, db=db)
         if len(existing_users) > 1:
@@ -93,9 +92,8 @@ async def create_or_update_user_account(data: RegisterUserRequest, image: Upload
         "password": hash_password(data.confirm_password),
         "is_active": data.is_active, # TODO: Change to false if you want to verify email first
         "verified_at":datetime.now().isoformat(), # TODO: Change to None if you want to verify email first
-        "created_by": current_user["id"] if 'id' in current_user else None,
+        "created_by": current_user["id"] if current_user and 'id' in current_user else None,
     }
-    
     return await User(**user_data).save(db = db)
     
     

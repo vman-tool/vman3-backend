@@ -24,19 +24,19 @@ async def default_account_creation( ):
         if db is None:
             logger.error("Failed to get database session")
             return
+        
         name = config("DEFAULT_ACCOUNT_NAME", default="admin")
         email = config("DEFAULT_ACCOUNT_EMAIL", default="admin@vman.net")
         password = config("DEFAULT_ACCOUNT_PASSWORD", default="Welcome2vman$")
         user_data = RegisterUserRequest(name=name, email=email, password = password, confirm_password=password, created_by="")
+
         
         # Check if email already exists
         existing_users = await User.get_many(filters={'email': user_data.email}, db=db)
-        email_exists = len(existing_users) > 0
-        if not email_exists:
+        if not len(existing_users) > 0:
             current_user = await user.create_or_update_user_account(data = user_data, db = db, background_tasks = BackgroundTasks())
         else:
             current_user = existing_users[0]
-        
 
         if len(existing_users) > 0:
             logger.info("User created successfully")
