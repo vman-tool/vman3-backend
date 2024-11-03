@@ -41,14 +41,15 @@ async def default_account_creation( ):
         if len(existing_users) > 0:
             logger.info("User created successfully")
         
-        current_user['id'] = current_user['_key']
-        await create_default_roles(UserResponse(**current_user))
+        
+        current_user['id'] = current_user['_key'] if '_key' in current_user else current_user['id'] if "id" in current_user else None
+        await create_default_roles(User(**current_user))
 
     except Exception as e:
         logger.error(f"Error in default account creation: {e}")
         return
     
-async def create_default_roles(current_user: UserResponse = None):
+async def create_default_roles(current_user: User = None):
     try:
         db = None
         async for session in get_arangodb_session():

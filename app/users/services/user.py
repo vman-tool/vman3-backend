@@ -399,13 +399,13 @@ async def save_role(data: RoleRequest = None, current_user: User = None, db: Sta
             if len(existing_role) == 1:
                 existing_role = existing_role[0]
                 role_json = replace_object_values(data.model_dump(), existing_role)
-                role = await Role(**role_json).update(updated_by = current_user.get('uuid', '') if 'uuid' in current_user else None, db=db)
+                role = await Role(**role_json).update(updated_by = current_user.uuid, db=db)
                 message = "Role updated successfully."
             elif len(existing_role) > 1:
                 raise HTTPException(status_code=400, detail="Multiple roles found with the same name or UUID.")
             else:
                 role_json = data.model_dump()
-                role_json['created_by'] = current_user.get('uuid', '') if 'uuid' in current_user else None
+                role_json['created_by'] = current_user.uuid
                 role = await Role(**role_json).save(db=db)
                 message = "Role created successfully"
             return ResponseMainModel(data = await RoleResponse.get_structured_role(role = role, db=db), message=message)
