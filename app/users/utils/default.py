@@ -10,6 +10,7 @@ from app.users.services import user
 from app.shared.configs.constants import AccessPrivileges
 from app.users.models.role import Role
 from app.users.responses.user import UserResponse
+from app.shared.configs.models import ResponseMainModel
 
 logger = logging.getLogger(__name__)
 
@@ -79,18 +80,18 @@ async def create_default_roles(current_user: User = None):
                 {"name": role.name}
             ]}
             existing_roles = await Role.get_many(filters = filters, db=db)
+            role_created : ResponseMainModel = None;
             if len(existing_roles) > 0:
-                if(len(existing_roles[0]['privileges'] if 'privileges' in existing_roles[0] else []) == len(role.privileges)):
-                    continue
-            role_created = await user.save_role(data = role, current_user = current_user, db = db)
+                if not (len(existing_roles[0]['privileges'] if 'privileges' in existing_roles[0] else []) == len(role.privileges)):
             
-            if role_created.data is not None:
-                logger.info(f"Role {role_created.data.name} created successfully")
-            
+                    role_created = await user.save_role(data = role, current_user = current_user, db = db)
+                    
+                    if role_created.data is not None:
+                        logger.info(f"Role {role_created.data.name} created successfully")
 
-            
-            if role_created.data.name == 'superuser':
-                role_assignment_request = AssignRolesRequest(user = current_user.uuid, roles = [role_created.data.uuid])
+            if (role_created and role_created.data.name == 'superuser') or (len(existing_roles) > 0 and existing_roles[0]['name'] == 'superuser'):
+                role_to_assign = role_created.data.uuid if role_created else existing_roles[0]['uuid']
+                role_assignment_request = AssignRolesRequest(user = current_user.uuid, roles = [role_to_assign])
                 user_role = await user.assign_roles(data = role_assignment_request, current_user = current_user, db = db)
                 if user_role.data:
                     logger.info(f"User {current_user.name} assigned to superuser role successfully")
