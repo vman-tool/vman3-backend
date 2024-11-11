@@ -10,6 +10,7 @@ from app.users.services import user
 from app.shared.configs.constants import AccessPrivileges
 from app.users.models.role import Role
 from app.users.responses.user import UserResponse
+from app.shared.configs.models import ResponseMainModel
 
 logger = logging.getLogger(__name__)
 
@@ -24,31 +25,32 @@ async def default_account_creation( ):
         if db is None:
             logger.error("Failed to get database session")
             return
+        
         name = config("DEFAULT_ACCOUNT_NAME", default="admin")
         email = config("DEFAULT_ACCOUNT_EMAIL", default="admin@vman.net")
         password = config("DEFAULT_ACCOUNT_PASSWORD", default="Welcome2vman$")
         user_data = RegisterUserRequest(name=name, email=email, password = password, confirm_password=password, created_by="")
+
         
         # Check if email already exists
         existing_users = await User.get_many(filters={'email': user_data.email}, db=db)
-        email_exists = len(existing_users) > 0
-        if not email_exists:
+        if not len(existing_users) > 0:
             current_user = await user.create_or_update_user_account(data = user_data, db = db, background_tasks = BackgroundTasks())
         else:
             current_user = existing_users[0]
-        
 
         if len(existing_users) > 0:
             logger.info("User created successfully")
         
-        current_user['id'] = current_user['_key']
-        await create_default_roles(UserResponse(**current_user))
+        
+        current_user['id'] = current_user['_key'] if '_key' in current_user else current_user['id'] if "id" in current_user else None
+        await create_default_roles(User(**current_user))
 
     except Exception as e:
         logger.error(f"Error in default account creation: {e}")
         return
     
-async def create_default_roles(current_user: UserResponse = None):
+async def create_default_roles(current_user: User = None):
     try:
         db = None
         async for session in get_arangodb_session():
@@ -78,18 +80,18 @@ async def create_default_roles(current_user: UserResponse = None):
                 {"name": role.name}
             ]}
             existing_roles = await Role.get_many(filters = filters, db=db)
+            role_created : ResponseMainModel = None;
             if len(existing_roles) > 0:
-                if(len(existing_roles[0]['privileges'] if 'privileges' in existing_roles[0] else []) == len(role.privileges)):
-                    continue
-            role_created = await user.save_role(data = role, current_user = current_user, db = db)
+                if not (len(existing_roles[0]['privileges'] if 'privileges' in existing_roles[0] else []) == len(role.privileges)):
             
-            if role_created.data is not None:
-                logger.info(f"Role {role_created.data.name} created successfully")
-            
+                    role_created = await user.save_role(data = role, current_user = current_user, db = db)
+                    
+                    if role_created.data is not None:
+                        logger.info(f"Role {role_created.data.name} created successfully")
 
-            
-            if role_created.data.name == 'superuser':
-                role_assignment_request = AssignRolesRequest(user = current_user.uuid, roles = [role_created.data.uuid])
+            if (role_created and role_created.data.name == 'superuser') or (len(existing_roles) > 0 and existing_roles[0]['name'] == 'superuser'):
+                role_to_assign = role_created.data.uuid if role_created else existing_roles[0]['uuid']
+                role_assignment_request = AssignRolesRequest(user = current_user.uuid, roles = [role_to_assign])
                 user_role = await user.assign_roles(data = role_assignment_request, current_user = current_user, db = db)
                 if user_role.data:
                     logger.info(f"User {current_user.name} assigned to superuser role successfully")
