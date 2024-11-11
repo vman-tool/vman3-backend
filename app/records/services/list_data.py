@@ -26,7 +26,7 @@ async def fetch_va_records(current_user:dict,paging: bool = True, page_number: i
             elif date_type == 'death_date':
                 today_field = 'id10023'
             elif date_type == 'interview_date':
-                today_field = 'Id10012'
+                today_field = 'id10012'
             else:
                 today_field = config.field_mapping.date 
         else:
@@ -103,7 +103,7 @@ async def fetch_va_records_json(current_user:dict,paging: bool = True, page_numb
             elif date_type == 'death_date':
                 today_field = 'id10023'
             elif date_type == 'interview_date':
-                today_field = 'Id10012'
+                today_field = 'id10012'
             else:
                 today_field = config.field_mapping.date 
         else:

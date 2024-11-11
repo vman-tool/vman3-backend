@@ -1,8 +1,6 @@
 from functools import lru_cache
 
 
-
-class db_collections():
     """
     Constants class for NoSQL database Collections. Use this class to call your collection
     """
