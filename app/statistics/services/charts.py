@@ -17,12 +17,13 @@ async def fetch_charts_statistics( current_user: dict,paging: bool = True, page_
         is_adult_field = config.field_mapping.is_adult
         is_child_field = config.field_mapping.is_child
         is_neonate_field = config.field_mapping.is_neonate
-        # 
+        #
+        print(date_type)
         if date_type is not None:
             if date_type == 'submission_date':
                 today_field = 'submissiondate'
             elif date_type == 'death_date':
-                today_field = 'Id10022'
+                today_field = 'id10023'
             elif date_type == 'interview_date':
                 today_field = 'Id10012'
             else:
@@ -46,12 +47,14 @@ async def fetch_charts_statistics( current_user: dict,paging: bool = True, page_
             bind_vars["locationValues"] = locationLimitValues
         ##
         if start_date:
-            filters.append(f"DATE_TIMESTAMP(doc.{today_field}) >= @start_date")
+            filters.append(f"doc.{today_field} >= @start_date")
             bind_vars["start_date"] = str(start_date)
 
         if end_date:
-            filters.append(f"DATE_TIMESTAMP(doc.{today_field}) <= @end_date")
+            filters.append(f"doc.{today_field} <= @end_date")
             bind_vars["end_date"] = str(end_date)
+            
+            print(bind_vars)
 
         if locations:
             filters.append(f"doc.{region_field} IN @locations")
@@ -134,7 +137,8 @@ async def fetch_charts_statistics( current_user: dict,paging: bool = True, page_
                 gender_distribution: genderDistribution
             }}
         """
-
+        
+        print(combined_query)
         # Execute the combined query
         cursor = db.aql.execute(combined_query, bind_vars=bind_vars,cache=True)
         result = cursor.next()

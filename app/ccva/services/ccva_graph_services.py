@@ -49,7 +49,7 @@ async def fetch_db_processed_ccva_graphs(
         #     if date_type == 'submission_date':
         #         today_field = 'submissiondate'
         #     elif date_type == 'death_date':
-        #         today_field = 'Id10022'
+        #         today_field = 'id10023'
         #     elif date_type == 'interview_date':
         #         today_field = 'Id10012'
         #     else:
@@ -222,7 +222,7 @@ async def fetch_db_processed_ccva_graphs(
         }
 
 
-
+        # print(query)
         cursor = db.aql.execute(query, bind_vars=bind_vars, cache=True)
         data = [document for document in cursor]
 
