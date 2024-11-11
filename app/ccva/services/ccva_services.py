@@ -23,9 +23,8 @@ from app.shared.configs.models import ResponseMainModel
 
 # The websocket_broadcast function for broadcasting progress updates
 async def websocket_broadcast(task_id: str, progress_data: dict):
-    from app.main import (
-        websocket__manager,  # Ensure this points to your actual WebSocket manager instance
-    )
+    from app.main import \
+        websocket__manager  # Ensure this points to your actual WebSocket manager instance
     await websocket__manager.broadcast(task_id, json.dumps(progress_data))
 
 async def get_record_to_run_ccva(current_user:dict,db: StandardDatabase, task_id: str, task_results: Dict,start_date: Optional[date] = None, end_date: Optional[date] = None,):

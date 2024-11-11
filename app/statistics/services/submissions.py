@@ -23,9 +23,9 @@ async def fetch_submissions_statistics( current_user: dict,paging: bool = True, 
             if date_type == 'submission_date':
                 today_field = 'submissiondate'
             elif date_type == 'death_date':
-                today_field = 'Id10022'
+                today_field = 'id10023'
             elif date_type == 'interview_date':
-                today_field = 'Id10012'
+                today_field = 'id10012'
             else:
                 today_field = config.field_mapping.date 
         else:
