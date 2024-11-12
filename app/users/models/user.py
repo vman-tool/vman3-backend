@@ -19,7 +19,7 @@ class User(VManBaseModel):
     verified_at: Optional[Union[str, datetime]] = None
     tokens: Union[str, None] = None
     roles: Union[List[Role], None] = None
-    password: str
+    password: Union[str, None] = None
     image: Union[str, None] = None
     
    
