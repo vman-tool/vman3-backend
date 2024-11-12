@@ -179,7 +179,7 @@ async def fetch_db_processed_ccva_graphs(
         )
 
         RETURN {{
-            "all": {{
+         "graphs":{{   "all": {{
                 "index": allCauses[*].cause,
                 "counts": allCauses[*].count,
                 "values": allCauses[*].percent
@@ -209,6 +209,7 @@ async def fetch_db_processed_ccva_graphs(
                 "counts": adultCauses[*].count,
                 "values": adultCauses[*].percent
             }},
+            }},
             "total_records": totalRecords,
             "created_at": "{created_at}",
             "elapsed_time": "{elapsed_time}",
@@ -218,12 +219,11 @@ async def fetch_db_processed_ccva_graphs(
         """
 
         bind_vars = {
-            "taskId": ccva_task_id,
-            # "locationLevel1": locations[0].lower() if locations is not None else None  # Assuming one location for simplicity
+            "taskId": ccva_task_id
         }
 
 
-        # print(query)
+        print(query)
         cursor = db.aql.execute(query, bind_vars=bind_vars, cache=True)
         data = [document for document in cursor]
 
