@@ -62,6 +62,7 @@ async def create_default_roles(current_user: User = None):
             logger.error("Failed to get database session")
             return
         
+        
         read_only_privs = AccessPrivileges.get_privileges(search_term="view")
         read_only_privs.extend([AccessPrivileges.USERS_UPDATE_USER,AccessPrivileges.USERS_DEACTIVATE_USER])
 
@@ -80,7 +81,7 @@ async def create_default_roles(current_user: User = None):
                 {"name": role.name}
             ]}
             existing_roles = await Role.get_many(filters = filters, db=db)
-            role_created : ResponseMainModel = None;
+            role_created : ResponseMainModel = None
             if len(existing_roles) > 0:
                 if not (len(existing_roles[0]['privileges'] if 'privileges' in existing_roles[0] else []) == len(role.privileges)):
             
@@ -88,6 +89,11 @@ async def create_default_roles(current_user: User = None):
                     
                     if role_created.data is not None:
                         logger.info(f"Role {role_created.data.name} created successfully")
+            else:
+                role_created = await user.save_role(data = role, current_user = current_user, db = db)
+                    
+                if role_created.data is not None:
+                    logger.info(f"Role {role_created.data.name} created successfully")
 
             if (role_created and role_created.data.name == 'superuser') or (len(existing_roles) > 0 and existing_roles[0]['name'] == 'superuser'):
                 role_to_assign = role_created.data.uuid if role_created else existing_roles[0]['uuid']
