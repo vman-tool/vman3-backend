@@ -35,7 +35,40 @@ async def fetch_and_store_data(
     return res
 
 
-
+@odk_router.post("/fetch_formsubmission_status", status_code=status.HTTP_200_OK)
+async def get_form_submission_status(
+    background_tasks: BackgroundTasks,
+    start_date: str = None,
+    end_date: str = None,
+    skip: int = 0,
+    top: int = 3000,
+    force_update: bool = Query(default=False),
+    db: StandardDatabase = Depends(get_arangodb_session)
+):
+    try:
+        records_margins= await data_download. get_margin_dates_and_records_count(db)
+        print(records_margins)
+        if records_margins is not None:
+            earliest_date = records_margins.get('earliest_date', None)
+            latest_date = records_margins.get('latest_date', None)
+            total_records = records_margins.get('total_records', 0)
+            return {
+                    "status": "Data fetch",
+                    "earliest_date": latest_date,
+                    "latest_date": earliest_date,
+                    "available_data_count": total_records
+                }
+        else:
+            return {
+                    "status": "failed to fetch data",
+                    "earliest_date": None,
+                    "latest_date": None,
+                    "available_data_count": 0
+                }
+           
+    except Exception as e:
+        print(e)
+        raise HTTPException(status_code=500, detail=str(e))
 
 @odk_router.post("/fetch_endpoint_with_async", status_code=status.HTTP_200_OK)
 async def fetch_odk_data_with_async_endpoint(
@@ -49,14 +82,14 @@ async def fetch_odk_data_with_async_endpoint(
 ):
     try:
         # Wrap the async function call inside an async function to use create_task
-        async def start_fetch(total_data_count,start_time,top,skip, ):
+        async def start_fetch(total_data_count,start_date,top,skip, ):
             await data_download.fetch_odk_data_with_async(
                 db=db,
                 start_date=start_date,
                 end_date=end_date,
                 skip=skip,
                 top=top,
-                start_time=start_time,
+                # start_time=start_time,
                 total_data_count=total_data_count
             )
         response = await data_download.fetch_odk_data_initial(
@@ -68,14 +101,15 @@ async def fetch_odk_data_with_async_endpoint(
                 force_update=force_update
             )
 
-
-        print(response['download_status'])
+ 
         # Add this wrapped task to background tasks
         if response['download_status'] is True:
-            background_tasks.add_task(start_fetch, response['total_data_count'], response['start_time'], top, skip)
+            background_tasks.add_task(start_fetch, response['total_data_count'], response['start_date'], top, skip)
+            
         return {"status": "Data fetch initiated", **response }
 
     except Exception as e:
+        print(e)
         raise HTTPException(status_code=500, detail=str(e))
 
 @odk_router.post("/fetch_form_questions", status_code=status.HTTP_200_OK)

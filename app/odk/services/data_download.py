@@ -65,7 +65,7 @@ async def fetch_odk_data_initial(
             if total_data_count == available_data_count and start_date == server_latest_submisson_date:
                 logger.info("\nVman is up to date.")
                 return {
-                "download_status": not (total_data_count == available_data_count and start_date == server_latest_submisson_date),
+                "download_status": False,
                 "status": "Vman is up to date",
                 "total_data_count": total_data_count,
                 "start_date": start_date,
@@ -84,10 +84,12 @@ async def fetch_odk_data_initial(
             logger.info(f"{total_data_count} total to be downloaded")
             
             return {
+                "download_status": True,
                 "status": "Data to be downloaded",
                 "total_data_count": total_data_count,
                 "start_date": start_date,
                 "end_date": end_date,  
+                
             }
             
     except Exception as e:
@@ -118,7 +120,7 @@ async def fetch_odk_data_with_async(
         # if start_date or end_date:
         #     log_message += f" between {start_date} and {end_date}"
         # logger.info(f"{log_message}\n")
-        # start_time = time.time()
+        start_time = time.time()
         # available_data_count: int = 0
         # records_margins: Dict = None
         
