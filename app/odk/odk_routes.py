@@ -71,7 +71,7 @@ async def fetch_odk_data_with_async_endpoint(
 
         print(response['download_status'])
         # Add this wrapped task to background tasks
-        if response['download_status'] is False:
+        if response['download_status'] is True:
             background_tasks.add_task(start_fetch, response['total_data_count'], response['start_time'], top, skip)
         return {"status": "Data fetch initiated", **response }
 
