@@ -9,24 +9,19 @@ from fastapi import HTTPException
 from loguru import logger
 
 from app.odk.models.questions_models import VA_Question
-from app.odk.utils.data_transform import (
-    assign_questions_options,
-    filter_non_questions,
-    odk_questions_formatter,
-)
+from app.odk.utils.data_transform import (assign_questions_options,
+                                          filter_non_questions,
+                                          odk_questions_formatter)
 from app.odk.utils.odk_client import ODKClientAsync
 from app.pcva.responses.va_response_classes import VAQuestionResponseClass
 from app.settings.services.odk_configs import fetch_odk_config
-from app.shared.configs.arangodb import (
-    ArangoDBClient,
-    get_arangodb_client,
-    remove_null_values,
-)
+from app.shared.configs.arangodb import (ArangoDBClient, get_arangodb_client,
+                                         remove_null_values)
 from app.shared.configs.constants import db_collections
 from app.shared.configs.models import ResponseMainModel
 
 
-async def fetch_odk_data_with_async(
+async def fetch_odk_data_initial(
     start_date: str = None, 
     end_date: str = None,
     skip: int = 0,
@@ -34,15 +29,16 @@ async def fetch_odk_data_with_async(
     force_update: bool = False, 
     resend: bool = False, 
     db: StandardDatabase = None,
-):   
+):
+    
     try:
-        from app.main import websocket__manager
+  
         log_message = "\nFetching data from ODK Central"
         if start_date or end_date:
             log_message += f" between {start_date} and {end_date}"
         logger.info(f"{log_message}\n")
 
-        start_time = time.time()
+
 
         available_data_count: int = 0
         records_margins: Dict = None
@@ -63,11 +59,18 @@ async def fetch_odk_data_with_async(
                 total_data_count = data_for_count["@odata.count"]
                 server_latest_submisson_date = data_for_count['value'][0]['__system']['submissionDate']
             except Exception as e:
+                print(e)
                 raise e
 
             if total_data_count == available_data_count and start_date == server_latest_submisson_date:
                 logger.info("\nVman is up to date.")
-                return {"status": "Vman is up to date"}
+                return {
+                "download_status": (total_data_count == available_data_count and start_date == server_latest_submisson_date) is True  ,
+                "status":"Vman is up to date",
+                "total_data_count": total_data_count,
+                "start_date": start_date,
+                "end_date": end_date,  
+            }   
             
             if available_data_count > 0 :
                 if available_data_count < total_data_count and start_date == server_latest_submisson_date:
@@ -77,6 +80,78 @@ async def fetch_odk_data_with_async(
             
             if total_data_count > available_data_count:
                 total_data_count = total_data_count - available_data_count
+
+            logger.info(f"{total_data_count} total to be downloaded")
+            
+            return {
+                "status": "Data to be downloaded",
+                "total_data_count": total_data_count,
+                "start_date": start_date,
+                "end_date": end_date,  
+            }
+            
+    except Exception as e:
+        print(e)
+
+
+
+            
+            
+
+
+
+async def fetch_odk_data_with_async(
+    total_data_count: int,
+    start_date: str = None, 
+    end_date: str = None,
+    skip: int = 0,
+    top: int = 3000,
+    # force_update: bool = False, 
+    # resend: bool = False, 
+    db: StandardDatabase = None,
+    start_time: float=0
+):   
+    try:
+        from app.main import websocket__manager
+
+        # log_message = "\nFetching data from ODK Central"
+        # if start_date or end_date:
+        #     log_message += f" between {start_date} and {end_date}"
+        # logger.info(f"{log_message}\n")
+        # start_time = time.time()
+        # available_data_count: int = 0
+        # records_margins: Dict = None
+        
+        config = await fetch_odk_config(db)
+        
+        # if not start_date and not end_date and not force_update:
+        #     records_margins = await get_margin_dates_and_records_count(db)
+        
+        # if records_margins:
+        #     end_date = records_margins.get('earliest_date', None)
+        #     start_date = records_margins.get('latest_date', None)
+        #     available_data_count = records_margins.get('total_records', 0)
+            
+        async with ODKClientAsync(config.odk_api_configs) as odk_client:
+        #     try:
+        #         data_for_count = await odk_client.getFormSubmissions(top= 1 if resend is False else top,skip= None if resend is False else skip, order_by='__system/submissionDate', order_direction='asc')
+        #         total_data_count = data_for_count["@odata.count"]
+        #         server_latest_submisson_date = data_for_count['value'][0]['__system']['submissionDate']
+        #     except Exception as e:
+        #         raise e
+
+        #     if total_data_count == available_data_count and start_date == server_latest_submisson_date:
+        #         logger.info("\nVman is up to date.")
+        #         return {"status": "Vman is up to date"}
+            
+        #     if available_data_count > 0 :
+        #         if available_data_count < total_data_count and start_date == server_latest_submisson_date:
+        #             start_date = None
+        #         elif available_data_count < total_data_count and start_date != server_latest_submisson_date:
+        #             end_date = None  
+            
+        #     if total_data_count > available_data_count:
+        #         total_data_count = total_data_count - available_data_count
 
             logger.info(f"{total_data_count} total to be downloaded")
             if websocket__manager:
@@ -250,6 +325,11 @@ async def get_margin_dates_and_records_count(db: StandardDatabase = None):
             """
 
     return db.aql.execute(query=query,cache=True).next()
+
+
+
+
+
 
 
 

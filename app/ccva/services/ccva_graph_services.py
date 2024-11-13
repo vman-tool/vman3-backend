@@ -46,13 +46,17 @@ async def fetch_db_processed_ccva_graphs(
         # is_neonte_field = config.field_mapping.is_neonate
         # 
         
+        death_date = config.field_mapping.death_date or 'id10023'
+        submitted_date = config.field_mapping.submitted_date or 'submissiondate'
+        interview_date = config.field_mapping.interview_date or 'id10012'
+            
         if date_type is not None:
             if date_type == 'submission_date':
-                today_field = 'submissiondate'
+                today_field = submitted_date
             elif date_type == 'death_date':
-                today_field = 'id10023'
+                today_field = death_date
             elif date_type == 'interview_date':
-                today_field = 'id10012'
+                today_field = interview_date
             else:
                 today_field = config.field_mapping.date 
         else:
@@ -223,7 +227,7 @@ async def fetch_db_processed_ccva_graphs(
         }
 
 
-        print(query)
+        # print(query)
         cursor = db.aql.execute(query, bind_vars=bind_vars, cache=True)
         data = [document for document in cursor]
 

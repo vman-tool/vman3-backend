@@ -42,6 +42,7 @@ async def run_internal_ccva(
     current_user: Optional[str] = Depends(get_current_user),
     start_date: Optional[date] = Body(None, alias="start_date"),
     end_date: Optional[date] = Body(None, alias="end_date"),
+    date_type: Optional[str]=Query(None, alias="date_type"),
     db: StandardDatabase = Depends(get_arangodb_session)
 ):
     start_time = datetime.now()
@@ -54,7 +55,7 @@ async def run_internal_ccva(
         # Generate task ID and fetch records
         task_id = str(uuid.uuid4())
         task_results = {}  # Initialize task results storage
-        records = await get_record_to_run_ccva(current_user,db, task_id, task_results, start_date, end_date)
+        records = await get_record_to_run_ccva(current_user,db, task_id, task_results, start_date, end_date,date_type=date_type,)
 
         # Handle no records scenario
         if not records:
@@ -105,6 +106,7 @@ async def get_processed_ccva_graphs(
 
     try:
         # Fetch processed CCVA data
+        print(ccva_graph_db_source)
         if ccva_graph_db_source:
             response =  await fetch_db_processed_ccva_graphs (
                 current_user=current_user,
@@ -128,7 +130,7 @@ async def get_processed_ccva_graphs(
                 limit=limit,
                 start_date=start_date,
                 end_date=end_date,
-               locations=locations.split(",") if locations else None,
+                locations=locations.split(",") if locations else None,
                 date_type=date_type,
                 db=db
             )
