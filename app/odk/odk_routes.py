@@ -8,7 +8,6 @@ from fastapi import (APIRouter, BackgroundTasks, Depends, HTTPException, Query,
 from app.odk.services import data_download
 from app.shared.configs.arangodb import get_arangodb_session
 from app.shared.configs.models import ResponseMainModel
-from app.users.models.user import User
 
 odk_router = APIRouter(
     prefix="/odk",
@@ -50,8 +49,17 @@ async def fetch_odk_data_with_async_endpoint(
 ):
     try:
         # Wrap the async function call inside an async function to use create_task
-        async def start_fetch():
+        async def start_fetch(total_data_count,start_time,top,skip, ):
             await data_download.fetch_odk_data_with_async(
+                db=db,
+                start_date=start_date,
+                end_date=end_date,
+                skip=skip,
+                top=top,
+                start_time=start_time,
+                total_data_count=total_data_count
+            )
+        response = await data_download.fetch_odk_data_initial(
                 db=db,
                 start_date=start_date,
                 end_date=end_date,
@@ -60,9 +68,12 @@ async def fetch_odk_data_with_async_endpoint(
                 force_update=force_update
             )
 
+
+        print(response['download_status'])
         # Add this wrapped task to background tasks
-        background_tasks.add_task(start_fetch)
-        return {"status": "Data fetch initiated"}
+        if response['download_status'] is False:
+            background_tasks.add_task(start_fetch, response['total_data_count'], response['start_time'], top, skip)
+        return {"status": "Data fetch initiated", **response }
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
