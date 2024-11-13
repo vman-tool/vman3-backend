@@ -65,12 +65,12 @@ async def fetch_odk_data_initial(
             if total_data_count == available_data_count and start_date == server_latest_submisson_date:
                 logger.info("\nVman is up to date.")
                 return {
-                "download_status": (total_data_count == available_data_count and start_date == server_latest_submisson_date) is True  ,
-                "status":"Vman is up to date",
+                "download_status": not (total_data_count == available_data_count and start_date == server_latest_submisson_date),
+                "status": "Vman is up to date",
                 "total_data_count": total_data_count,
                 "start_date": start_date,
                 "end_date": end_date,  
-            }   
+            }
             
             if available_data_count > 0 :
                 if available_data_count < total_data_count and start_date == server_latest_submisson_date:
