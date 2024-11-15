@@ -102,6 +102,8 @@ async def add_configs_settings(configData: SettingsConfigData, db: StandardDatab
             
         else:
             raise ValueError("Invalid type or missing configuration data")
+        
+        print(data)
 
         # db.collection(db_collections.SYSTEM_CONFIGS).insert(data, overwrite=False)
         results = await save_system_settings(data, db)
@@ -194,5 +196,5 @@ async def save_system_images(data: ImagesConfigData, reset: bool = False, db: St
             await save_system_settings(saving_data, db)
 
             return await get_system_images(db)
-    except Exception as e:
+    except Exception:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Couldn't save system images")
