@@ -232,21 +232,23 @@ async def fetch_db_processed_ccva_graphs(
                 "counts": femaleCauses[*].count,
                 "values": femaleCauses[*].percent
             }},
+              "adult": {{
+                "index": adultCauses[*].cause,
+                "counts": adultCauses[*].count,
+                "values": adultCauses[*].percent
+            }},
+               "child": {{
+                "index": childCauses[*].cause,
+                "counts": childCauses[*].count,
+                "values": childCauses[*].percent
+            }},
             "neonate": {{
                 "index": neonateCauses[*].cause,
                 "counts": neonateCauses[*].count,
                 "values": neonateCauses[*].percent
             }},
-            "child": {{
-                "index": childCauses[*].cause,
-                "counts": childCauses[*].count,
-                "values": childCauses[*].percent
-            }},
-            "adult": {{
-                "index": adultCauses[*].cause,
-                "counts": adultCauses[*].count,
-                "values": adultCauses[*].percent
-            }},
+         
+          
             }},
             "total_records": totalRecords,
             "created_at": "{created_at}",
