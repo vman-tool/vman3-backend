@@ -31,13 +31,13 @@ async def fetch_charts_statistics( current_user: dict,paging: bool = True, page_
             elif date_type == 'interview_date':
                 today_field = interview_date
             else:
-                today_field = config.field_mapping.date 
+                today_field = submitted_date
         else:
-            today_field = config.field_mapping.date 
+            today_field = submitted_date
 
         deceased_gender = config.field_mapping.deceased_gender
 
-
+        print(date_type, today_field)
         # locationLimitValues =current_user['access_limit']['limit_by'] or None ## [{value: "value", label: "label"}]
         locationKey, locationLimitValues = get_location_limit_values(current_user)
 
@@ -142,7 +142,7 @@ async def fetch_charts_statistics( current_user: dict,paging: bool = True, page_
             }}
         """
         
-        # print(combined_query)
+        print(combined_query)
         # Execute the combined query
         cursor = db.aql.execute(combined_query, bind_vars=bind_vars,cache=True)
         result = cursor.next()
