@@ -39,33 +39,17 @@ async def fetch_db_processed_ccva_graphs(
         
     
         config = await fetch_odk_config(db)
-        # region_field = config.field_mapping.location_level1
-        # district_field = config.field_mapping.location_level2
-        # is_adult_field = config.field_mapping.is_adult
-        # is_child_field = config.field_mapping.is_child
-        # is_neonte_field = config.field_mapping.is_neonate
-        # 
-        
         if date_type is not None:
             if date_type == 'submission_date':
-                today_field = 'submissiondate'
+                today_field = 'submitted_date'
             elif date_type == 'death_date':
-                today_field = 'id10023'
+                today_field = 'death_date'
             elif date_type == 'interview_date':
-                today_field = 'id10012'
+                today_field = 'interview_date'
             else:
-                today_field = config.field_mapping.date 
+                today_field = 'date' or config.field_mapping.date 
         else:
-            today_field = config.field_mapping.date 
-            
-        # if start_date:
-        #     filters.append(f"doc.{today_field} >= @start_date")
-        #     bind_vars["start_date"] = str(start_date)
-
-        # if end_date:
-        #     filters.append(f"doc.{today_field} <= @end_date")
-        #     bind_vars["end_date"] = str(end_date)
-            
+            today_field = 'date' or config.field_mapping.date 
             
         collection_name = db_collections.CCVA_RESULTS  # Use the actual collection name here
         if ccva_id is not None:
@@ -99,6 +83,60 @@ async def fetch_db_processed_ccva_graphs(
                 {f'AND DATE_TIMESTAMP(cc.{today_field}) <= DATE_TIMESTAMP("{end_date}")' if end_date else ''}
             RETURN 1
         )
+              LET totalchildRecords = LENGTH(
+            FOR cc IN {collection_name}
+                 FILTER cc.task_id == @taskId AND cc.CAUSE1 != "" AND (cc.ischild == "1" OR cc.age_group == "child") AND cc.ID != null
+               
+                {f'AND cc.locationLevel1 IN {locations}' if locations else ''}
+                {f'AND cc.{locationKey} IN {locationLimitValues}' if locationKey and locationLimitValues else ''}
+                {f'AND DATE_TIMESTAMP(cc.{today_field}) >= DATE_TIMESTAMP("{start_date}")' if start_date else ''}
+                {f'AND DATE_TIMESTAMP(cc.{today_field}) <= DATE_TIMESTAMP("{end_date}")' if end_date else ''}
+            RETURN 1
+        )
+        
+              LET totalNeonateRecords = LENGTH(
+            FOR cc IN {collection_name}
+                 FILTER cc.task_id == @taskId AND cc.CAUSE1 != "" AND (cc.isneonatal == "1" OR cc.age_group == "neonate") AND cc.ID != null
+               
+                {f'AND cc.locationLevel1 IN {locations}' if locations else ''}
+                {f'AND cc.{locationKey} IN {locationLimitValues}' if locationKey and locationLimitValues else ''}
+                {f'AND DATE_TIMESTAMP(cc.{today_field}) >= DATE_TIMESTAMP("{start_date}")' if start_date else ''}
+                {f'AND DATE_TIMESTAMP(cc.{today_field}) <= DATE_TIMESTAMP("{end_date}")' if end_date else ''}
+            RETURN 1
+        )
+                  LET totalAdultRecords = LENGTH(
+            FOR cc IN {collection_name}
+                 FILTER cc.task_id == @taskId AND cc.CAUSE1 != "" AND (cc.isadult == "1" OR cc.age_group == "adult") AND cc.ID != null
+               
+                {f'AND cc.locationLevel1 IN {locations}' if locations else ''}
+                {f'AND cc.{locationKey} IN {locationLimitValues}' if locationKey and locationLimitValues else ''}
+                {f'AND DATE_TIMESTAMP(cc.{today_field}) >= DATE_TIMESTAMP("{start_date}")' if start_date else ''}
+                {f'AND DATE_TIMESTAMP(cc.{today_field}) <= DATE_TIMESTAMP("{end_date}")' if end_date else ''}
+            RETURN 1
+        )
+        
+               LET totalmaleRecords = LENGTH(
+            FOR cc IN {collection_name}
+                 FILTER cc.task_id == @taskId AND cc.CAUSE1 != ""  AND cc.gender == "male" AND cc.ID != null
+               
+                {f'AND cc.locationLevel1 IN {locations}' if locations else ''}
+                {f'AND cc.{locationKey} IN {locationLimitValues}' if locationKey and locationLimitValues else ''}
+                {f'AND DATE_TIMESTAMP(cc.{today_field}) >= DATE_TIMESTAMP("{start_date}")' if start_date else ''}
+                {f'AND DATE_TIMESTAMP(cc.{today_field}) <= DATE_TIMESTAMP("{end_date}")' if end_date else ''}
+            RETURN 1
+        )
+        
+                 LET totalfemaleRecords = LENGTH(
+            FOR cc IN {collection_name}
+                 FILTER cc.task_id == @taskId AND cc.CAUSE1 != ""  AND cc.gender == "female" AND cc.ID != null
+               
+                {f'AND cc.locationLevel1 IN {locations}' if locations else ''}
+                {f'AND cc.{locationKey} IN {locationLimitValues}' if locationKey and locationLimitValues else ''}
+                {f'AND DATE_TIMESTAMP(cc.{today_field}) >= DATE_TIMESTAMP("{start_date}")' if start_date else ''}
+                {f'AND DATE_TIMESTAMP(cc.{today_field}) <= DATE_TIMESTAMP("{end_date}")' if end_date else ''}
+            RETURN 1
+        )
+    
 
         LET allCauses = (
             FOR cr IN {collection_name}
@@ -121,7 +159,7 @@ async def fetch_db_processed_ccva_graphs(
                 {f'AND DATE_TIMESTAMP(cr.{today_field}) >= DATE_TIMESTAMP("{start_date}")' if start_date else ''}
                 {f'AND DATE_TIMESTAMP(cr.{today_field}) <= DATE_TIMESTAMP("{end_date}")' if end_date else ''}
             COLLECT cause = cr.CAUSE1 WITH COUNT INTO count
-            LET percent = count / totalRecords
+            LET percent = count / totalmaleRecords
             SORT percent DESC
             RETURN {{ cause, count, percent }}
         )
@@ -134,7 +172,7 @@ async def fetch_db_processed_ccva_graphs(
                 {f'AND DATE_TIMESTAMP(cr.{today_field}) >= DATE_TIMESTAMP("{start_date}")' if start_date else ''}
                 {f'AND DATE_TIMESTAMP(cr.{today_field}) <= DATE_TIMESTAMP("{end_date}")' if end_date else ''}
             COLLECT cause = cr.CAUSE1 WITH COUNT INTO count
-            LET percent = count / totalRecords
+            LET percent = count / totalfemaleRecords
             SORT percent DESC
             RETURN {{ cause, count, percent }}
         )
@@ -147,7 +185,7 @@ async def fetch_db_processed_ccva_graphs(
                 {f'AND DATE_TIMESTAMP(cr.{today_field}) >= DATE_TIMESTAMP("{start_date}")' if start_date else ''}
                 {f'AND DATE_TIMESTAMP(cr.{today_field}) <= DATE_TIMESTAMP("{end_date}")' if end_date else ''}
             COLLECT cause = cr.CAUSE1 WITH COUNT INTO count
-            LET percent = count / totalRecords
+            LET percent = count / totalNeonateRecords
             SORT percent DESC
             RETURN {{ cause, count, percent }}
         )
@@ -160,7 +198,7 @@ async def fetch_db_processed_ccva_graphs(
                 {f'AND DATE_TIMESTAMP(cr.{today_field}) >= DATE_TIMESTAMP("{start_date}")' if start_date else ''}
                 {f'AND DATE_TIMESTAMP(cr.{today_field}) <= DATE_TIMESTAMP("{end_date}")' if end_date else ''}
             COLLECT cause = cr.CAUSE1 WITH COUNT INTO count
-            LET percent = count / totalRecords
+            LET percent = count / totalchildRecords
             SORT percent DESC
             RETURN {{ cause, count, percent }}
         )
@@ -173,7 +211,7 @@ async def fetch_db_processed_ccva_graphs(
                 {f'AND DATE_TIMESTAMP(cr.{today_field}) >= DATE_TIMESTAMP("{start_date}")' if start_date else ''}
                 {f'AND DATE_TIMESTAMP(cr.{today_field}) <= DATE_TIMESTAMP("{end_date}")' if end_date else ''}
             COLLECT cause = cr.CAUSE1 WITH COUNT INTO count
-            LET percent = count / totalRecords
+            LET percent = count / totalAdultRecords
             SORT percent DESC
             RETURN {{ cause, count, percent }}
         )
@@ -194,21 +232,23 @@ async def fetch_db_processed_ccva_graphs(
                 "counts": femaleCauses[*].count,
                 "values": femaleCauses[*].percent
             }},
+              "adult": {{
+                "index": adultCauses[*].cause,
+                "counts": adultCauses[*].count,
+                "values": adultCauses[*].percent
+            }},
+               "child": {{
+                "index": childCauses[*].cause,
+                "counts": childCauses[*].count,
+                "values": childCauses[*].percent
+            }},
             "neonate": {{
                 "index": neonateCauses[*].cause,
                 "counts": neonateCauses[*].count,
                 "values": neonateCauses[*].percent
             }},
-            "child": {{
-                "index": childCauses[*].cause,
-                "counts": childCauses[*].count,
-                "values": childCauses[*].percent
-            }},
-            "adult": {{
-                "index": adultCauses[*].cause,
-                "counts": adultCauses[*].count,
-                "values": adultCauses[*].percent
-            }},
+         
+          
             }},
             "total_records": totalRecords,
             "created_at": "{created_at}",
@@ -223,11 +263,10 @@ async def fetch_db_processed_ccva_graphs(
         }
 
 
-        print(query)
         cursor = db.aql.execute(query, bind_vars=bind_vars, cache=True)
         data = [document for document in cursor]
 
-        # print(data)
+
         if not data:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No records found")
 
