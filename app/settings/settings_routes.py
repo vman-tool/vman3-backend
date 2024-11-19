@@ -1,6 +1,6 @@
 from typing import List, Optional
 from arango.database import StandardDatabase
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
 
 from app.settings.models.settings import ImagesConfigData, SettingsConfigData
 from app.settings.services.odk_configs import (add_configs_settings,
@@ -9,7 +9,7 @@ from app.settings.services.odk_configs import (add_configs_settings,
 from app.shared.configs.arangodb import get_arangodb_session
 from app.shared.configs.models import ResponseMainModel
 from app.shared.services.va_records import get_field_value_from_va_records
-from app.shared.configs.constants import AccessPrivileges, Special_Constants
+from app.shared.configs.constants import AccessPrivileges
 from app.users.decorators.user import check_privileges, get_current_user
 from app.utilits.helpers import delete_file, save_file
 
@@ -96,7 +96,6 @@ async def upload_image(
         
         if favicon:
             favicon_saved_path = save_file(favicon, valid_file_extensions=valid_image_extensions, delete_extisting=existing_images["favicon"] if "favicon" in existing_images else None)
-
 
         data = ImagesConfigData(
             logo=logo_saved_path,

@@ -74,7 +74,7 @@ async def create_or_update_user_account(data: RegisterUserRequest, image: Upload
             update_user_data = replace_object_values(user_data, existing_user)
 
             if image:
-                existing_image = user_data['image'] if "image" in update_user_data else None
+                existing_image = update_user_data['image'] if "image" in update_user_data else None
                 
                 update_user_data['image'] = save_file(
                     file=image, 
