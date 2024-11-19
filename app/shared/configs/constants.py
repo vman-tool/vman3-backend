@@ -26,6 +26,7 @@ class db_collections():
 
 class Special_Constants():
     UPLOAD_FOLDER: str = '/uploads'
+    FILE_URL: str = '/vman/api/v1/uploads'
    
     
 collections_with_indexes = {

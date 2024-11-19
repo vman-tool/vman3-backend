@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 import shutil
 from typing import List
 import uuid
@@ -25,24 +26,30 @@ def save_file(file: UploadFile, valid_file_extensions: List[str] = None, delete_
         raise ValueError(f"Invalid file. Expected one of: {', '.join(valid_file_extensions)}")
     
     folder = Special_Constants.UPLOAD_FOLDER if Special_Constants.UPLOAD_FOLDER.startswith("/") else f"/{Special_Constants.UPLOAD_FOLDER}"
+
+
     
     filename =  f"{str(uuid.uuid4())}.{file_extension}" if reconstruct_filename else file.filename
-        
-    file_location = os.path.join(f"{os.getcwd()}/app{folder}", filename)
+    
+    file_path = Path(f"{os.getcwd()}/app{folder}/{filename}")
 
-    existing_location = f"{os.getcwd()}/app{delete_extisting}" if delete_extisting else None
+    existing_location = f"{os.getcwd()}/app{Special_Constants.UPLOAD_FOLDER}{delete_extisting.rsplit(Special_Constants.UPLOAD_FOLDER)[0]}" if delete_extisting else None
 
     if delete_extisting and existing_location and os.path.isfile(existing_location):
         os.remove(existing_location)
     
-    with open(file_location, "wb") as buffer:
+    
+    with file_path.open("wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
 
-    return f"{folder}/{filename}"
+    return f"{Special_Constants.FILE_URL}/{filename}"
 
 def delete_file(path: str = None):
     try:
-        existing_location = f"{os.getcwd()}/app{path}" if path else None
+        if not path:
+            raise ValueError("Path is required for deletion")
+        file_name = path.rsplit(Special_Constants.UPLOAD_FOLDER)[0]
+        existing_location = f"{os.getcwd()}/app{Special_Constants.UPLOAD_FOLDER}{file_name}" if path else None
         if path and existing_location and os.path.isfile(existing_location):
             os.remove(existing_location)
     except:
