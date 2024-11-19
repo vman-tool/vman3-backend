@@ -20,7 +20,7 @@ from app.shared.configs.constants import Special_Constants
 def main_route(application):
     application.include_router(create_main_router())
     path= os.getcwd()+"/app"+Special_Constants.UPLOAD_FOLDER
-    application.mount(Special_Constants.UPLOAD_FOLDER, StaticFiles(directory=path), name="uploads")
+    application.mount(Special_Constants.FILE_URL, StaticFiles(directory=path), name="uploads")
 
 def create_main_router():
     main_router = APIRouter(prefix="/vman/api/v1")
