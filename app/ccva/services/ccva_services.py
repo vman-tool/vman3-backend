@@ -23,9 +23,8 @@ from app.shared.configs.models import ResponseMainModel
 
 # The websocket_broadcast function for broadcasting progress updates
 async def websocket_broadcast(task_id: str, progress_data: dict):
-    from app.main import (
-        websocket__manager,  # Ensure this points to your actual WebSocket manager instance
-    )
+    from app.main import \
+        websocket__manager  # Ensure this points to your actual WebSocket manager instance
     await websocket__manager.broadcast(task_id, json.dumps(progress_data))
 
 async def get_record_to_run_ccva(current_user:dict,db: StandardDatabase, task_id: str, task_results: Dict,start_date: Optional[date] = None, end_date: Optional[date] = None,date_type:Optional[str]=None,):
@@ -455,7 +454,7 @@ async def getVADataAndMergeWithResults(db: StandardDatabase, results: list):
     location_level1 = config.field_mapping.location_level1
     location_level2 = config.field_mapping.location_level2
     death_date = config.field_mapping.death_date or 'id10023'
-    submitted_date = config.field_mapping.submitted_date or 'submissiondate'
+    submitted_date = config.field_mapping.submitted_date or 'today' or 'submissiondate'
     interview_date = config.field_mapping.interview_date or 'id10012'
     date = config.field_mapping.date
     instance_id = config.field_mapping.instance_id or 'instanceid'
