@@ -48,7 +48,7 @@ def delete_file(path: str = None):
     try:
         if not path:
             raise ValueError("Path is required for deletion")
-        file_name = path.rsplit(Special_Constants.UPLOAD_FOLDER)[0]
+        file_name = path.rsplit(Special_Constants.UPLOAD_FOLDER)[1]
         existing_location = f"{os.getcwd()}/app{Special_Constants.UPLOAD_FOLDER}{file_name}" if path else None
         if path and existing_location and os.path.isfile(existing_location):
             os.remove(existing_location)
