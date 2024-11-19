@@ -33,10 +33,10 @@ def save_file(file: UploadFile, valid_file_extensions: List[str] = None, delete_
     
     file_path = Path(f"{os.getcwd()}/app{folder}/{filename}")
 
-    existing_location = f"{os.getcwd()}/app{Special_Constants.UPLOAD_FOLDER}{delete_extisting.rsplit(Special_Constants.UPLOAD_FOLDER)[0]}" if delete_extisting else None
 
-    if delete_extisting and existing_location and os.path.isfile(existing_location):
-        os.remove(existing_location)
+    if delete_extisting:
+        delete_file(delete_extisting)
+        
     
     
     with file_path.open("wb") as buffer:
