@@ -43,7 +43,6 @@ def save_file(file: UploadFile, valid_file_extensions: List[str] = None, delete_
 def delete_file(path: str = None):
     try:
         existing_location = f"{os.getcwd()}/app{path}" if path else None
-        print("Deleting", existing_location)
         if path and existing_location and os.path.isfile(existing_location):
             os.remove(existing_location)
     except:

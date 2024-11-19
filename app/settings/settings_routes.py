@@ -97,7 +97,6 @@ async def upload_image(
         if favicon:
             favicon_saved_path = save_file(favicon, valid_file_extensions=valid_image_extensions, delete_extisting=existing_images["favicon"] if "favicon" in existing_images else None)
 
-
         data = ImagesConfigData(
             logo=logo_saved_path,
             favicon=favicon_saved_path,
