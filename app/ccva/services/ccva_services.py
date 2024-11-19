@@ -27,9 +27,9 @@ async def websocket_broadcast(task_id: str, progress_data: dict):
         websocket__manager  # Ensure this points to your actual WebSocket manager instance
     await websocket__manager.broadcast(task_id, json.dumps(progress_data))
 
-async def get_record_to_run_ccva(current_user:dict,db: StandardDatabase, task_id: str, task_results: Dict,start_date: Optional[date] = None, end_date: Optional[date] = None,):
+async def get_record_to_run_ccva(current_user:dict,db: StandardDatabase, task_id: str, task_results: Dict,start_date: Optional[date] = None, end_date: Optional[date] = None,date_type:Optional[str]=None,):
     try:
-        records= await fetch_va_records_json(current_user=current_user,paging=False, start_date=start_date, end_date=end_date,  db=db)
+        records= await fetch_va_records_json(current_user=current_user,paging=False, start_date=start_date, end_date=end_date,  db=db,date_type=date_type)
         if records.data == []:
             raise Exception("No records found")
         
@@ -131,10 +131,14 @@ def runCCVA(odk_raw:pd.DataFrame, id_col: str = None,date_col:str =None,start_ti
         # Run the InterVA5 analysis, with progress updates via the async callback
         iv5out.run()
         records =  iv5out.get_indiv_prob(
-            top=10
+            top=10,
+            include_propensities=False
         )
-       
+       ## TODOS: find the corect way to load data from records (fuction)
         rcd = records.to_dict(orient='records')
+        # pd.DataFrame(rcd).to_csv(f"{output_folder}{file_id}_ccva_results-test.csv")
+        # get from csv(official)
+        rcd = pd.read_csv(f"{output_folder}{file_id}.csv").to_dict(orient='records')
         print(len(rcd))
         # print(rcd)
         if rcd == [] or rcd is None:
@@ -160,10 +164,19 @@ def runCCVA(odk_raw:pd.DataFrame, id_col: str = None,date_col:str =None,start_ti
         total_records = len(records)
         rangeDates={"start": odk_raw[date_col].max(), "end":odk_raw[date_col].min()}
         ## get ccva error logs to be added to the ccva_results
-        error_logs = process_ccva_errorlogs(output_folder + file_id + "_")
+        error_logs = process_ccva_errorlogs(output_folder + file_id + "_", task_id=file_id)
         print("Processing error logs...")
 
-        ccva_results= compile_ccva_results(iv5out, error_logs=error_logs, top=top, undetermined=undetermined, task_id=file_id,start_time= start_time,total_records=total_records,  rangeDates =rangeDates, db=db)
+        ccva_results= compile_ccva_results(iv5out,
+                                           data_processed_with_results=len(results_to_insert),
+                                           error_logs=error_logs,
+                                           top=top,
+                                           undetermined=undetermined,
+                                           task_id=file_id,
+                                           start_time= start_time,
+                                           total_records=total_records,  
+                                           rangeDates =rangeDates, 
+                                           db=db)
         print("CCVA run is completed.")
         error_log_path = f"{output_folder}{file_id}_errorlogV5.txt"
         log_path = f"{output_folder}{file_id}.csv"
@@ -185,6 +198,7 @@ def runCCVA(odk_raw:pd.DataFrame, id_col: str = None,date_col:str =None,start_ti
 # Function to compile the results from InterVA5
 def compile_ccva_results(iv5out, top=10, undetermined=True,start_time:timedelta=None,
                          task_id:str=None,
+                         data_processed_with_results:int=0,
                          total_records:int=0, rangeDates: Dict={},
                          error_logs: Optional[any]=None,
                          db: StandardDatabase=None):
@@ -304,6 +318,7 @@ def compile_ccva_results(iv5out, top=10, undetermined=True,start_time:timedelta=
         "task_id": task_id,
         "created_at": datetime.now().isoformat(),
         "total_records": total_records,
+        "data_processed_with_results": data_processed_with_results,
         "elapsed_time":   f"{elapsed_time.seconds // 3600}:{(elapsed_time.seconds // 60) % 60}:{elapsed_time.seconds % 60}",
 
         "range":rangeDates,
@@ -324,7 +339,7 @@ def compile_ccva_results(iv5out, top=10, undetermined=True,start_time:timedelta=
 
     return ccva_results
 
-def process_ccva_errorlogs(output_folder: str):
+def process_ccva_errorlogs(output_folder: str,task_id:str=None):
     # Path to the error log file
     log_file_path = output_folder + 'errorlogV5.txt'
     log_entries = []
@@ -373,6 +388,7 @@ def process_ccva_errorlogs(output_folder: str):
             # Create a log entry for insertion into ArangoDB
             log_entry = {
                 "uuid": uuid,
+                "task_id": task_id,  # Use the UUID as the task_id for easy reference
                 "error_type": error_type,
                 "error_message": error_message,
                 "group": current_group  # Add the group/category for identification
@@ -392,24 +408,20 @@ async def fetch_ccva_results_and_errors(db: StandardDatabase, task_id: str):
         # AQL query to fetch individual results and error logs
         query = f"""
         LET graph_results = (
-            FOR g IN ccva_graph_results
+            FOR g IN ccva_errors
             FILTER g.task_id == "{task_id}"
-            RETURN g.error_logs
+            RETURN g
         )
 
         LET indiv_results = (
             FOR d IN ccva_results
             FILTER d.task_id == "{task_id}"
-            RETURN {{
-                ID: d.ID,
-                CAUSE1: d.CAUSE1,
-                CAUSE2: d.CAUSE2
-            }}
+            RETURN d
         )
 
         RETURN {{
             results: indiv_results,
-            error_logs: LENGTH(graph_results) > 0 ? graph_results[0] : null
+            error_logs: LENGTH(graph_results) > 0 ? graph_results : null
         }}
         """
 
@@ -426,6 +438,9 @@ async def fetch_ccva_results_and_errors(db: StandardDatabase, task_id: str):
         return None
     
 async def getVADataAndMergeWithResults(db: StandardDatabase, results: list):
+    # save results to csv
+    df = pd.DataFrame(results)
+    df.to_csv('results.csv')
     from app.settings.services.odk_configs import fetch_odk_config
 
     # Fetch configurations asynchronously
@@ -439,13 +454,14 @@ async def getVADataAndMergeWithResults(db: StandardDatabase, results: list):
     location_level1 = config.field_mapping.location_level1
     location_level2 = config.field_mapping.location_level2
     death_date = config.field_mapping.death_date or 'id10023'
-    submitted_date = config.field_mapping.submitted_date or 'submissiondate'
+    submitted_date = config.field_mapping.submitted_date or 'today' or 'submissiondate'
     interview_date = config.field_mapping.interview_date or 'id10012'
     date = config.field_mapping.date
     instance_id = config.field_mapping.instance_id or 'instanceid'
-
+    # results = [{key: result[key] for key in ['ID', 'CAUSE1', 'task_id']} for result in results]
+    print(results)
     # Extract all data UIDs for a batch query
-    data_uids = [result.get('ID') for result in results if result.get('ID')]
+    data_uids = [result.get('ID') for result in results if result.get('ID') is not None]
 
     # Return early if there are no valid data_uids
     if not data_uids:
@@ -471,24 +487,37 @@ FOR doc IN {collection.name}
         locationLevel2: LOWER(doc.{location_level2}),
         death_date: doc.{death_date},
         submitted_date: doc.{submitted_date},
-        interview_date: doc.{interview_date}
+        interview_date: doc.{interview_date},
+        reasoans:doc.id10476,
+        form_age_group:doc.age_group,
+        isneonatal:doc.isneonatal,
+        ischild:doc.ischild, 
+        isadult:doc.isadult
 
     }}
     """
-
+    # print(query)
     # Execute the query with caching
     cursor = db.aql.execute(query, cache=True)
 
     # Convert the cursor to a dictionary keyed by UID for easy lookup
     va_data_map = {doc['uid']: doc for doc in cursor}
+    
+    # print(va_data_map)
 
     # Merge the fetched data with the original results
+    updated_results = []
     for result in results:
         data_uid = result.get('ID')
         if data_uid in va_data_map:
-            result.update(va_data_map[data_uid])
+            # Create a new dictionary by merging the original and the update
+            merged_result = {**result, **va_data_map[data_uid]}
+            updated_results.append(merged_result)
+        else:
+            updated_results.append(result)  # If no update, keep the original
 
-    return results
+
+    return updated_results
 
 
 def ensure_task(task):

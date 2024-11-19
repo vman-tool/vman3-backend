@@ -125,6 +125,7 @@ async def fetch_processed_ccva_graphs(
         """
 
         cursor = db.aql.execute(query, bind_vars=bind_vars,cache=True)
+
         data = [document for document in cursor]
 
         if not data:
