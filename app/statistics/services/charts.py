@@ -20,7 +20,7 @@ async def fetch_charts_statistics( current_user: dict,paging: bool = True, page_
         #
         print(date_type)
         death_date = config.field_mapping.death_date or 'id10023'
-        submitted_date = config.field_mapping.submitted_date or 'submissiondate'
+        submitted_date = config.field_mapping.submitted_date or 'today' or 'submissiondate'
         interview_date = config.field_mapping.interview_date or 'id10012'
             
         if date_type is not None:
