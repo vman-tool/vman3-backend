@@ -142,7 +142,7 @@ async def fetch_charts_statistics( current_user: dict,paging: bool = True, page_
             }}
         """
         
-        print(combined_query)
+        # print(combined_query)
         # Execute the combined query
         cursor = db.aql.execute(combined_query, bind_vars=bind_vars,cache=True)
         result = cursor.next()
