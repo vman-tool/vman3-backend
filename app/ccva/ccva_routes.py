@@ -6,16 +6,29 @@ from typing import Optional
 
 import pandas as pd
 from arango.database import StandardDatabase
-from fastapi import (APIRouter, BackgroundTasks, Body, Depends, HTTPException,
-                     Query, Response, status)
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    Body,
+    Depends,
+    HTTPException,
+    Query,
+    Response,
+    status,
+)
 
 from app.ccva.services.ccva_data_services import (
-    delete_ccva_entry, fetch_all_processed_ccva_graphs,
-    fetch_processed_ccva_graphs, set_ccva_as_default)
-from app.ccva.services.ccva_graph_services import \
-    fetch_db_processed_ccva_graphs
-from app.ccva.services.ccva_services import (fetch_ccva_results_and_errors,
-                                             get_record_to_run_ccva, run_ccva)
+    delete_ccva_entry,
+    fetch_all_processed_ccva_graphs,
+    fetch_processed_ccva_graphs,
+    set_ccva_as_default,
+)
+from app.ccva.services.ccva_graph_services import fetch_db_processed_ccva_graphs
+from app.ccva.services.ccva_services import (
+    fetch_ccva_results_and_errors,
+    get_record_to_run_ccva,
+    run_ccva,
+)
 from app.shared.configs.arangodb import get_arangodb_session
 from app.shared.configs.models import ResponseMainModel
 from app.users.decorators.user import get_current_user, oauth2_scheme
@@ -186,7 +199,7 @@ async def download_ccva_results(
     db: StandardDatabase = Depends(get_arangodb_session),
     file_format: str = "json"
 ):
-    print(task_id)
+    # print(task_id)
     try:
         if task_id is None:
            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Task ID is required.")
