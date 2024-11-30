@@ -4,7 +4,7 @@ from arango.database import StandardDatabase
 from fastapi import HTTPException, status
 
 from app.odk.utils.odk_client import ODKClientAsync
-from app.settings.models.settings import ImagesConfigData, SettingsConfigData
+from app.settings.models.settings import ImagesConfigData, OdkConfigModel, SettingsConfigData
 from app.shared.configs.constants import db_collections
 from app.shared.configs.models import ResponseMainModel
 from app.shared.utils.database_utilities import replace_object_values
@@ -51,14 +51,13 @@ async def add_configs_settings(configData: SettingsConfigData, db: StandardDatab
         if configData.type == 'odk_api_configs' and configData.odk_api_configs:
             odk_data = configData.odk_api_configs.model_dump()
             data['odk_api_configs'] = odk_data
-           
-
-            # Flatten odk_api_configs data for SimpleNamespace
+            
             data_simpleSpace = SimpleNamespace(**odk_data)
 
             # Validate ODK configuration
             async with ODKClientAsync(data_simpleSpace) as odk_client:
                 data_for_count = await odk_client.getFormSubmissions(top=1, order_by='__system/submissionDate', order_direction='asc')
+                print("Test Data: ", data_for_count['@odata.count'])
                 if not data_for_count:
                     raise ValueError("Invalid ODK configuration")
 
@@ -102,11 +101,9 @@ async def add_configs_settings(configData: SettingsConfigData, db: StandardDatab
             
         else:
             raise ValueError("Invalid type or missing configuration data")
-        
-        print(data)
 
         # db.collection(db_collections.SYSTEM_CONFIGS).insert(data, overwrite=False)
-        results = await save_system_settings(data, db)
+        results = await save_system_settings(data = data, db = db)
 
         # Return success response
         return ResponseMainModel(

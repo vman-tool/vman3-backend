@@ -47,8 +47,11 @@ async def save_configs_settings(
             AccessPrivileges.USERS_UPDATE_ACCESS_LIMIT_LABELS
         ])),
     db: StandardDatabase = Depends(get_arangodb_session)):
-    response = await add_configs_settings( configData, db=db)
-    return response
+    try:
+        response = await add_configs_settings( configData, db=db)
+        return response
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
 
 
 @settings_router.get("/questioner_fields", status_code=status.HTTP_200_OK, response_model=ResponseMainModel)
