@@ -180,7 +180,8 @@ async def fetch_odk_data_with_async(
                     df.columns = df.columns.str.lower()
                     df = df.dropna(axis=1, how='all')
 
-                    
+                    # TODO: Investigate on duplicate columns temporary solution is to rename duplicate columns
+                    df = df.loc[:, ~df.columns.duplicated()] 
                     
                     return loads(df.to_json(orient='records'))
                 except Exception as e:
