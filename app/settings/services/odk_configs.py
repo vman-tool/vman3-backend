@@ -56,8 +56,9 @@ async def add_configs_settings(configData: SettingsConfigData, db: StandardDatab
 
             # Validate ODK configuration
             async with ODKClientAsync(data_simpleSpace) as odk_client:
+                print("Start Validation of object: ", data_simpleSpace)
                 data_for_count = await odk_client.getFormSubmissions(top=1, order_by='__system/submissionDate', order_direction='asc')
-                print("Test Data: ", data_for_count['@odata.count'])
+                print("Test Request Succeeded with records: ", data_for_count['@odata.count'])
                 if not data_for_count:
                     raise ValueError("Invalid ODK configuration")
 
