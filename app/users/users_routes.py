@@ -15,6 +15,7 @@ from app.users.responses.user import LoginResponse, UserResponse
 from app.users.schemas.user import (AssignRolesRequest, EmailRequest, RegisterUserRequest,
                                     ResetRequest, RoleRequest, VerifyUserRequest)
 from app.users.services import user
+from app.users.models.user import User
 
 user_router = APIRouter(
     prefix="/users",
@@ -165,7 +166,7 @@ async def create_or_update_roles(
         required_privs: List[str] = Depends(check_privileges([AccessPrivileges.USERS_CREATE_ROLES])),
     ):
     try:
-        return await user.save_role(data = data, current_user = current_user, db=session)
+        return await user.save_role(data = data, current_user = User(**current_user), db=session)
     except HTTPException as e:
         raise e
 

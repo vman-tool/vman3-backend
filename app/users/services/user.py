@@ -438,7 +438,7 @@ async def assign_roles(data: AssignRolesRequest = None, current_user: User = Non
         
         existing_user_roles = await UserRole.get_many(filters={"user": data.user}, db=db)
         for user_role in existing_user_roles:
-            if user_role['role'] not in data.roles:
+            if user_role and data.roles and 'role' in user_role and user_role['role'] not in data.roles:
                 await UserRole.delete(doc_uuid=user_role.get('uuid'), deleted_by=current_user['uuid'] if 'uuid' in current_user else None, db=db)
 
         if data.roles:
