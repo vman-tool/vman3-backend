@@ -71,6 +71,8 @@ async def fetch_db_processed_ccva_graphs(
         range= defaultsCr[0].get('range')
         # to lower case for locations
         locations = [location.lower() for location in locations] if locations else None
+        locationLimitValues = [location.lower() for location in locationLimitValues] if locationLimitValues else None
+        
         
 
         query = f"""
