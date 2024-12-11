@@ -340,9 +340,8 @@ async def get_coders(
 ):
     try:
         coders_privileges = [
-            AccessPrivileges.PCVA_VIEW_VA_RECORDS, #PCVA_VIEW_VA_RECORDS
-            AccessPrivileges.PCVA_VIEW_CODERS, #PCVA_VIEW_CODERS
-            AccessPrivileges.PCVA_CODE_VA #PCVA_CODE_VA
+            AccessPrivileges.PCVA_VIEW_VA_RECORDS,
+            AccessPrivileges.PCVA_CODE_VA
         ]
 
         offset = (page_number - 1) * limit if paging else 0
