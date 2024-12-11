@@ -103,7 +103,21 @@ def add_query_filters(filters: Dict = None, bind_vars: Dict = None, document_nam
             ],
             'in_conditions': [
                 {'role': ['admin', 'manager']},
-            ]
+            ],
+            'includes_conditions': [
+            {
+                'tags': {
+                    'and': ['important', 'urgent'],
+                    'or': ['project1', 'project2'] 
+                }
+            },
+            {
+                'description': {
+                    'and': ['key1', 'key2'],
+                    'or': ['term1', 'term2']
+                }
+            }
+        ]
         }
         ```
     """
@@ -112,11 +126,38 @@ def add_query_filters(filters: Dict = None, bind_vars: Dict = None, document_nam
     and_conditions = filters.pop("and_conditions", [])
     or_conditions = filters.pop("or_conditions", [])
     in_conditions = filters.pop("in_conditions", [])
+    includes_conditions = filters.pop("includes_conditions", [])
 
     def add_comparison_filter(field: str, value: Any, op: str, condition_type: str, i: int):
         bind_var_key = f"{field}_{condition_type}_{i}"
         aql_filters.append(f"{document_name}.{field} {op} @{bind_var_key}")
         bind_vars[bind_var_key] = value
+
+    
+    def generate_includes_filter(field, include_conditions):
+        """Generate filter for include conditions with AND/OR logic"""
+        sub_filters = []
+        
+        if 'and' in include_conditions:
+            and_values = include_conditions['and']
+            and_sub_conditions = []
+            for i, value in enumerate(and_values):
+                bind_var_key = f"{field}_and_includes_{i}"
+                and_sub_conditions.append(f"CONTAINS({document_name}.{field}, @{bind_var_key})")
+                bind_vars[bind_var_key] = value
+            
+            sub_filters.append(f"({' AND '.join(and_sub_conditions)})")
+        
+        if 'or' in include_conditions:
+            or_values = include_conditions['or']
+            or_sub_conditions = []
+            for i, value in enumerate(or_values):
+                bind_var_key = f"{field}_or_includes_{i}"
+                or_sub_conditions.append(f"CONTAINS({document_name}.{field}, @{bind_var_key})")
+                bind_vars[bind_var_key] = value
+            sub_filters.append(f"({' OR '.join(or_sub_conditions)})")
+        
+        return sub_filters
 
     def reassign_operation(op):
         operations = {
@@ -171,5 +212,27 @@ def add_query_filters(filters: Dict = None, bind_vars: Dict = None, document_nam
                 in_clauses.append(f"{document_name}.{field} IN @{bind_var_key}")
                 bind_vars[bind_var_key] = values
             aql_filters.append(" AND ".join(in_clauses))
+    
+    if includes_conditions:
+        includes_clauses = []
+        for condition in includes_conditions:
+            for field, include_conditions in condition.items():
+                if isinstance(include_conditions, dict):
+                    field_filters = generate_includes_filter(field, include_conditions)
+                    includes_clauses.extend(field_filters)
+
+                elif isinstance(include_conditions, (list, str)):
+                    values = include_conditions if isinstance(include_conditions, list) else [include_conditions]
+                    sub_conditions = []
+                    for i, value in enumerate(values):
+                        bind_var_key = f"{field}_includes_{i}"
+                        sub_conditions.append(f"CONTAINS({document_name}.{field}, @{bind_var_key})")
+                        bind_vars[bind_var_key] = value
+                    includes_clauses.append(f"({' OR '.join(sub_conditions)})")
+        
+        if includes_clauses:
+            aql_filters.append(" AND ".join(includes_clauses))
 
     return aql_filters, bind_vars
+
+
