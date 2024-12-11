@@ -64,7 +64,7 @@ async def create_default_roles(current_user: User = None):
         
         
         read_only_privs = AccessPrivileges.get_privileges(search_term="view")
-        read_only_privs.extend([AccessPrivileges.USERS_UPDATE_USER,AccessPrivileges.USERS_DEACTIVATE_USER])
+        read_only_privs.extend([AccessPrivileges.USERS_UPDATE_USER, AccessPrivileges.USERS_DEACTIVATE_USER])
 
         roles = [
             RoleRequest(
@@ -74,6 +74,10 @@ async def create_default_roles(current_user: User = None):
             RoleRequest(
                 name = "read_only",
                 privileges = read_only_privs
+            ),
+            RoleRequest(
+                name = "coder",
+                privileges = [AccessPrivileges.PCVA_CODE_VA, AccessPrivileges.PCVA_VIEW_VA_RECORDS]
             )
         ]
         for role in roles:
