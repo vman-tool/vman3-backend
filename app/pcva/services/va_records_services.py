@@ -351,14 +351,13 @@ async def get_coders(
             LET coder_role = (
                 FOR doc IN {db_collections.ROLES}
                 FILTER @coders_privileges ALL IN doc.privileges AND doc.is_deleted == false
-                LIMIT 1
-                RETURN doc
-            )[0]
+                RETURN doc.uuid
+            )
 
 
             LET coders_assigned = (
                 FOR user_role IN {db_collections.USER_ROLES}
-                FILTER user_role.role == coder_role.uuid AND user_role.is_deleted == false
+                FILTER user_role.role IN coder_role AND user_role.is_deleted == false
                 LIMIT @offset, @limit
                 RETURN user_role.user
             )
