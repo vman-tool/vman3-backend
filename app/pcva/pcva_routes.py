@@ -34,6 +34,7 @@ from app.pcva.services.va_records_services import (
     assign_va_service,
     code_assigned_va_service,
     get_coded_va_service,
+    get_coders,
     get_concordants_va_service,
     get_form_questions_service,
     get_va_assignment_service,
@@ -209,6 +210,26 @@ async def update_icd10(
         return await update_icd10_codes(codes, user, db)
     except:
         raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed update icd10 codes")
+
+@pcva_router.get("/coders", status_code=status.HTTP_200_OK)
+async def get_assigned_va(
+    paging: Optional[str] = Query(None, alias="paging"),
+    page_number: Optional[int] = Query(1, alias="page_number"),
+    limit: Optional[int] = Query(10, alias="limit"),
+    include_deleted: Optional[str] = Query(None, alias="include_deleted"),
+    current_user: User = Depends(get_current_user),
+    db: StandardDatabase = Depends(get_arangodb_session)) -> Union[List[ResponseMainModel], Any]:
+    try:
+        return await get_coders(
+            paging = paging,
+            page_number = page_number,
+            limit = limit,
+            include_deleted = include_deleted,
+            current_user = current_user,
+            db = db
+        )
+    except Exception as e:
+         raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to get coders: {e}")
 
 @pcva_router.get("/va-assignments", status_code=status.HTTP_200_OK)
 async def get_assigned_va(

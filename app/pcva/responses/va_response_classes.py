@@ -1,4 +1,4 @@
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union
 from fastapi import HTTPException
 from pydantic import BaseModel
 from arango.database import StandardDatabase
@@ -176,3 +176,12 @@ class VAQuestionResponseClass(BaseModel):
     selectMultiple: Optional[bool] = None
     label: str
     options: Optional[List[Option]] = None
+
+
+class CoderResponseClass(BaseModel):
+    uuid: str
+    name: str
+    email: Union[str, None] = None
+    phone: Union[str, None] = None
+    assigned_va: Union[int, None] = None
+    coded_va: Union[int, None] = None
