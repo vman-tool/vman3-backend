@@ -544,6 +544,7 @@ class InterVA5:
             if nanmax(prob_temp) < 0.4:
                 cause1 = lik1 = cause2 = lik2 = cause3 = lik3 = " "
                 indet = 100
+                cause1 = "Undeterminant"        # modified by Isaac, Dec 13th, 2024
             if nanmax(prob_temp) >= 0.4:
                 max1_loc = where(prob_temp == nanmax(prob_temp))[0][0]
                 lik1 = round(nanmax(prob_temp) * 100)
