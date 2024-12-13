@@ -9,7 +9,7 @@ from fastapi import BackgroundTasks, HTTPException, UploadFile, status
 from pydantic import BaseModel
 
 from app.shared.configs.constants import db_collections
-from app.shared.configs.models import Pager, ResponseMainModel
+from app.shared.configs.models import Pager, ResponseMainModel, VManBaseModel
 from app.shared.configs.security import (
     generate_token,
     get_token_payload,
@@ -543,7 +543,7 @@ async def get_user_roles(user_uuid: str  = None, current_user: User = None, db: 
         if not user_exists:
             raise HTTPException(status_code=404, detail="User does not exist.")
 
-        user_roles_result = await UserRole.run_custom_query(query=query, bind_vars=bind_vars, db=db)
+        user_roles_result = await VManBaseModel.run_custom_query(query=query, bind_vars=bind_vars, db=db)
         if user_roles_result:
             user_roles = [user_role for user_role in user_roles_result]
             user_role = user_roles[0]
