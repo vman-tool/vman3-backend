@@ -6,19 +6,20 @@ from fastapi import HTTPException
 
 from app.pcva.models.pcva_models import ICD10, AssignedVA, CodedVA
 from app.pcva.requests.va_request_classes import AssignVARequestClass, CodeAssignedVARequestClass
-from app.pcva.responses.va_response_classes import AssignVAResponseClass, CodedVAResponseClass, VAQuestionResponseClass
-from app.shared.configs.constants import db_collections
+from app.pcva.responses.va_response_classes import AssignVAResponseClass, CodedVAResponseClass, CoderResponseClass, VAQuestionResponseClass
+from app.shared.configs.constants import AccessPrivileges, db_collections
 from app.shared.utils.database_utilities import add_query_filters, record_exists, replace_object_values
 from app.users.models.user import User
 from app.pcva.utilities.va_records_utils import format_va_record
-from app.shared.configs.models import Pager, ResponseMainModel
+from app.shared.configs.models import Pager, ResponseMainModel, VManBaseModel
 from app.odk.models.questions_models import VA_Question
 from app.settings.services.odk_configs import fetch_odk_config
+from app.users.models.role import Role, UserRole
    
 
 async def assign_va_service(va_records: AssignVARequestClass, user: User,  db: StandardDatabase = None):
     try:
-        if not va_records.coder and not va_records.new_coder:
+        if not va_records.coder and not va_backend.records.new_coder:
             raise HTTPException(status_code=400, detail=f"Coder or new coder must be specified")
         
         if va_records.coder or va_records.new_coder:
@@ -167,7 +168,7 @@ async def get_va_assignment_service(paging: bool, page_number: int = None, limit
 
 
 
-        query_result = await AssignedVA.run_custom_query(query=query, bind_vars=bind_vars, db=db)
+        query_result = await VManBaseModel.run_custom_query(query=query, bind_vars=bind_vars, db=db)
         assigned_vas = query_result.next()
         assignments = []
         for assignment in assigned_vas['assignments']:
@@ -308,7 +309,7 @@ async def get_concordants_va_service(user, db: StandardDatabase = None):
         "user_id": user["uuid"]
     }
     
-    codedVAs = await CodedVA.run_custom_query(query, bind_vars, db)
+    codedVAs = await VManBaseModel.run_custom_query(query, bind_vars, db)
     
     formattedCodedVA = []
     for codedVA_group in codedVAs:
@@ -327,3 +328,79 @@ async def get_form_questions_service(filters: Dict = None, db: StandardDatabase 
     
      
     return ResponseMainModel(data=questions, message="Questions fetched successfully", total=len(questions))
+
+
+async def get_coders(
+        paging: int = None,
+        page_number: int = None,
+        limit: int = None,
+        include_deleted: bool = False,
+        current_user: User = None,
+        db: StandardDatabase = None
+):
+    try:
+        coders_privileges = [
+            AccessPrivileges.PCVA_VIEW_VA_RECORDS,
+            AccessPrivileges.PCVA_CODE_VA
+        ]
+
+        offset = (page_number - 1) * limit if paging else 0
+        
+        query = f"""
+
+            LET coder_role = (
+                FOR doc IN {db_collections.ROLES}
+                FILTER @coders_privileges ALL IN doc.privileges AND doc.is_deleted == false
+                RETURN doc.uuid
+            )
+
+
+            LET coders_assigned = (
+                FOR user_role IN {db_collections.USER_ROLES}
+                FILTER user_role.role IN coder_role AND user_role.is_deleted == false
+                LIMIT @offset, @limit
+                RETURN user_role.user
+            )
+
+            LET coders = (
+                FOR user IN {db_collections.USERS}
+                    FILTER user.uuid IN coders_assigned AND user.is_deleted == false
+                    LET assigned_va_count = (
+                        FOR va IN {db_collections.ASSIGNED_VA}
+                            FILTER va.coder == user.uuid AND va.is_deleted == false
+                            COLLECT WITH COUNT INTO count
+                        RETURN count
+                    )[0]
+                    LET coded_va_count = (
+                        FOR va IN {db_collections.CODED_VA}
+                            FILTER va.created_by == user.uuid AND va.is_deleted == false
+                            COLLECT assigned_va = va.assigned_va WITH COUNT INTO count
+                        RETURN count
+                    )[0]
+                    RETURN MERGE (user, {{
+                        assigned_va: assigned_va_count,
+                        coded_va: coded_va_count
+                    }})
+            )
+
+            RETURN coders
+        """
+        
+        params = {
+            "coders_privileges": coders_privileges,
+            "limit": limit,
+            "offset": offset
+        }
+
+        coders = await VManBaseModel.run_custom_query(
+            query = query,
+            bind_vars = params,
+            db = db
+        )
+        
+        coders_data = [CoderResponseClass(**coder) for coder in coders.next()]
+
+        return ResponseMainModel(data = coders_data, total=len(coders_data), message="Coder fetched successfully!", pager=Pager(page=page_number, limit=limit))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get coders: {e}")
+
