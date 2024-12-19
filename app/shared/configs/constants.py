@@ -23,6 +23,7 @@ class db_collections():
     CCVA_RESULTS: str = 'ccva_results'
     CCVA_GRAPH_RESULTS: str = 'ccva_graph_results'
     CCVA_ERRORS:str = 'ccva_errors'
+    CCVA_ERRORS_CORRECTIONS:str = 'ccva_errors_corrections'
 
 class Special_Constants():
     UPLOAD_FOLDER: str = '/uploads'
@@ -78,6 +79,7 @@ collections_with_indexes = {
         
     ],
     db_collections.CCVA_ERRORS: [],
+    db_collections.CCVA_ERRORS_CORRECTIONS: []
 }
 
 class AccessPrivileges():

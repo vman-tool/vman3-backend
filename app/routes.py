@@ -1,19 +1,17 @@
-from fastapi import APIRouter, HTTPException
 import os
-from pathlib import Path
 
+from fastapi import APIRouter
+from fastapi.staticfiles import StaticFiles
+
+from app.ccva import ccva_routes
+from app.data_quality import data_quality_routes
 from app.odk import odk_routes
 from app.pcva import pcva_routes
-from app.ccva import ccva_routes
 from app.records import records_routes
 from app.settings import settings_routes
+from app.shared.configs.constants import Special_Constants
 from app.statistics import statistics_routes
 from app.users import users_routes
-from app.ccva import ccva_routes
-from fastapi.staticfiles import StaticFiles
-from decouple import config
-
-from app.shared.configs.constants import Special_Constants
 
 
 
@@ -37,6 +35,6 @@ def create_main_router():
     main_router.include_router(settings_routes.settings_router)
     main_router.include_router(settings_routes.settings_router)
     main_router.include_router(ccva_routes.ccva_router)
-
+    main_router.include_router(data_quality_routes.data_quality_router)
     return main_router
     
