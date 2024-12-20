@@ -105,7 +105,7 @@ async def get_icd10_categories(
 async def create_icd10_categories(
     categories: List[ICD10CategoryRequestClass],
     user: User = Depends(get_current_user),
-    db: StandardDatabase = Depends(get_arangodb_session)) -> List[ICD10CategoryResponseClass]:
+    db: StandardDatabase = Depends(get_arangodb_session)) -> ResponseMainModel:
 
     try:
         return await create_icd10_categories_service(categories, user, db)
@@ -121,7 +121,7 @@ async def create_icd10_categories(
 async def update_icd10_categories(
     categories: List[ICD10CategoryUpdateClass],
     user: User = Depends(get_current_user),
-    db: StandardDatabase = Depends(get_arangodb_session)) -> List[ICD10CategoryResponseClass]:
+    db: StandardDatabase = Depends(get_arangodb_session)) -> ResponseMainModel:
     try:
         return await update_icd10_categories_service(categories, user, db)
     except:
@@ -136,7 +136,7 @@ async def upload_file(
     file: UploadFile = File(),
     user: User = Depends(get_current_user),
     db: StandardDatabase = Depends(get_arangodb_session)
-    ):
+    ) -> ResponseMainModel:
     try:
         file_extension = file.filename.split(".")[-1].lower()
 
@@ -168,7 +168,7 @@ async def get_icd10(
     page_number: Optional[int] = Query(1, alias="page_number"),
     limit: Optional[int] = Query(10, alias="limit"),
     include_deleted: Optional[str] = Query(None, alias="include_deleted"),
-    db: StandardDatabase = Depends(get_arangodb_session)) -> Union[List[ICD10ResponseClass], Any]:
+    db: StandardDatabase = Depends(get_arangodb_session)) -> ResponseMainModel:
 
     try:
         allowPaging = False if paging is not None and paging.lower() == 'false' else True
@@ -190,7 +190,7 @@ async def get_icd10(
 async def create_icd10(
     codes: List[ICD10CreateRequestClass],
     user: User = Depends(get_current_user),
-    db: StandardDatabase = Depends(get_arangodb_session)) -> List[ICD10ResponseClass]:
+    db: StandardDatabase = Depends(get_arangodb_session)) -> ResponseMainModel:
 
     try:
         return await create_icd10_codes(codes, user, db)
@@ -205,7 +205,7 @@ async def create_icd10(
 async def update_icd10(
     codes: List[ICD10UpdateRequestClass],
     user: User = Depends(get_current_user),
-    db: StandardDatabase = Depends(get_arangodb_session)) -> List[ICD10ResponseClass]:
+    db: StandardDatabase = Depends(get_arangodb_session)) -> ResponseMainModel:
     try:
         return await update_icd10_codes(codes, user, db)
     except:
@@ -218,7 +218,7 @@ async def get_assigned_va(
     limit: Optional[int] = Query(10, alias="limit"),
     include_deleted: Optional[str] = Query(None, alias="include_deleted"),
     current_user: User = Depends(get_current_user),
-    db: StandardDatabase = Depends(get_arangodb_session)) -> Union[List[ResponseMainModel], Any]:
+    db: StandardDatabase = Depends(get_arangodb_session)) -> ResponseMainModel:
     try:
         return await get_coders(
             paging = paging,
@@ -240,7 +240,7 @@ async def get_assigned_va(
     va_id: Optional[str] = Query(None, alias="va_id"),
     coder: Optional[str] = Query(None, alias="coder"),
     current_user: User = Depends(get_current_user),
-    db: StandardDatabase = Depends(get_arangodb_session)) -> Union[List[ResponseMainModel], Any]:
+    db: StandardDatabase = Depends(get_arangodb_session)) -> ResponseMainModel:
 
     try:
         filters = {}
