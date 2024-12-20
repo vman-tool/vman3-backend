@@ -77,6 +77,17 @@ async def create_icd10_codes(codes, user, db: StandardDatabase = None) -> Respon
             code = code.model_dump()
             code['created_by']=user['uuid']
             code.pop("uuid") if 'uuid' in code else code
+            categories = await ICD10Category.get_many(
+                filters={
+                    "or_conditions": [
+                        {"name": code.get("category", "")}, 
+                        {"uuid": code.get("category", "")}
+                    ]
+                }, db=db)
+            if(len(categories) > 0):
+                code["category"] = categories[0]['uuid']
+            else:
+                raise HTTPException(status_code=400, detail="Category not found.")
             saved_code = await ICD10(**code).save(db)
             created_code = await ICD10ResponseClass.get_structured_code(icd10_code = saved_code, db = db)
             created_codes.append(created_code)
@@ -114,7 +125,7 @@ async def create_or_icd10_codes_from_file(codes, user, db: StandardDatabase):
                 
                 code["category"] = category.get("uuid", "")
 
-                existing_code = await ICD10.get_many(include_deleted=False, filters={"name": code.get("name", "")}, db = db)
+                existing_code = await ICD10.get_many(include_deleted=False, filters={"code": code.get("code", "")}, db = db)
                 if len(existing_code) > 0:
                     existing_code = existing_code[0]
                     code = replace_object_values(code, existing_code)

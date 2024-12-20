@@ -86,7 +86,7 @@ async def get_icd10_categories(
     page_number: Optional[int] = Query(1, alias="page_number"),
     limit: Optional[int] = Query(10, alias="limit"),
     include_deleted: Optional[str] = Query(None, alias="include_deleted"),
-    db: StandardDatabase = Depends(get_arangodb_session)) -> Union[List[ICD10CategoryResponseClass], Any]:
+    db: StandardDatabase = Depends(get_arangodb_session)) -> ResponseMainModel:
 
     try:
         allowPaging = False if paging is not None and paging.lower() == 'false' else True
