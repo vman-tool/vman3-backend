@@ -277,9 +277,10 @@ class VManBaseModel(BaseModel):
         bind_vars = {}
         aql_filters = []
 
-        aql_filters, vars = add_query_filters(filters, bind_vars)
+        aql_filters, vars = add_query_filters(filters, bind_vars) if filters is not None else (None, None)
 
-        bind_vars.update(vars)
+        if vars:
+            bind_vars.update(vars)
         
         if not include_deleted:
             aql_filters.append("doc.is_deleted == false")
