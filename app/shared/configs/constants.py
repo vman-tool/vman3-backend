@@ -73,6 +73,7 @@ collections_with_indexes = {
     db_collections.SYSTEM_CONFIGS: [],
     db_collections.VA_QUESTIONS: [],
     db_collections.CCVA_RESULTS: [
+             {"fields": ["CAUSE1"], "type": "persistent", "name": "cause_idx"}
         #   {"fields": ["ID"], "unique": True, "type": "persistent", "name": "idx_interva5_id"},
           ],
     db_collections.CCVA_GRAPH_RESULTS: [
