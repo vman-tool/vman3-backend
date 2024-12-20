@@ -25,16 +25,15 @@ async def create_icd10_categories_service(categories, user, db: StandardDatabase
 
 async def get_icd10_categories_service(paging: bool = True,  page_number: int = 1, filters: Dict= {}, limit: int = 10, include_deleted: bool = None, db: StandardDatabase = None) -> ResponseMainModel:
     try:
-        data = [
-            await ICD10CategoryResponseClass.get_structured_category(icd10_category = icd10_category, db = db) 
-            for icd10_category in await ICD10Category.get_many(
-                paging = paging, 
-                page_number = page_number, 
-                limit = limit, 
-                filters=filters,
-                include_deleted = include_deleted,
-                db = db
-            )]
+        categoriesData = await ICD10Category.get_many(
+            paging = paging, 
+            page_number = page_number, 
+            limit = limit, 
+            filters=filters,
+            include_deleted = include_deleted,
+            db = db
+        )
+        data = [await ICD10CategoryResponseClass.get_structured_category(icd10_category = icd10_category, db = db) for icd10_category in categoriesData]
         count_data = await ICD10Category.count(filters=filters, include_deleted=include_deleted, db=db)
         return ResponseMainModel(data=data, total=count_data, message="ICD10 Categories fetched successfully", pager=Pager(page=page_number, limit=limit))
     except ArangoError as e:
