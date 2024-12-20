@@ -15,9 +15,9 @@ async def create_icd10_categories_service(categories, user, db: StandardDatabase
         created_categories = []
         for category in categories:
             category = category.model_dump()
-            category['created_by']=user['uuid']
+            category['created_by']=user.get('uuid', "")
             saved_category = await ICD10Category(**category).save(db)
-            created_category = ICD10CategoryResponseClass.get_structured_category(icd10_category = saved_category, db = db)
+            created_category = await ICD10CategoryResponseClass.get_structured_category(icd10_category = saved_category, db = db)
             created_categories.append(created_category)
         return ResponseMainModel(data=created_categories, message="Categories created successfully", total=len(created_categories))
     except ArangoError as e:
