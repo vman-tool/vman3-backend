@@ -66,6 +66,7 @@ class ICD10CategoryResponseClass(BaseResponseModel):
         return cls(**populated_category_data)
 
 class ICD10ResponseClass(BaseResponseModel):
+    code: str
     name: str
     created_at: str
     updated_at: Optional[str]
