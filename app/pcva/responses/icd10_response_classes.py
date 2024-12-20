@@ -1,10 +1,10 @@
-from typing import Optional
+from typing import Optional, Union
 
 from arango.database import StandardDatabase
 from pydantic import BaseModel
 
 from app.shared.configs.constants import db_collections
-from app.shared.configs.models import BaseResponseModel
+from app.shared.configs.models import BaseResponseModel, ResponseUser
 from app.shared.utils.response import populate_user_fields
 
 
@@ -29,9 +29,10 @@ class ICD10CategoryFieldClass(BaseModel):
         return cls(**category_data)
 
 class ICD10CategoryResponseClass(BaseResponseModel):
+    uuid: str
     name: str
-    created_at: str
-    updated_at: str
+    created_by: Union[ResponseUser, None] | None
+    updated_by: Union[ResponseUser, None] | None
 
     @classmethod
     def get_icd10_categories(cls, db: StandardDatabase = None):
@@ -61,8 +62,7 @@ class ICD10CategoryResponseClass(BaseResponseModel):
             bind_vars = {'icd10_category_uuid': icd10_category_uuid}
             cursor = db.aql.execute(query, bind_vars=bind_vars)
             category_data = cursor.next()
-
-        populated_category_data = await populate_user_fields(category_data, db)
+        populated_category_data = await populate_user_fields(data = category_data, db = db)
         return cls(**populated_category_data)
 
 class ICD10ResponseClass(BaseResponseModel):
