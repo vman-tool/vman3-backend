@@ -89,7 +89,7 @@ async def get_icd10_categories(
     db: StandardDatabase = Depends(get_arangodb_session)) -> ResponseMainModel:
 
     try:
-        allowPaging = paging if paging is not None and paging.lower() == 'false' else True
+        allowPaging = paging if paging is not None else True
         include_deleted = False if include_deleted is not None and include_deleted.lower() == 'false' else True
         return await get_icd10_categories_service(
             paging = allowPaging, 
