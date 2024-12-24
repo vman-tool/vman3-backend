@@ -65,7 +65,7 @@ async def get_icd10_codes(paging: bool = True,  page_number: int = 1, limit: int
                 db = db
             )]
         count_data = await ICD10.count(filters=filters, include_deleted=include_deleted, db=db)
-        return ResponseMainModel(data=data, total=count_data, message="ICD10 fetched successfully", pager=Pager(page=page_number, limit=limit))
+        return ResponseMainModel(data=data, total=count_data, message="ICD10 fetched successfully", pager=Pager(page=page_number, limit=limit) if paging else None)
     except ArangoError as e:
         raise HTTPException(status_code=500, detail=f"Failed to get codes: {e}")
 
