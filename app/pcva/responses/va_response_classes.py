@@ -7,6 +7,7 @@ from app.shared.configs.models import BaseResponseModel, ResponseUser
 from app.shared.utils.response import populate_user_fields
 from app.shared.configs.constants import db_collections
 from app.users.models.user import User
+from app.pcva.models.pcva_models import FetalOrInfant, FrameA, FrameB, MannerOfDeath, PlaceOfOccurrence, PregnantDeceased
 
 
 class ICD10FieldClass(BaseModel):
@@ -160,6 +161,49 @@ class CodedVAResponseClass(BaseResponseModel):
         if cod]
         
         populated_coded_va_data['assignedVA'] = await AssignedVAFieldClass.get_structured_assignment_by_vaId(coded_va_data['assigned_va'],coder = populated_coded_va_data.get('created_by').uuid, db = db)
+        return cls(**populated_coded_va_data)
+    
+class PCVAResultsResponseClass(BaseModel):
+    assigned_va: str
+    frameA: Union[FrameA, Dict, None] = None
+    frameB: Union[FrameB, Dict, None] = None
+    mannerOfDeath: Union[MannerOfDeath, Dict, None] = None
+    placeOfOccurrence: Union[PlaceOfOccurrence, Dict, None] = None
+    fetalOrInfant: Union[FetalOrInfant, Dict, None] = None
+    pregnantDeceased: Union[PregnantDeceased, Dict, None] = None
+    clinical_notes: Union[str, None] = None
+
+    @classmethod
+    async def get_structured_codedVA(cls, pcva_result_uuid, pcva_result = None, db: StandardDatabase = None):
+        coded_va_data = pcva_result
+        if not coded_va_data:
+            query = f"""
+            FOR coded_va IN {db_collections.PCVA_RESULTS}
+                FILTER coded_va.uuid == @coded_va
+                RETURN coded_va
+            """
+            bind_vars = {'coded_va': pcva_result_uuid}
+            cursor = db.aql.execute(query, bind_vars=bind_vars)
+            coded_va_data = cursor.next()
+        
+        populated_coded_va_data = await populate_user_fields(coded_va_data, db = db)
+
+        frameA = coded_va_data.get('frameA', None)
+
+        frameA['a'] = await ICD10FieldClass.get_icd10(frameA.get("a", None), db)
+        
+        frameA['b'] = await ICD10FieldClass.get_icd10(frameA.get("b", None), db)
+        
+        frameA['c'] = await ICD10FieldClass.get_icd10(frameA.get("c", None), db)
+        
+        frameA['d'] = await ICD10FieldClass.get_icd10(frameA.get("d", None), db)
+        
+        frameA['contributories'] = [await ICD10FieldClass.get_icd10(cod, db) for cod in frameA.get("contributories", None) or [] 
+        if cod]
+
+        coded_va_data['frameA'] = frameA
+        
+        populated_coded_va_data['assigned_va'] = await AssignedVAFieldClass.get_structured_assignment_by_vaId(coded_va_data['assigned_va'], coder = coded_va_data.get('created_by', None), db = db)
         return cls(**populated_coded_va_data)
     
 
