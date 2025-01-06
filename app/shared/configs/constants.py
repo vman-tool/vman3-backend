@@ -15,7 +15,7 @@ class db_collections():
     ICD10_CATEGORY: str = 'icd10_category'
     ICD10: str = 'icd10'
     ASSIGNED_VA: str = 'assigned_va'
-    CODED_VA: str = 'coded_va'
+    PCVA_RESULTS: str = 'pcva_results'
     DOWNLOAD_TRACKER: str   ='download_tracker'
     DOWNLOAD_PROCESS_TRACKER: str   ='download_process_tracker'
     SYSTEM_CONFIGS: str = 'system_configs'
@@ -44,10 +44,13 @@ collections_with_indexes = {
          {"fields": ["is_active"], "type": "persistent", "name": "u_is_active"}
     ],
     db_collections.ROLES: [
-        {"fields": ["is_deleted"], "type": "persistent", "name": "r_is_active"}
+        {"fields": ["is_deleted"], "type": "persistent", "name": "r_is_active"},
+        {"fields": ["name"], "unique": True, "type": "persistent", "name": "role_name"}
     ],
     db_collections.USER_ROLES: [
-        {"fields": ["is_deleted"], "type": "persistent", "name": "ur_is_active"}
+        {"fields": ["is_deleted"], "type": "persistent", "name": "ur_is_active"},
+        {"fields": ["user"], "unique": False, "type": "persistent", "name": "role_user"},
+        {"fields": ["role"], "unique": False, "type": "persistent", "name": "role"}
     ],
     db_collections.USER_TOKENS: [
         {"fields": ["is_deleted"], "type": "persistent", "name": "ut_is_active"}
@@ -56,7 +59,8 @@ collections_with_indexes = {
         {"fields": ["is_deleted"], "type": "persistent", "name": "ucl_is_active"}
     ],
     db_collections.ICD10_CATEGORY: [
-        {"fields": ["is_deleted"], "type": "persistent", "name": "ic_is_active"}
+        {"fields": ["is_deleted"], "type": "persistent", "name": "ic_is_active"},
+        {"fields": ["name"], "unique": True, "type": "persistent", "name": "category_name"}
     ],
     db_collections.ICD10: [
         {"fields": ["is_deleted"], "type": "persistent", "name": "i_is_active"}
@@ -64,8 +68,9 @@ collections_with_indexes = {
     db_collections.ASSIGNED_VA: [
         {"fields": ["is_deleted"], "type": "persistent", "name": "av_is_active"}
     ],
-    db_collections.CODED_VA: [
-        {"fields": ["is_deleted"], "type": "persistent", "name": "cv_is_active"}
+    db_collections.PCVA_RESULTS: [
+        {"fields": ["is_deleted"], "type": "persistent", "name": "cv_is_active"},
+        {"fields": ["va"], "unique": False, "type": "persistent", "name": "va_record"}
     ],
     db_collections.DOWNLOAD_TRACKER: [],
     db_collections.DOWNLOAD_PROCESS_TRACKER: [],

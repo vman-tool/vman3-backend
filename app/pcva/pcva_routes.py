@@ -213,10 +213,10 @@ async def update_icd10(
 
 @pcva_router.get("/coders", status_code=status.HTTP_200_OK)
 async def get_assigned_va(
-    paging: Optional[str] = Query(None, alias="paging"),
+    paging: Optional[bool] = Query(False, alias="paging"),
     page_number: Optional[int] = Query(1, alias="page_number"),
     limit: Optional[int] = Query(10, alias="limit"),
-    include_deleted: Optional[str] = Query(None, alias="include_deleted"),
+    include_deleted: Optional[bool] = Query(False, alias="include_deleted"),
     current_user: User = Depends(get_current_user),
     db: StandardDatabase = Depends(get_arangodb_session)) -> ResponseMainModel:
     try:
