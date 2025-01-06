@@ -357,7 +357,7 @@ async def get_coders(
 
             LET coders_assigned = (
                 FOR user_role IN {db_collections.USER_ROLES}
-                FILTER user_role.role IN coder_role AND user_role.is_deleted == false
+                FILTER user_role.role IN coder_role AND user_role.is_deleted == @include_deleted
                 LIMIT @offset, @limit
                 RETURN user_role.user
             )
@@ -372,7 +372,7 @@ async def get_coders(
                         RETURN count
                     )[0]
                     LET coded_va_count = (
-                        FOR va IN {db_collections.CODED_VA}
+                        FOR va IN {db_collections.PCVA_RESULTS}
                             FILTER va.created_by == user.uuid AND va.is_deleted == false
                             COLLECT assigned_va = va.assigned_va WITH COUNT INTO count
                         RETURN count
@@ -388,6 +388,7 @@ async def get_coders(
         
         params = {
             "coders_privileges": coders_privileges,
+            "include_deleted": include_deleted,
             "limit": limit,
             "offset": offset
         }
@@ -400,7 +401,7 @@ async def get_coders(
         
         coders_data = [CoderResponseClass(**coder) for coder in coders.next()]
 
-        return ResponseMainModel(data = coders_data, total=len(coders_data), message="Coder fetched successfully!", pager=Pager(page=page_number, limit=limit))
+        return ResponseMainModel(data = coders_data, total=len(coders_data), message="Coders fetched successfully!", pager=Pager(page=page_number, limit=limit))
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to get coders: {e}")
 
