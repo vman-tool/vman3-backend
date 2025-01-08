@@ -43,7 +43,7 @@ class AssignedVAFieldClass(BaseModel):
     async def get_structured_assignment_by_vaId(cls, vaId = None, coder = None, db: StandardDatabase = None):
         
         assignment_data = {}
-        if vaId:
+        if vaId and coder:
             query = f"""
             FOR assignment IN {db_collections.ASSIGNED_VA}
                 FILTER assignment.vaId == @vaId AND assignment.coder == @coder
@@ -53,11 +53,12 @@ class AssignedVAFieldClass(BaseModel):
                 'vaId': vaId,
                 'coder': coder
             }
+            print(bind_vars)
             cursor = db.aql.execute(query, bind_vars=bind_vars)
             assignment_data = cursor.next()
         
         if len(assignment_data.items()) > 0:
-            populated_code_data = await populate_user_fields(assignment_data, ['coder'], db = db)
+            populated_code_data = await populate_user_fields(data = assignment_data, specific_fields = ['coder'], db = db)
             return cls(**populated_code_data)
         return cls()
 
@@ -160,7 +161,7 @@ class CodedVAResponseClass(BaseResponseModel):
         populated_coded_va_data['contributory_cod'] = [await ICD10FieldClass.get_icd10(cod, db) for cod in coded_va_data.get("contributory_cod", []) 
         if cod]
         
-        populated_coded_va_data['assignedVA'] = await AssignedVAFieldClass.get_structured_assignment_by_vaId(coded_va_data['assigned_va'],coder = populated_coded_va_data.get('created_by').uuid, db = db)
+        populated_coded_va_data['assignedVA'] = await AssignedVAFieldClass.get_structured_assignment_by_vaId(vaId = coded_va_data['assigned_va'],coder = populated_coded_va_data.get('created_by').uuid, db = db)
         return cls(**populated_coded_va_data)
     
 class PCVAResultsResponseClass(BaseModel):
@@ -174,7 +175,7 @@ class PCVAResultsResponseClass(BaseModel):
     clinical_notes: Union[str, None] = None
 
     @classmethod
-    async def get_structured_codedVA(cls, pcva_result_uuid, pcva_result = None, db: StandardDatabase = None):
+    async def get_structured_codedVA(cls, pcva_result_uuid = None, pcva_result = None, db: StandardDatabase = None):
         coded_va_data = pcva_result
         if not coded_va_data:
             query = f"""
@@ -185,6 +186,10 @@ class PCVAResultsResponseClass(BaseModel):
             bind_vars = {'coded_va': pcva_result_uuid}
             cursor = db.aql.execute(query, bind_vars=bind_vars)
             coded_va_data = cursor.next()
+
+        # Restructure VA document assigned and coded... (Commented as a reserve code)
+        
+        # coded_va_data['assigned_va'] = await AssignedVAFieldClass.get_structured_assignment_by_vaId(vaId = coded_va_data['assigned_va'], coder = coded_va_data.get('created_by', None), db = db)
         
         populated_coded_va_data = await populate_user_fields(coded_va_data, db = db)
 
@@ -203,7 +208,6 @@ class PCVAResultsResponseClass(BaseModel):
 
         coded_va_data['frameA'] = frameA
         
-        populated_coded_va_data['assigned_va'] = await AssignedVAFieldClass.get_structured_assignment_by_vaId(coded_va_data['assigned_va'], coder = coded_va_data.get('created_by', None), db = db)
         return cls(**populated_coded_va_data)
     
 

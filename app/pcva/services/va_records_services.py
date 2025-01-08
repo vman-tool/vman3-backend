@@ -6,7 +6,7 @@ from fastapi import HTTPException
 
 from app.pcva.models.pcva_models import ICD10, AssignedVA, CodedVA, PCVAResults
 from app.pcva.requests.va_request_classes import AssignVARequestClass, CodeAssignedVARequestClass, PCVAResultsRequestClass
-from app.pcva.responses.va_response_classes import AssignVAResponseClass, CodedVAResponseClass, CoderResponseClass, VAQuestionResponseClass
+from app.pcva.responses.va_response_classes import AssignVAResponseClass, CodedVAResponseClass, CoderResponseClass, PCVAResultsResponseClass, VAQuestionResponseClass
 from app.shared.configs.constants import AccessPrivileges, db_collections
 from app.shared.utils.database_utilities import add_query_filters, record_exists, replace_object_values
 from app.users.models.user import User
@@ -82,14 +82,6 @@ async def assign_va_service(va_records: AssignVARequestClass, user: User,  db: S
 async def get_va_assignment_service(paging: bool, page_number: int = None, limit: int = None, include_deleted: bool = None, filters: Dict = {}, user = None, db: StandardDatabase = None):
     
     try:
-        # assigned_vas = await AssignedVA.get_many(
-        #     paging = paging, 
-        #     page_number = page_number, 
-        #     limit = limit, 
-        #     filters = filters, 
-        #     include_deleted = include_deleted, 
-        #     db = db
-        # )
         config = await fetch_odk_config(db)
 
         filters.update({
@@ -197,78 +189,108 @@ async def code_assigned_va_service(coded_va: PCVAResultsRequestClass = None, cur
                 raise HTTPException(status_code=404, detail="VA does not exist.")
             if not is_user_assigned:
                 raise HTTPException(status_code=400, detail="VA is not assigned to this user.")
-            if not coded_va.clinical_notes:
-                raise HTTPException(status_code=400, detail="Clinical Notes must be written.")
+            
+            # Check if clinical notes are available (reserve code)
+            # if not coded_va.clinical_notes:
+            #     raise HTTPException(status_code=400, detail="Clinical Notes must be written.")
             
             # 2. Check all causes of dealths exists and grab their uuid values
             in_conditions = {
                 "uuid": []
             }
+
+            icdcount = 0
             if coded_va.frameA.a:
                 in_conditions["uuid"].append(coded_va.frameA.a)
+                icdcount += 1
             if coded_va.frameA.b:
                 in_conditions["uuid"].append(coded_va.frameA.b)
+                icdcount += 1
             if coded_va.frameA.c:
                 in_conditions["uuid"].append(coded_va.frameA.c)
+                icdcount += 1
             if coded_va.frameA.d:
                 in_conditions["uuid"].append(coded_va.frameA.d)
+                icdcount += 1
 
-            for contributory in coded_va.frameA.constributories:
-                if contributory:
-                    in_conditions["uuid"].append(contributory)
+            if coded_va.frameA.contributories:
+                for contributory in coded_va.frameA.contributories:
+                    if contributory:
+                        in_conditions["uuid"].append(contributory)
+                        icdcount += 1
 
             in_conditions = {field: values for field, values in in_conditions.items() if values}
             
             icd10_query_filters = {
-                "in_conditions": in_conditions
+                "in_conditions": [in_conditions]
             }
                 
-            # 3. Confirm existence of contributory codes before saving them as comma separated values
-            icd10_codes = []
-            if in_conditions["uuid"]:
-                icd10_codes = await ICD10.get_many(paging = False, filters=icd10_query_filters, db = db)
+            if icdcount == 0:
+                raise HTTPException(status_code=400, detail="Kindly make sure to code this VA before submitting.")
+            
+            icd10_codes_count = await ICD10.count(filters=icd10_query_filters, db = db)
+            
+            
+            if icd10_codes_count != icdcount:
+                raise HTTPException(status_code=400, detail="Some ICD 10 Codes haven't been added in the system configurations.")
+            
 
-            # 4. Check if the record needs to be updated or inserted
-            existing_coded_va = await PCVAResults.get_many(
-                paging = False, 
-                filters = {
-                    "assigned_va": coded_va.assigned_va,
-                    "created_by": current_user.uuid
-                },
-                db = db
-            )
+            # # 4. Check if the record needs to be updated or inserted (Reserved code)
+            # existing_coded_va = await PCVAResults.get_many(
+            #     paging = False, 
+            #     filters = {
+            #         "assigned_va": coded_va.assigned_va,
+            #         "created_by": current_user.uuid
+            #     },
+            #     db = db
+            # )
 
-            if existing_coded_va and len(existing_coded_va) == 1:
-                updated_va = replace_object_values(coded_va.model_dump(), existing_coded_va[0], force = True)
-                saved_coded_va = await PCVAResults(**updated_va).update(current_user.uuid, db)
-            else:
-                coded_va_object = coded_va.model_dump()
-                coded_va_object["created_by"] = current_user.uuid
-                saved_coded_va = await PCVAResults(**coded_va_object).save(db)
-            return await CodedVAResponseClass.get_structured_codedVA(coded_va = saved_coded_va, db = db)
+            # if existing_coded_va and len(existing_coded_va) == 1:
+            #     updated_va = replace_object_values(coded_va.model_dump(), existing_coded_va[0], force = True)
+            #     saved_coded_va = await PCVAResults(**updated_va).update(current_user.uuid, db)
+            # else:
+            coded_va_object = coded_va.model_dump()
+            coded_va_object["created_by"] = current_user.uuid
+            saved_coded_va = await PCVAResults(**coded_va_object).save(db)
+            data = await PCVAResultsResponseClass.get_structured_codedVA(pcva_result = saved_coded_va, db = db)
+            return ResponseMainModel(data = data, message = "VA Coded successfully!") 
         except Exception as e:
             raise e 
 
-async def get_coded_va_service(paging: bool, page_number: int = None, limit: int = None, include_deleted: bool = None, filters: Dict = {}, user = None, db: StandardDatabase = None):
-    
-    coded_vas = await CodedVA.get_many(
-        paging = paging, 
-        page_number = page_number, 
-        limit = limit, 
-        filters = filters, 
-        include_deleted = include_deleted, 
-        db = db
-    )
+async def get_coded_va_service(paging: bool, page_number: int = None, limit: int = None, include_deleted: bool = None, coder: str = None, current_user = None, db: StandardDatabase = None):
     try:
-        
-        return {
-            "page_number": page_number,
-            "limit": limit,
-            "data": [await CodedVAResponseClass.get_structured_codedVA(coded_va=va, db = db) for va in coded_vas]
-        } if paging else [await CodedVAResponseClass.get_structured_codedVA(coded_va=va, db = db) for va in coded_vas]
+    
+        offset = (page_number - 1) * limit if paging else 0
+
+        query = f"""
+            FOR va IN {db_collections.PCVA_RESULTS}
+                FILTER va.created_by == @coder AND va.is_deleted == false
+                SORT va.datetime DESC
+                COLLECT assigned_va = va.assigned_va
+                AGGREGATE latest_record = FIRST(va)
+                LIMIT CASE 
+                    WHEN @paging == true THEN 0 
+                    ELSE @offset 
+                END,
+                CASE 
+                    WHEN @paging == true THEN ALL 
+                    ELSE @limit 
+                END
+        """
+
+        bind_vars = {
+            "coder": coder,
+            "paging": paging,
+            "offset": offset,
+            "limit": limit
+        }
+    
+        coded_vas = await VManBaseModel.run_custom_query(query, bind_vars, db)
+        coders_data = [await PCVAResultsResponseClass.get_structured_codedVA(coded_va=va, db = db) for va in coded_vas]
+        return ResponseMainModel(data = coders_data, total=len(coders_data), message="Coded VAs fetched successfully!", pager=Pager(page=page_number, limit=limit)) 
     
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to get coded va: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to get coded vas: {e}")
     
 
 async def get_concordants_va_service(user, db: StandardDatabase = None):
@@ -364,12 +386,12 @@ async def get_coders(
                             COLLECT WITH COUNT INTO count
                         RETURN count
                     )[0]
-                    LET coded_va_count = (
+                    LET coded_va_count = LENGTH(
                         FOR va IN {db_collections.PCVA_RESULTS}
                             FILTER va.created_by == user.uuid AND va.is_deleted == false
-                            COLLECT assigned_va = va.assigned_va WITH COUNT INTO count
-                        RETURN count
-                    )[0]
+                            COLLECT assigned_va = va.assigned_va
+                            RETURN assigned_va
+                    )
                     RETURN MERGE (user, {{
                         assigned_va: assigned_va_count,
                         coded_va: coded_va_count
