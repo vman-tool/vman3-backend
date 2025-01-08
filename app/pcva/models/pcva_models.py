@@ -57,7 +57,7 @@ class FrameA(BaseModel):
     timeinterval_c: Union[str, None] = None
     d: Union[str, None] = None
     timeinterval_d: Union[str, None] = None
-    constributories: Union[List[str], None] = None
+    contributories: Union[List[str], None] = None
 
 class FrameB(BaseModel):
     surgeryPerformed: Union[str, None] = None

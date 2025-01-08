@@ -17,7 +17,7 @@ class CodeAssignedVARequestClass(BaseModel):
     intermediate3_cod: Optional[str] = None
     underlying_cod: Optional[str] = None
     contributory_cod: Optional[List[str]] = None
-    clinical_notes: str
+    clinical_notes: Union[str, None] = None
 
 class PCVAResultsRequestClass(BaseModel):
     assigned_va: str

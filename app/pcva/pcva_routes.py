@@ -15,6 +15,7 @@ from app.pcva.requests.icd10_request_classes import (
 from app.pcva.requests.va_request_classes import (
     AssignVARequestClass,
     CodeAssignedVARequestClass,
+    PCVAResultsRequestClass,
 )
 from app.pcva.responses.icd10_response_classes import (
     ICD10CategoryResponseClass,
@@ -272,24 +273,26 @@ async def assign_va(
 
 @pcva_router.get("/get-coded-va", status_code=status.HTTP_200_OK)
 async def get_coded_va(
+    coder: Optional[str] = Query(None, alias="coder"),
     current_user: User = Depends(get_current_user),
-    db: StandardDatabase = Depends(get_arangodb_session)) -> Union[List[CodedVAResponseClass],Dict]:
+    db: StandardDatabase = Depends(get_arangodb_session)) -> ResponseMainModel:
 
     try:
         return  await get_coded_va_service(
             paging=True, 
             page_number=1,
             limit=10,
-            user = User(**current_user), 
+            coder = coder,
+            current_user = User(**current_user), 
             db = db)
     except Exception as e:
         raise e
 
 @pcva_router.post("/code-assigned-va", status_code=status.HTTP_200_OK)
 async def code_assigned_va(
-    coded_va: CodeAssignedVARequestClass,
+    coded_va: PCVAResultsRequestClass,
     current_user: User = Depends(get_current_user),
-    db: StandardDatabase = Depends(get_arangodb_session)) -> Union[CodedVAResponseClass,Dict]:
+    db: StandardDatabase = Depends(get_arangodb_session)) -> ResponseMainModel:
     try:
         return  await code_assigned_va_service(coded_va, current_user = User(**current_user), db = db)
     except Exception as e:
