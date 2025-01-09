@@ -23,6 +23,7 @@ class db_collections():
     CCVA_RESULTS: str = 'ccva_results'
     CCVA_GRAPH_RESULTS: str = 'ccva_graph_results'
     CCVA_ERRORS:str = 'ccva_errors'
+    CCVA_ERRORS_CORRECTIONS:str = 'ccva_errors_corrections'
 
 class Special_Constants():
     UPLOAD_FOLDER: str = '/uploads'
@@ -77,12 +78,14 @@ collections_with_indexes = {
     db_collections.SYSTEM_CONFIGS: [],
     db_collections.VA_QUESTIONS: [],
     db_collections.CCVA_RESULTS: [
+             {"fields": ["CAUSE1"], "type": "persistent", "name": "cause_idx"}
         #   {"fields": ["ID"], "unique": True, "type": "persistent", "name": "idx_interva5_id"},
           ],
     db_collections.CCVA_GRAPH_RESULTS: [
         
     ],
     db_collections.CCVA_ERRORS: [],
+    db_collections.CCVA_ERRORS_CORRECTIONS: []
 }
 
 class AccessPrivileges():
