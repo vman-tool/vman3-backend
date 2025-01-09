@@ -257,37 +257,93 @@ async def code_assigned_va_service(coded_va: PCVAResultsRequestClass = None, cur
         except Exception as e:
             raise e 
 
-async def get_coded_va_service(paging: bool, page_number: int = None, limit: int = None, include_deleted: bool = None, coder: str = None, current_user = None, db: StandardDatabase = None):
+async def get_coded_va_service(paging: bool, page_number: int = None, limit: int = None, include_deleted: bool = None, va: str = None, coder: str = None, current_user = None, db: StandardDatabase = None):
     try:
     
         offset = (page_number - 1) * limit if paging else 0
 
-        query = f"""
-            FOR va IN {db_collections.PCVA_RESULTS}
-                FILTER va.created_by == @coder AND va.is_deleted == false
-                SORT va.datetime DESC
-                COLLECT assigned_va = va.assigned_va
-                AGGREGATE latest_record = FIRST(va)
-                LIMIT CASE 
-                    WHEN @paging == true THEN 0 
-                    ELSE @offset 
-                END,
-                CASE 
-                    WHEN @paging == true THEN ALL 
-                    ELSE @limit 
-                END
-        """
+        query = ""
+        paginator = ""
+        bind_vars = {}
+        if paging:
+            paginator = f"LIMIT @offset, @limit"
+            bind_vars.update({
+                "offset": offset,
+                "limit": limit
+            })
+        if coder:
+            query = f"""
+                FOR form IN {db_collections.VA_TABLE}
+                    FILTER form.instanceid IN (
+                        FOR va IN {db_collections.PCVA_RESULTS}
+                            FILTER va.created_by == @coder AND va.is_deleted == false
+                            SORT va.datetime DESC
+                            COLLECT assigned_va = va.assigned_va
+                            INTO latest_records = va.assigned_va
+                            {paginator}
+                            RETURN FIRST(latest_records)
+                    )
+                    RETURN form
+            """
 
-        bind_vars = {
-            "coder": coder,
-            "paging": paging,
-            "offset": offset,
-            "limit": limit
-        }
+            bind_vars.update({
+                "coder": coder,
+            })
     
-        coded_vas = await VManBaseModel.run_custom_query(query, bind_vars, db)
-        coders_data = [await PCVAResultsResponseClass.get_structured_codedVA(coded_va=va, db = db) for va in coded_vas]
-        return ResponseMainModel(data = coders_data, total=len(coders_data), message="Coded VAs fetched successfully!", pager=Pager(page=page_number, limit=limit)) 
+        coded_vas = await VManBaseModel.run_custom_query(query = query, bind_vars = bind_vars, db = db)
+        config = await fetch_odk_config(db)
+        coded_data = [format_va_record(va, config) for va in coded_vas]
+        return ResponseMainModel(data = coded_data, total=len(coded_data), message="Coded VAs fetched successfully!", pager=Pager(page=page_number, limit=limit)) 
+    
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get coded vas: {e}")
+    
+async def get_coded_va_details(paging: bool, page_number: int = None, limit: int = None, include_deleted: bool = None, va: str = None, coder: str = None, current_user = None, db: StandardDatabase = None):
+    try:
+    
+        offset = (page_number - 1) * limit if paging else 0
+
+        query = ""
+        paginator = ""
+        bind_vars = {}
+        if paging:
+            paginator = f"LIMIT @offset, @limit"
+            bind_vars.update({
+                "offset": offset,
+                "limit": limit
+            })
+        
+
+        if coder:
+            query = f"""
+                    FOR va IN {db_collections.PCVA_RESULTS}
+                    FILTER va.assigned_va == @va va.created_by == @coder AND va.is_deleted == false
+                    SORT va.datetime DESC
+                    COLLECT assigned_va = va.assigned_va
+                    INTO latest_records = va
+                    {paginator}
+                    RETURN FIRST(latest_records)
+            """
+
+            bind_vars.update({
+                "coder": coder,
+            })
+        
+        else:
+            query = f"""
+                    FOR va IN {db_collections.PCVA_RESULTS}
+                    FILTER va.assigned_va == @va AND va.is_deleted == false
+                    SORT va.datetime DESC
+                    {paginator}
+                    RETURN va
+            """
+
+        bind_vars.update({
+            "va": va,
+        })
+        coded_vas = await VManBaseModel.run_custom_query(query = query, bind_vars = bind_vars, db = db)
+        coded_data = [await PCVAResultsResponseClass.get_structured_codedVA(pcva_result = coded_va, db = db) for coded_va in coded_vas] 
+        return ResponseMainModel(data = coded_data, total=len(coded_data), message="Coded VAs fetched successfully!", pager=Pager(page=page_number, limit=limit)) 
     
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to get coded vas: {e}")

@@ -165,7 +165,7 @@ class CodedVAResponseClass(BaseResponseModel):
         return cls(**populated_coded_va_data)
     
 class PCVAResultsResponseClass(BaseModel):
-    assigned_va: str
+    assigned_va: AssignedVAFieldClass
     frameA: Union[FrameA, Dict, None] = None
     frameB: Union[FrameB, Dict, None] = None
     mannerOfDeath: Union[MannerOfDeath, Dict, None] = None
@@ -173,6 +173,7 @@ class PCVAResultsResponseClass(BaseModel):
     fetalOrInfant: Union[FetalOrInfant, Dict, None] = None
     pregnantDeceased: Union[PregnantDeceased, Dict, None] = None
     clinical_notes: Union[str, None] = None
+    datetime: Union[str, None] = None
 
     @classmethod
     async def get_structured_codedVA(cls, pcva_result_uuid = None, pcva_result = None, db: StandardDatabase = None):
@@ -188,8 +189,8 @@ class PCVAResultsResponseClass(BaseModel):
             coded_va_data = cursor.next()
 
         # Restructure VA document assigned and coded... (Commented as a reserve code)
-        
-        # coded_va_data['assigned_va'] = await AssignedVAFieldClass.get_structured_assignment_by_vaId(vaId = coded_va_data['assigned_va'], coder = coded_va_data.get('created_by', None), db = db)
+
+        coded_va_data['assigned_va'] = await AssignedVAFieldClass.get_structured_assignment_by_vaId(vaId = coded_va_data['assigned_va'], coder = coded_va_data.get('created_by', None), db = db)
         
         populated_coded_va_data = await populate_user_fields(coded_va_data, db = db)
 
