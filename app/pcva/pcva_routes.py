@@ -245,8 +245,6 @@ async def get_assigned_va(
 
     try:
         filters = {}
-        if va_id:
-            filters['vaId'] = va_id
         if coder: 
             filters['coder'] = coder
         allowPaging = paging if paging is not None else True
