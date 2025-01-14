@@ -34,6 +34,7 @@ from app.pcva.services.icd10_services import (
 from app.pcva.services.va_records_services import (
     assign_va_service,
     code_assigned_va_service,
+    get_coded_va_details,
     get_coded_va_service,
     get_coders,
     get_concordants_va_service,
@@ -281,6 +282,27 @@ async def get_coded_va(
             page_number=1,
             limit=10,
             coder = coder,
+            current_user = User(**current_user), 
+            db = db)
+    except Exception as e:
+        raise e
+
+@pcva_router.get("/get-coded-va-details/{va_id}", status_code=status.HTTP_200_OK)
+async def get_coded_va(
+    va_id: str,
+    coder: Optional[str] = Query(None, alias="coder"),
+    include_history: Optional[bool] = Query(False, alias="include_history"),
+    current_user: User = Depends(get_current_user),
+    db: StandardDatabase = Depends(get_arangodb_session)) -> ResponseMainModel:
+
+    try:
+        return  await get_coded_va_details(
+            paging=True, 
+            page_number=1,
+            limit=10,
+            va=va_id,
+            coder = coder,
+            include_history = include_history,
             current_user = User(**current_user), 
             db = db)
     except Exception as e:

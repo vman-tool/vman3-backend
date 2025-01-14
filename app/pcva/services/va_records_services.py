@@ -278,7 +278,7 @@ async def get_coded_va_service(paging: bool, page_number: int = None, limit: int
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to get coded vas: {e}")
     
-async def get_coded_va_details(paging: bool, page_number: int = None, limit: int = None, include_deleted: bool = None, va: str = None, coder: str = None, current_user = None, db: StandardDatabase = None):
+async def get_coded_va_details(paging: bool, page_number: int = None, limit: int = None, include_deleted: bool = None, va: str = None, coder: str = None, include_history: bool = False, current_user = None, db: StandardDatabase = None):
     try:
     
         offset = (page_number - 1) * limit if paging else 0
@@ -297,12 +297,12 @@ async def get_coded_va_details(paging: bool, page_number: int = None, limit: int
         if coder:
             query = f"""
                     FOR va IN {db_collections.PCVA_RESULTS}
-                    FILTER va.assigned_va == @va va.created_by == @coder AND va.is_deleted == false
+                    FILTER va.assigned_va == @va AND va.created_by == @coder {'AND va.is_deleted == false' if not include_deleted else ''}
                     SORT va.datetime DESC
                     COLLECT assigned_va = va.assigned_va
                     INTO latest_records = va
                     {paginator}
-                    RETURN FIRST(latest_records)
+                    RETURN {'latest_records[*]' if include_history else 'FIRST(latest_records)'}
             """
 
             bind_vars.update({
@@ -312,7 +312,7 @@ async def get_coded_va_details(paging: bool, page_number: int = None, limit: int
         else:
             query = f"""
                     FOR va IN {db_collections.PCVA_RESULTS}
-                    FILTER va.assigned_va == @va AND va.is_deleted == false
+                    FILTER va.assigned_va == @va {'AND va.is_deleted == false' if not include_deleted else ""}
                     SORT va.datetime DESC
                     {paginator}
                     RETURN va
@@ -322,7 +322,10 @@ async def get_coded_va_details(paging: bool, page_number: int = None, limit: int
             "va": va,
         })
         coded_vas = await VManBaseModel.run_custom_query(query = query, bind_vars = bind_vars, db = db)
-        coded_data = [await PCVAResultsResponseClass.get_structured_codedVA(pcva_result = coded_va, db = db) for coded_va in coded_vas] 
+
+        coded_vas = coded_vas.next() if include_history else coded_vas
+
+        coded_data = [await PCVAResultsResponseClass.get_structured_codedVA(pcva_result = coded_va, db = db) for coded_va in coded_vas]
         return ResponseMainModel(data = coded_data, total=len(coded_data), message="Coded VAs fetched successfully!", pager=Pager(page=page_number, limit=limit)) 
     
     except Exception as e:
