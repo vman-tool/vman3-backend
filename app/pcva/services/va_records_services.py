@@ -172,7 +172,7 @@ async def code_assigned_va_service(coded_va: PCVAResultsRequestClass = None, cur
                 raise HTTPException(status_code=400, detail="VA is not assigned to this user.")
             
             # Check if clinical notes are available (reserve code)
-            # if not coded_va.clinical_notes:
+            # if not coded_va.clinicalNotes:
             #     raise HTTPException(status_code=400, detail="Clinical Notes must be written.")
             
             # 2. Check all causes of dealths exists and grab their uuid values

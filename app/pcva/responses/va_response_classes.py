@@ -7,7 +7,7 @@ from app.shared.configs.models import BaseResponseModel, ResponseUser
 from app.shared.utils.response import populate_user_fields
 from app.shared.configs.constants import db_collections
 from app.users.models.user import User
-from app.pcva.models.pcva_models import FetalOrInfant, FrameA, FrameB, MannerOfDeath, PlaceOfOccurrence, PregnantDeceased
+from app.pcva.models.pcva_models import FetalOrInfant, FrameA, FrameB, MannerOfDeath, PlaceOfOccurence, PregnantDeceased
 
 
 class ICD10FieldClass(BaseModel):
@@ -169,10 +169,10 @@ class PCVAResultsResponseClass(BaseModel):
     frameA: Union[FrameA, Dict, None] = None
     frameB: Union[FrameB, Dict, None] = None
     mannerOfDeath: Union[MannerOfDeath, Dict, None] = None
-    placeOfOccurrence: Union[PlaceOfOccurrence, Dict, None] = None
+    placeOfOccurence: Union[PlaceOfOccurence, Dict, None] = None
     fetalOrInfant: Union[FetalOrInfant, Dict, None] = None
     pregnantDeceased: Union[PregnantDeceased, Dict, None] = None
-    clinical_notes: Union[str, None] = None
+    clinicalNotes: Union[str, None] = None
     datetime: Union[str, None] = None
 
     @classmethod
