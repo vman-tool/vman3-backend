@@ -181,22 +181,22 @@ async def code_assigned_va_service(coded_va: PCVAResultsRequestClass = None, cur
             }
 
             icdcount = 0
-            if coded_va.frameA.a:
+            if coded_va.frameA.a and coded_va.frameA.a not in in_conditions["uuid"]:
                 in_conditions["uuid"].append(coded_va.frameA.a)
                 icdcount += 1
-            if coded_va.frameA.b:
+            if coded_va.frameA.b and coded_va.frameA.b not in in_conditions["uuid"]:
                 in_conditions["uuid"].append(coded_va.frameA.b)
                 icdcount += 1
-            if coded_va.frameA.c:
+            if coded_va.frameA.c and coded_va.frameA.c not in in_conditions["uuid"]:
                 in_conditions["uuid"].append(coded_va.frameA.c)
                 icdcount += 1
-            if coded_va.frameA.d:
+            if coded_va.frameA.d and coded_va.frameA.d not in in_conditions["uuid"]:
                 in_conditions["uuid"].append(coded_va.frameA.d)
                 icdcount += 1
 
             if coded_va.frameA.contributories:
                 for contributory in coded_va.frameA.contributories:
-                    if contributory:
+                    if contributory and contributory not in in_conditions["uuid"]:
                         in_conditions["uuid"].append(contributory)
                         icdcount += 1
 
