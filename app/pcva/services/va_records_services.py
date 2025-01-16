@@ -17,6 +17,58 @@ from app.settings.services.odk_configs import fetch_odk_config
 from app.users.models.role import Role, UserRole
    
 
+
+async def get_unassigned_va_service(paging: bool = True, page_number: int = 0, limit: int = 10, format_records: bool = True, coder: str = None, db: StandardDatabase = None):
+    offset = (page_number - 1) * limit if paging else 0
+
+    query = ""
+    paginator = ""
+    bind_vars = {}
+    if paging:
+        paginator = f"LIMIT @offset, @limit"
+        bind_vars.update({
+            "offset": offset,
+            "limit": limit
+        })
+
+    query = f"""
+        FOR doc IN form_submissions
+            LET coders = (
+                FOR va IN assigned_va
+                FILTER va.vaId == doc.instanceid 
+                AND va.is_deleted == false
+                RETURN va.coder
+            )
+            
+            LET assignmentCount = (
+                FOR va IN assigned_va
+                FILTER va.vaId == doc.instanceid 
+                AND va.is_deleted == false
+                COLLECT WITH COUNT INTO count
+                RETURN count
+            )[0]
+
+            FILTER doc.instanceid NOT IN (
+                FOR va IN assigned_va
+                FILTER { 'va.coder == @coder AND' if coder else ''} va.is_deleted == false
+                COLLECT vaId = va.vaId WITH COUNT INTO coderCount
+                FILTER coderCount < @maximum_assignment
+                RETURN vaId
+            )
+            {paginator}
+            RETURN MERGE(doc, {{assignments: assignmentCount , coders: coders}}
+        )
+    """
+
+    if coder:
+        bind_vars.update({
+            "coder": coder
+        })
+    bind_vars.update({
+        "maximum_assignment": 2
+    })
+    return False
+
 async def assign_va_service(va_records: AssignVARequestClass, user: User,  db: StandardDatabase = None):
     try:
         if not va_records.coder and not va_records.new_coder:
@@ -259,7 +311,7 @@ async def get_coded_va_service(paging: bool, page_number: int = None, limit: int
                         FOR va IN {db_collections.PCVA_RESULTS}
                             FILTER va.created_by == @coder AND va.is_deleted == false
                             SORT va.datetime DESC
-                            COLLECT assigned_va = va.assigned_va
+                            COLLECT assignecount_assigned_vasd_va = va.assigned_va
                             INTO latest_records = va.assigned_va
                             {paginator}
                             RETURN FIRST(latest_records)
