@@ -123,7 +123,6 @@ async def assign_va_service(va_records: AssignVARequestClass, user: User,  db: S
                     raise HTTPException(status_code=400, detail=f"Include new coder Id to update existing assignment.")
             else:
                 saved_object = await va_object.save(db = db)
-                print("Object saved successfully: ", saved_object)
             va_assignment_data.append(await AssignVAResponseClass.get_structured_assignment(assignment=saved_object, db = db))
         
         return va_assignment_data
