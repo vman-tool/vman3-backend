@@ -53,7 +53,6 @@ class AssignedVAFieldClass(BaseModel):
                 'vaId': vaId,
                 'coder': coder
             }
-            print(bind_vars)
             cursor = db.aql.execute(query, bind_vars=bind_vars)
             assignment_data = cursor.next()
         
