@@ -1,0 +1,195 @@
+from datetime import date, datetime
+from typing import List, Optional
+
+from arango import ArangoError
+from arango.database import StandardDatabase
+
+from app.shared.configs.constants import db_collections
+from app.shared.configs.models import ResponseMainModel
+from app.shared.middlewares.exceptions import BadRequestException
+
+
+async def fetch_error_list(
+    db: StandardDatabase,
+    paging: bool = True,
+    page_number: int = 1,
+    limit: int = 10,
+    error_type: Optional[str] = None,
+    group: Optional[str] = None,
+    start_date: Optional[date] = None,
+    end_date: Optional[date] = None,
+    locations: Optional[List[str]] = None
+) -> ResponseMainModel:
+    try:
+        # config = await fetch_odk_config(db)
+        # date_field = config.field_mapping.date
+        # region_field = config.field_mapping.location_level1
+
+        collection = db.collection(db_collections.CCVA_ERRORS)
+        # query = f"FOR doc IN {collection.name} "
+        bind_vars = {}
+
+        
+        query = f"""
+            FOR e IN {collection.name}
+            COLLECT errorType = e.error_type, errorMessage = e.error_message, group = e.group, uuid = e.uuid INTO groupedErrors
+            SORT uuid ASC
+            LIMIT @offset, @size
+            RETURN {{
+                uuid: uuid,
+                error_type: errorType,
+                error_message: errorMessage,
+                group: group
+            }}
+        """
+        bind_vars.update({
+            "offset": 0,
+            "size": 1000
+        })
+        cursor = db.aql.execute(query, bind_vars=bind_vars, cache=True)
+        data = [document for document in cursor]
+
+        # Fetch total count of documents
+        # count_query = f"RETURN LENGTH({collection.name})"
+        # total_records_cursor = db.aql.execute(count_query, cache=True)
+        # total_records = total_records_cursor.next()
+        # print(data)
+
+        # Fetch total count of documents
+        count_query = f"RETURN LENGTH({collection.name})"
+        total_records_cursor = db.aql.execute(count_query,cache=True)
+        total_records = total_records_cursor.next()
+
+        return ResponseMainModel(
+            data=data,
+            message="Records fetched successfully",
+            total=total_records
+        )
+    except ArangoError as e:
+        print(e)
+        raise BadRequestException("Failed to fetched records",str(e))
+    except Exception as e:
+        print(e)
+        raise BadRequestException(f"Failed to fetch records: {str(e)}",str(e))
+    
+async def fetch_error_details(db: StandardDatabase, error_id: str) -> ResponseMainModel:
+    try:
+        collection = db.collection(db_collections.CCVA_ERRORS)
+        query = f"""
+          
+        FOR e IN {db_collections.CCVA_ERRORS}
+         FILTER e.uuid == @error_id
+COLLECT errorType = e.error_type, errorMessage = e.error_message, group = e.group, uuid = e.uuid INTO groupedErrors
+
+LET formData = (
+    FOR fs IN {db_collections.VA_TABLE}
+    FILTER fs.__id == CONCAT("uuid:", uuid)
+    RETURN UNSET(fs, ["_id", "_rev","__id",'_key','instanceid','submissiondate'])
+)
+RETURN {{
+    error: {{
+        uuid: uuid,
+        error_type: errorType,
+        error_message: errorMessage,
+        group: group
+    }},
+    form_data: formData[0] // Include the matching form data
+}}
+     
+        """
+        print(query)
+        
+        cursor = db.aql.execute(query, bind_vars={"error_id": error_id}, cache=True)
+        result = cursor.next()
+
+        if not result:
+            raise BadRequestException("Error not found", f"No error found with id {error_id}")
+
+        return ResponseMainModel(
+            data=result,
+            message="Error details fetched successfully",
+            total=1
+        )
+    except Exception as e:
+        print(e)
+        raise BadRequestException(f"Failed to fetch error details: {str(e)}", str(e))
+
+async def fetch_form_data(db: StandardDatabase, form_id: str) -> ResponseMainModel:
+    try:
+        collection = db.collection(db_collections.FORM_SUBMISSIONS)
+        query = f"""
+        FOR fs IN {collection.name}
+        FILTER fs.__id == @form_id
+        RETURN fs
+        """
+        
+        cursor = db.aql.execute(query, bind_vars={"form_id": form_id}, cache=True)
+        result = cursor.next()
+
+        if not result:
+            raise BadRequestException("Form data not found", f"No form data found with id {form_id}")
+
+        return ResponseMainModel(
+            data=result,
+            message="Form data fetched successfully",
+            total=1
+        )
+    except Exception as e:
+        print(e)
+        raise BadRequestException(f"Failed to fetch form data: {str(e)}", str(e))
+
+async def update_form_data(db: StandardDatabase, form_id: str, updated_data: dict) -> ResponseMainModel:
+    try:
+        collection = db.collection(db_collections.FORM_SUBMISSIONS)
+        query = f"""
+        FOR fs IN {collection.name}
+        FILTER fs.__id == @form_id
+        UPDATE fs WITH @updated_data IN {collection.name}
+        RETURN NEW
+        """
+        
+        cursor = db.aql.execute(query, bind_vars={"form_id": form_id, "updated_data": updated_data}, cache=True)
+        result = cursor.next()
+
+        if not result:
+            raise BadRequestException("Form data not found", f"No form data found with id {form_id}")
+
+        return ResponseMainModel(
+            data=result,
+            message="Form data updated successfully",
+            total=1
+        )
+    except Exception as e:
+        print(e)
+        raise BadRequestException(f"Failed to update form data: {str(e)}", str(e))
+
+
+async def save_corrections_data(db: StandardDatabase, form_id:str, updated_data: dict) -> ResponseMainModel:
+    try:
+        collection = db.collection(db_collections.CCVA_ERRORS_CORRECTIONS)
+        
+        # Add timestamps to the updated_data
+        updated_data["created_at"] = datetime.utcnow().isoformat()
+        updated_data["updated_at"] = datetime.utcnow().isoformat()
+        updated_data["form_id"] = form_id
+
+        # Query to insert the data
+        query = f"""
+        INSERT @updated_data INTO {collection.name}
+        RETURN NEW
+        """
+        
+        cursor = db.aql.execute(query, bind_vars={"updated_data": updated_data}, cache=True)
+        result = cursor.next()
+
+        if not result:
+            raise BadRequestException("Failed to insert form data", "No data was inserted")
+
+        return ResponseMainModel(
+            data=result,
+            message="Form data inserted successfully",
+            total=1
+        )
+    except Exception as e:
+        print(e)
+        raise BadRequestException(f"Failed to insert form data: {str(e)}", str(e))

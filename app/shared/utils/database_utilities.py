@@ -123,10 +123,10 @@ def add_query_filters(filters: Dict = None, bind_vars: Dict = None, document_nam
     """
     aql_filters = []
         
-    and_conditions = filters.pop("and_conditions", [])
-    or_conditions = filters.pop("or_conditions", [])
-    in_conditions = filters.pop("in_conditions", [])
-    includes_conditions = filters.pop("includes_conditions", [])
+    and_conditions = filters.pop("and_conditions", []) if filters else []
+    or_conditions = filters.pop("or_conditions", []) if filters else []
+    in_conditions = filters.pop("in_conditions", []) if filters else []
+    includes_conditions = filters.pop("includes_conditions", []) if filters else []
 
     def add_comparison_filter(field: str, value: Any, op: str, condition_type: str, i: int):
         bind_var_key = f"{field}_{condition_type}_{i}"
@@ -170,7 +170,7 @@ def add_query_filters(filters: Dict = None, bind_vars: Dict = None, document_nam
         }
         return operations.get(op, op)
 
-    for field, value in filters.items():
+    for field, value in filters.items() if filters else []:
         if isinstance(value, dict):
             for op, comp_value in value.items():
                 op = reassign_operation(op)

@@ -100,6 +100,7 @@ async def run_internal_ccva(
 async def get_processed_ccva_graphs(
     background_tasks: BackgroundTasks,
     ccva_id: Optional[str] = None,
+    selected_success_type=None,
     is_default: Optional[bool] = None,
     paging: bool = True,
     page_number: int = 1,
@@ -121,9 +122,11 @@ async def get_processed_ccva_graphs(
         # Fetch processed CCVA data
         print(ccva_graph_db_source)
         if ccva_graph_db_source:
+
             response =  await fetch_db_processed_ccva_graphs (
                 current_user=current_user,
                 ccva_id=ccva_id,
+                selected_success_type=selected_success_type,
                 is_default=True,
                 paging=paging,
                 page_number=page_number,

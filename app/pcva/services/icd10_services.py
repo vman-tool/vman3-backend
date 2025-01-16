@@ -15,9 +15,9 @@ async def create_icd10_categories_service(categories, user, db: StandardDatabase
         created_categories = []
         for category in categories:
             category = category.model_dump()
-            category['created_by']=user['uuid']
+            category['created_by']=user.get('uuid', "")
             saved_category = await ICD10Category(**category).save(db)
-            created_category = ICD10CategoryResponseClass.get_structured_category(icd10_category = saved_category, db = db)
+            created_category = await ICD10CategoryResponseClass.get_structured_category(icd10_category = saved_category, db = db)
             created_categories.append(created_category)
         return ResponseMainModel(data=created_categories, message="Categories created successfully", total=len(created_categories))
     except ArangoError as e:
@@ -25,16 +25,15 @@ async def create_icd10_categories_service(categories, user, db: StandardDatabase
 
 async def get_icd10_categories_service(paging: bool = True,  page_number: int = 1, filters: Dict= {}, limit: int = 10, include_deleted: bool = None, db: StandardDatabase = None) -> ResponseMainModel:
     try:
-        data = [
-            await ICD10CategoryResponseClass.get_structured_category(icd10_category = icd10_category, db = db) 
-            for icd10_category in await ICD10Category.get_many(
-                paging = paging, 
-                page_number = page_number, 
-                limit = limit, 
-                filters=filters,
-                include_deleted = include_deleted,
-                db = db
-            )]
+        categoriesData = await ICD10Category.get_many(
+            paging = paging, 
+            page_number = page_number, 
+            limit = limit, 
+            filters=filters,
+            include_deleted = include_deleted,
+            db = db
+        )
+        data = [await ICD10CategoryResponseClass.get_structured_category(icd10_category = icd10_category, db = db) for icd10_category in categoriesData]
         count_data = await ICD10Category.count(filters=filters, include_deleted=include_deleted, db=db)
         return ResponseMainModel(data=data, total=count_data, message="ICD10 Categories fetched successfully", pager=Pager(page=page_number, limit=limit))
     except ArangoError as e:
@@ -66,7 +65,7 @@ async def get_icd10_codes(paging: bool = True,  page_number: int = 1, limit: int
                 db = db
             )]
         count_data = await ICD10.count(filters=filters, include_deleted=include_deleted, db=db)
-        return ResponseMainModel(data=data, total=count_data, message="ICD10 fetched successfully", pager=Pager(page=page_number, limit=limit))
+        return ResponseMainModel(data=data, total=count_data, message="ICD10 fetched successfully", pager=Pager(page=page_number, limit=limit) if paging else None)
     except ArangoError as e:
         raise HTTPException(status_code=500, detail=f"Failed to get codes: {e}")
 
@@ -77,6 +76,17 @@ async def create_icd10_codes(codes, user, db: StandardDatabase = None) -> Respon
             code = code.model_dump()
             code['created_by']=user['uuid']
             code.pop("uuid") if 'uuid' in code else code
+            categories = await ICD10Category.get_many(
+                filters={
+                    "or_conditions": [
+                        {"name": code.get("category", "")}, 
+                        {"uuid": code.get("category", "")}
+                    ]
+                }, db=db)
+            if(len(categories) > 0):
+                code["category"] = categories[0]['uuid']
+            else:
+                raise HTTPException(status_code=400, detail="Category not found.")
             saved_code = await ICD10(**code).save(db)
             created_code = await ICD10ResponseClass.get_structured_code(icd10_code = saved_code, db = db)
             created_codes.append(created_code)
@@ -114,7 +124,7 @@ async def create_or_icd10_codes_from_file(codes, user, db: StandardDatabase):
                 
                 code["category"] = category.get("uuid", "")
 
-                existing_code = await ICD10.get_many(include_deleted=False, filters={"name": code.get("name", "")}, db = db)
+                existing_code = await ICD10.get_many(include_deleted=False, filters={"code": code.get("code", "")}, db = db)
                 if len(existing_code) > 0:
                     existing_code = existing_code[0]
                     code = replace_object_values(code, existing_code)
