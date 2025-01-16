@@ -43,6 +43,7 @@ class FieldMapping(BaseModel):
     interviewer_phone: str  # Optional field
     interviewer_sex: str  # Optional field
     submitted_date: Optional[str] = None
+    birth_date: Optional[str] = None
     death_date: Optional[str] = None
     interview_date: Optional[str] = None
     additional_fields: Optional[Dict[str, Any]] = Field(default_factory=dict)  # For additional fields

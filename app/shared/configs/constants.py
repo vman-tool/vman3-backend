@@ -15,7 +15,7 @@ class db_collections():
     ICD10_CATEGORY: str = 'icd10_category'
     ICD10: str = 'icd10'
     ASSIGNED_VA: str = 'assigned_va'
-    CODED_VA: str = 'coded_va'
+    PCVA_RESULTS: str = 'pcva_results'
     DOWNLOAD_TRACKER: str   ='download_tracker'
     DOWNLOAD_PROCESS_TRACKER: str   ='download_process_tracker'
     SYSTEM_CONFIGS: str = 'system_configs'
@@ -23,6 +23,7 @@ class db_collections():
     CCVA_RESULTS: str = 'ccva_results'
     CCVA_GRAPH_RESULTS: str = 'ccva_graph_results'
     CCVA_ERRORS:str = 'ccva_errors'
+    CCVA_ERRORS_CORRECTIONS:str = 'ccva_errors_corrections'
 
 class Special_Constants():
     UPLOAD_FOLDER: str = '/uploads'
@@ -44,10 +45,13 @@ collections_with_indexes = {
          {"fields": ["is_active"], "type": "persistent", "name": "u_is_active"}
     ],
     db_collections.ROLES: [
-        {"fields": ["is_deleted"], "type": "persistent", "name": "r_is_active"}
+        {"fields": ["is_deleted"], "type": "persistent", "name": "r_is_active"},
+        {"fields": ["name"], "unique": True, "type": "persistent", "name": "role_name"}
     ],
     db_collections.USER_ROLES: [
-        {"fields": ["is_deleted"], "type": "persistent", "name": "ur_is_active"}
+        {"fields": ["is_deleted"], "type": "persistent", "name": "ur_is_active"},
+        {"fields": ["user"], "unique": False, "type": "persistent", "name": "role_user"},
+        {"fields": ["role"], "unique": False, "type": "persistent", "name": "role"}
     ],
     db_collections.USER_TOKENS: [
         {"fields": ["is_deleted"], "type": "persistent", "name": "ut_is_active"}
@@ -56,7 +60,8 @@ collections_with_indexes = {
         {"fields": ["is_deleted"], "type": "persistent", "name": "ucl_is_active"}
     ],
     db_collections.ICD10_CATEGORY: [
-        {"fields": ["is_deleted"], "type": "persistent", "name": "ic_is_active"}
+        {"fields": ["is_deleted"], "type": "persistent", "name": "ic_is_active"},
+        {"fields": ["name"], "unique": True, "type": "persistent", "name": "category_name"}
     ],
     db_collections.ICD10: [
         {"fields": ["is_deleted"], "type": "persistent", "name": "i_is_active"}
@@ -64,20 +69,23 @@ collections_with_indexes = {
     db_collections.ASSIGNED_VA: [
         {"fields": ["is_deleted"], "type": "persistent", "name": "av_is_active"}
     ],
-    db_collections.CODED_VA: [
-        {"fields": ["is_deleted"], "type": "persistent", "name": "cv_is_active"}
+    db_collections.PCVA_RESULTS: [
+        {"fields": ["is_deleted"], "type": "persistent", "name": "cv_is_active"},
+        {"fields": ["va"], "unique": False, "type": "persistent", "name": "va_record"}
     ],
     db_collections.DOWNLOAD_TRACKER: [],
     db_collections.DOWNLOAD_PROCESS_TRACKER: [],
     db_collections.SYSTEM_CONFIGS: [],
     db_collections.VA_QUESTIONS: [],
     db_collections.CCVA_RESULTS: [
+             {"fields": ["CAUSE1"], "type": "persistent", "name": "cause_idx"}
         #   {"fields": ["ID"], "unique": True, "type": "persistent", "name": "idx_interva5_id"},
           ],
     db_collections.CCVA_GRAPH_RESULTS: [
         
     ],
     db_collections.CCVA_ERRORS: [],
+    db_collections.CCVA_ERRORS_CORRECTIONS: []
 }
 
 class AccessPrivileges():

@@ -15,6 +15,7 @@ from app.pcva.requests.icd10_request_classes import (
 from app.pcva.requests.va_request_classes import (
     AssignVARequestClass,
     CodeAssignedVARequestClass,
+    PCVAResultsRequestClass,
 )
 from app.pcva.responses.icd10_response_classes import (
     ICD10CategoryResponseClass,
@@ -33,6 +34,7 @@ from app.pcva.services.icd10_services import (
 from app.pcva.services.va_records_services import (
     assign_va_service,
     code_assigned_va_service,
+    get_coded_va_details,
     get_coded_va_service,
     get_coders,
     get_concordants_va_service,
@@ -55,7 +57,7 @@ pcva_router = APIRouter(
 
 @pcva_router.get("", status_code=status.HTTP_200_OK)
 async def get_va_records(
-    paging: Optional[str] = Query(None, alias="paging"),
+    paging: Optional[bool] = Query(None, alias="paging"),
     page_number: Optional[int] = Query(1, alias="page_number"),
     limit: Optional[int] = Query(10, alias="limit"),
     include_assignment: Optional[str] = Query(None, alias="include_assignment"),
@@ -64,7 +66,7 @@ async def get_va_records(
     db: StandardDatabase = Depends(get_arangodb_session)) -> ResponseMainModel:
 
     try:
-        allowPaging = False if paging is not None and paging.lower() == 'false' else True
+        allowPaging = paging if paging is not None else True
         include_assignment = False if include_assignment is not None and include_assignment.lower() == 'false' else True
         filters = {}
         if va_id is not None:
@@ -82,14 +84,14 @@ async def get_va_records(
         status_code=status.HTTP_200_OK,
 )
 async def get_icd10_categories(
-    paging: Optional[str] = Query(None, alias="paging"),
+    paging: Optional[bool] = Query(None, alias="paging"),
     page_number: Optional[int] = Query(1, alias="page_number"),
     limit: Optional[int] = Query(10, alias="limit"),
     include_deleted: Optional[str] = Query(None, alias="include_deleted"),
-    db: StandardDatabase = Depends(get_arangodb_session)) -> Union[List[ICD10CategoryResponseClass], Any]:
+    db: StandardDatabase = Depends(get_arangodb_session)) -> ResponseMainModel:
 
     try:
-        allowPaging = False if paging is not None and paging.lower() == 'false' else True
+        allowPaging = paging if paging is not None else True
         include_deleted = False if include_deleted is not None and include_deleted.lower() == 'false' else True
         return await get_icd10_categories_service(
             paging = allowPaging, 
@@ -105,7 +107,7 @@ async def get_icd10_categories(
 async def create_icd10_categories(
     categories: List[ICD10CategoryRequestClass],
     user: User = Depends(get_current_user),
-    db: StandardDatabase = Depends(get_arangodb_session)) -> List[ICD10CategoryResponseClass]:
+    db: StandardDatabase = Depends(get_arangodb_session)) -> ResponseMainModel:
 
     try:
         return await create_icd10_categories_service(categories, user, db)
@@ -121,7 +123,7 @@ async def create_icd10_categories(
 async def update_icd10_categories(
     categories: List[ICD10CategoryUpdateClass],
     user: User = Depends(get_current_user),
-    db: StandardDatabase = Depends(get_arangodb_session)) -> List[ICD10CategoryResponseClass]:
+    db: StandardDatabase = Depends(get_arangodb_session)) -> ResponseMainModel:
     try:
         return await update_icd10_categories_service(categories, user, db)
     except:
@@ -136,7 +138,7 @@ async def upload_file(
     file: UploadFile = File(),
     user: User = Depends(get_current_user),
     db: StandardDatabase = Depends(get_arangodb_session)
-    ):
+    ) -> ResponseMainModel:
     try:
         file_extension = file.filename.split(".")[-1].lower()
 
@@ -164,14 +166,14 @@ async def upload_file(
         description="Submit array of icd10 codes in a json format"
 )
 async def get_icd10(
-    paging: Optional[str] = Query(None, alias="paging"),
+    paging: Optional[bool] = Query(None, alias="paging"),
     page_number: Optional[int] = Query(1, alias="page_number"),
     limit: Optional[int] = Query(10, alias="limit"),
     include_deleted: Optional[str] = Query(None, alias="include_deleted"),
-    db: StandardDatabase = Depends(get_arangodb_session)) -> Union[List[ICD10ResponseClass], Any]:
+    db: StandardDatabase = Depends(get_arangodb_session)) -> ResponseMainModel:
 
     try:
-        allowPaging = False if paging is not None and paging.lower() == 'false' else True
+        allowPaging = paging if paging is not None else True
         include_deleted = False if include_deleted is not None and include_deleted.lower() == 'false' else True
         return await get_icd10_codes(
             paging = allowPaging, 
@@ -190,7 +192,7 @@ async def get_icd10(
 async def create_icd10(
     codes: List[ICD10CreateRequestClass],
     user: User = Depends(get_current_user),
-    db: StandardDatabase = Depends(get_arangodb_session)) -> List[ICD10ResponseClass]:
+    db: StandardDatabase = Depends(get_arangodb_session)) -> ResponseMainModel:
 
     try:
         return await create_icd10_codes(codes, user, db)
@@ -205,7 +207,7 @@ async def create_icd10(
 async def update_icd10(
     codes: List[ICD10UpdateRequestClass],
     user: User = Depends(get_current_user),
-    db: StandardDatabase = Depends(get_arangodb_session)) -> List[ICD10ResponseClass]:
+    db: StandardDatabase = Depends(get_arangodb_session)) -> ResponseMainModel:
     try:
         return await update_icd10_codes(codes, user, db)
     except:
@@ -213,12 +215,12 @@ async def update_icd10(
 
 @pcva_router.get("/coders", status_code=status.HTTP_200_OK)
 async def get_assigned_va(
-    paging: Optional[str] = Query(None, alias="paging"),
+    paging: Optional[bool] = Query(False, alias="paging"),
     page_number: Optional[int] = Query(1, alias="page_number"),
     limit: Optional[int] = Query(10, alias="limit"),
-    include_deleted: Optional[str] = Query(None, alias="include_deleted"),
+    include_deleted: Optional[bool] = Query(False, alias="include_deleted"),
     current_user: User = Depends(get_current_user),
-    db: StandardDatabase = Depends(get_arangodb_session)) -> Union[List[ResponseMainModel], Any]:
+    db: StandardDatabase = Depends(get_arangodb_session)) -> ResponseMainModel:
     try:
         return await get_coders(
             paging = paging,
@@ -233,22 +235,20 @@ async def get_assigned_va(
 
 @pcva_router.get("/va-assignments", status_code=status.HTTP_200_OK)
 async def get_assigned_va(
-    paging: Optional[str] = Query(None, alias="paging"),
+    paging: Optional[bool] = Query(None, alias="paging"),
     page_number: Optional[int] = Query(1, alias="page_number"),
     limit: Optional[int] = Query(10, alias="limit"),
     include_deleted: Optional[str] = Query(None, alias="include_deleted"),
     va_id: Optional[str] = Query(None, alias="va_id"),
     coder: Optional[str] = Query(None, alias="coder"),
     current_user: User = Depends(get_current_user),
-    db: StandardDatabase = Depends(get_arangodb_session)) -> Union[List[ResponseMainModel], Any]:
+    db: StandardDatabase = Depends(get_arangodb_session)) -> ResponseMainModel:
 
     try:
         filters = {}
-        if va_id:
-            filters['vaId'] = va_id
         if coder: 
             filters['coder'] = coder
-        allowPaging = False if paging is not None and paging.lower() == 'false' else True
+        allowPaging = paging if paging is not None else True
         include_deleted = True if include_deleted is not None and include_deleted.lower() == 'true' else False
         
         return await get_va_assignment_service(allowPaging, page_number, limit, include_deleted, filters, current_user, db)    
@@ -272,24 +272,47 @@ async def assign_va(
 
 @pcva_router.get("/get-coded-va", status_code=status.HTTP_200_OK)
 async def get_coded_va(
+    coder: Optional[str] = Query(None, alias="coder"),
     current_user: User = Depends(get_current_user),
-    db: StandardDatabase = Depends(get_arangodb_session)) -> Union[List[CodedVAResponseClass],Dict]:
+    db: StandardDatabase = Depends(get_arangodb_session)) -> ResponseMainModel:
 
     try:
         return  await get_coded_va_service(
             paging=True, 
             page_number=1,
             limit=10,
-            user = User(**current_user), 
+            coder = coder,
+            current_user = User(**current_user), 
+            db = db)
+    except Exception as e:
+        raise e
+
+@pcva_router.get("/get-coded-va-details/{va_id}", status_code=status.HTTP_200_OK)
+async def get_coded_va(
+    va_id: str,
+    coder: Optional[str] = Query(None, alias="coder"),
+    include_history: Optional[bool] = Query(False, alias="include_history"),
+    current_user: User = Depends(get_current_user),
+    db: StandardDatabase = Depends(get_arangodb_session)) -> ResponseMainModel:
+
+    try:
+        return  await get_coded_va_details(
+            paging=True, 
+            page_number=1,
+            limit=10,
+            va=va_id,
+            coder = coder,
+            include_history = include_history,
+            current_user = User(**current_user), 
             db = db)
     except Exception as e:
         raise e
 
 @pcva_router.post("/code-assigned-va", status_code=status.HTTP_200_OK)
 async def code_assigned_va(
-    coded_va: CodeAssignedVARequestClass,
+    coded_va: PCVAResultsRequestClass,
     current_user: User = Depends(get_current_user),
-    db: StandardDatabase = Depends(get_arangodb_session)) -> Union[CodedVAResponseClass,Dict]:
+    db: StandardDatabase = Depends(get_arangodb_session)) -> ResponseMainModel:
     try:
         return  await code_assigned_va_service(coded_va, current_user = User(**current_user), db = db)
     except Exception as e:
