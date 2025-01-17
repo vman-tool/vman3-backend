@@ -71,6 +71,9 @@ async def fetch_error_list(
             "offset": 0,
             "size": 1000
         })
+
+        if error_type:
+            bind_vars["error_type"] = error_type
         cursor = db.aql.execute(query, bind_vars=bind_vars, cache=True)
         data = [document for document in cursor]
 
