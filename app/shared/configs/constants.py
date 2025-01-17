@@ -46,7 +46,7 @@ collections_with_indexes = {
     ],
     db_collections.ROLES: [
         {"fields": ["is_deleted"], "type": "persistent", "name": "r_is_active"},
-        {"fields": ["name"], "unique": True, "type": "persistent", "name": "role_name"}
+        # {"fields": ["name"], "unique": True, "type": "persistent", "name": "role_name"}
     ],
     db_collections.USER_ROLES: [
         {"fields": ["is_deleted"], "type": "persistent", "name": "ur_is_active"},
