@@ -21,6 +21,7 @@ async def fetch_error_list(
     locations: Optional[List[str]] = None
 ) -> ResponseMainModel:
     try:
+        print(error_type)
         # config = await fetch_odk_config(db)
         # date_field = config.field_mapping.date
         # region_field = config.field_mapping.location_level1
@@ -31,17 +32,41 @@ async def fetch_error_list(
 
         
         query = f"""
-            FOR e IN {collection.name}
-            COLLECT errorType = e.error_type, errorMessage = e.error_message, group = e.group, uuid = e.uuid INTO groupedErrors
+        LET groupedErrorsCounts = (
+            FOR e IN {db_collections.CCVA_ERRORS}
+           // {"FILTER e.error_type == @error_type" if error_type else ""}
+            COLLECT errorType = e.error_type INTO groupedDocs
+            LET uniqueUuids = UNIQUE(groupedDocs[*].e.uuid)
+            RETURN {{
+            error_type: errorType,
+            total: LENGTH(uniqueUuids)
+            }}
+        )
+
+        LET individualErrorsResults = (
+            FOR e IN {db_collections.CCVA_ERRORS}
+            {"FILTER e.error_type == @error_type" if error_type else ""}
+            COLLECT uuid = e.uuid, group = e.group INTO groupedErrors
+            LET error_types = UNIQUE(groupedErrors[*].e.error_type)
+            LET error_messages = UNIQUE(groupedErrors[*].e.error_message)
             SORT uuid ASC
             LIMIT @offset, @size
             RETURN {{
                 uuid: uuid,
-                error_type: errorType,
-                error_message: errorMessage,
-                group: group
+                error_types: error_types,
+                group: group,
+                error_messages: error_messages
             }}
+        )
+
+        RETURN {{
+            groupedErrorsCounts: groupedErrorsCounts,
+            individualErrorsResults: individualErrorsResults
+        }}
         """
+
+
+     
         bind_vars.update({
             "offset": 0,
             "size": 1000
@@ -61,7 +86,7 @@ async def fetch_error_list(
         total_records = total_records_cursor.next()
 
         return ResponseMainModel(
-            data=data,
+            data=data[0] if data else {},
             message="Records fetched successfully",
             total=total_records
         )
@@ -74,30 +99,30 @@ async def fetch_error_list(
     
 async def fetch_error_details(db: StandardDatabase, error_id: str) -> ResponseMainModel:
     try:
-        collection = db.collection(db_collections.CCVA_ERRORS)
+        # collection = db.collection(db_collections.CCVA_ERRORS)
         query = f"""
-          
-        FOR e IN {db_collections.CCVA_ERRORS}
-         FILTER e.uuid == @error_id
-COLLECT errorType = e.error_type, errorMessage = e.error_message, group = e.group, uuid = e.uuid INTO groupedErrors
+            FOR e IN {db_collections.CCVA_ERRORS}
+                FILTER e.uuid == @error_id
+                COLLECT uuid = e.uuid, errorType = e.error_type, group = e.group INTO groupedErrors
 
-LET formData = (
-    FOR fs IN {db_collections.VA_TABLE}
-    FILTER fs.__id == CONCAT("uuid:", uuid)
-    RETURN UNSET(fs, ["_id", "_rev","__id",'_key','instanceid','submissiondate'])
-)
-RETURN {{
-    error: {{
-        uuid: uuid,
-        error_type: errorType,
-        error_message: errorMessage,
-        group: group
-    }},
-    form_data: formData[0] // Include the matching form data
-}}
-     
+            LET formData = (
+                FOR fs IN {db_collections.VA_TABLE}
+                    FILTER fs.__id == CONCAT("uuid:", uuid)
+                    RETURN UNSET(fs, ["_id", "_rev", "__id", "_key", "instanceid", "submissiondate"])
+            )
+
+            RETURN {{
+                error: {{
+                    uuid: uuid,
+                    error_types: errorType,
+                    group: group,
+                    error_messages: UNIQUE(groupedErrors[*].e.error_message) // Aggregate unique error messages
+                }},
+                form_data: formData[0] // Include the matching form data
+            }}
         """
-        print(query)
+
+        # print(query)
         
         cursor = db.aql.execute(query, bind_vars={"error_id": error_id}, cache=True)
         result = cursor.next()
