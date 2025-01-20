@@ -28,9 +28,9 @@ async def websocket_broadcast(task_id: str, progress_data: dict):
     )
     await websocket__manager.broadcast(task_id, json.dumps(progress_data))
 
-async def get_record_to_run_ccva(current_user:dict,db: StandardDatabase, task_id: str, task_results: Dict,start_date: Optional[date] = None, end_date: Optional[date] = None,date_type:Optional[str]=None,):
+async def get_record_to_run_ccva(current_user:dict,db: StandardDatabase,data_source:Optional[str], task_id: Optional[str], task_results: Dict,start_date: Optional[date] = None, end_date: Optional[date] = None,date_type:Optional[str]=None,):
     try:
-        records= await fetch_va_records_json(current_user=current_user,paging=False, start_date=start_date, end_date=end_date,  db=db,date_type=date_type)
+        records= await fetch_va_records_json(current_user=current_user,paging=False,data_source=data_source,task_id=task_id,  start_date=start_date, end_date=end_date,  db=db,date_type=date_type)
         if records.data == []:
             raise Exception("No records found")
         
@@ -106,16 +106,17 @@ def runCCVA(odk_raw:pd.DataFrame, id_col: str = None,date_col:str =None,start_ti
             file_id: str = "unnamed_file", update_callback=None, db: StandardDatabase=None):
     
     try:
+        print('pass here 0', file_id,instrument,id_col)
         # Transform the input data
         if id_col:
             input_data = transform((instrument, algorithm), odk_raw, raw_data_id=id_col, lower=True)
         else:
             input_data = transform((instrument, algorithm), odk_raw, lower=True)
-        
+        print('pass here')
         # Define the output folder
         output_folder = "./ccva_files/"
         # output_folder = f"../ccva_files/{file_id}/"
-        
+        print('pass here 2')
         # Create an InterVA5 instance with the async callback
         iv5out = InterVA5(input_data,task_id=file_id, hiv=hiv, malaria=malaria, write=True, directory=output_folder, filename=file_id,start_time=start_time, update_callback=update_callback, return_checked_data=True)
 
