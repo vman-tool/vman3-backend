@@ -233,3 +233,70 @@ class CoderResponseClass(BaseModel):
     phone: Union[str, None] = None
     assigned_va: Union[int, None] = None
     coded_va: Union[int, None] = None
+
+
+class PCVAResultsExportClass(PCVAResultsResponseClass):
+    assigned_va: Union[Dict, None] = None
+    cause_a: Union[str, None] = None
+    cause_b: Union[str, None] = None
+    cause_c: Union[str, None] = None
+    cause_d: Union[str, None] = None
+    cause_contributories: Union[str, None] = None
+
+"""
+LET coded_vas = (
+  FOR doc IN pcva_results
+  SORT doc.datetime DESC
+  COLLECT created_by = doc.created_by, assigned_va = doc.assigned_va
+  INTO grouped = doc
+  RETURN FIRST(
+    FOR result IN grouped
+    LIMIT 1
+    RETURN {
+      coder: result.created_by,
+      va: result.assigned_va,
+      cause_a: result.frameA.a,
+      cause_b: result.frameA.b,
+      cause_c: result.frameA.c,
+      cause_d: result.frameA.d,
+      contributories_causes: result.frameA.contributories
+    }
+  )
+)
+
+LET results = (
+  FOR doc IN coded_vas
+  COLLECT va = doc.va INTO grouped_docs = doc
+  
+  LET coders = (
+    FOR g IN grouped_docs
+    RETURN {
+      cause_a: g.cause_a,
+      cause_b: g.cause_b,
+      cause_c: g.cause_c,
+      cause_d: g.cause_d,
+      contributories_causes: g.contributories_causes
+    }
+  )
+  
+  LET numbered_causes = (
+    FOR coder IN coders
+    FOR i IN 1..LENGTH(coders)
+    RETURN {
+      [CONCAT('cd', TO_STRING(i), '_cause_a')]: coder.cause_a,
+      [CONCAT('cd', TO_STRING(i), '_cause_b')]: coder.cause_b,
+      [CONCAT('cd', TO_STRING(i), '_cause_c')]: coder.cause_c,
+      [CONCAT('cd', TO_STRING(i), '_cause_d')]: coder.cause_d,
+      [CONCAT('cd', TO_STRING(i), '_contributories_causes')]: coder.contributories_causes
+    }
+  )
+  
+  RETURN MERGE(
+    { assigned_va: va },
+    MERGE(numbered_causes[*])
+  )
+)
+
+RETURN results
+
+"""
