@@ -243,65 +243,67 @@ class PCVAResultsExportClass(PCVAResultsResponseClass):
     cause_d: Union[str, None] = None
     cause_contributories: Union[str, None] = None
 
-"""LET coded_vas = (
-  FOR doc IN pcva_results
-  SORT doc.datetime DESC
-  COLLECT created_by = doc.created_by, assigned_va = doc.assigned_va
-  INTO grouped = doc
-  RETURN FIRST(
-    FOR result IN grouped
-    LIMIT 1
-    RETURN {
-      coder: result.created_by,
-      va: result.assigned_va,
-      cause_a: result.frameA.a,
-      cause_b: result.frameA.b,
-      cause_c: result.frameA.c,
-      cause_d: result.frameA.d,
-      contributory_causes: result.frameA.contributories
-    }
-  )
-)
-
-LET results = (
-  FOR doc IN coded_vas
-  COLLECT va = doc.va INTO grouped_docs = doc
-  
-  LET coders = (
-    FOR g IN grouped_docs
-    RETURN {
-      cause_a: g.cause_a,
-      cause_b: g.cause_b,
-      cause_c: g.cause_c,
-      cause_d: g.cause_d,
-      contributory_causes: g.contributory_causes
-    }
-  )
-  
-  LET numbered_causes = (
-    FOR coder IN coders
-    FOR i IN 1..LENGTH(coders)
-    LET contributory_causes = (
-      FOR j IN 1..LENGTH(coder.contributory_causes)
-      RETURN {
-        [CONCAT('coder', TO_STRING(i), '_contributory_cause_', TO_STRING(j))]: coder.contributory_causes[j-1]
-      }
+"""
+    LET coded_vas = (
+    FOR doc IN pcva_results
+    SORT doc.datetime DESC
+    COLLECT created_by = doc.created_by, assigned_va = doc.assigned_va
+    INTO grouped = doc
+    RETURN FIRST(
+        FOR result IN grouped
+        LIMIT 1
+        RETURN {
+        coder: result.created_by,
+        va: result.assigned_va,
+        cause_a: result.frameA.a,
+        cause_b: result.frameA.b,
+        cause_c: result.frameA.c,
+        cause_d: result.frameA.d,
+        contributory_causes: result.frameA.contributories
+        }
     )
+    )
+
+    LET results = (
+    FOR doc IN coded_vas
+    COLLECT va = doc.va INTO grouped_docs = doc
+    
+    LET coders = (
+        FOR g IN grouped_docs
+        RETURN {
+        cause_a: g.cause_a,
+        cause_b: g.cause_b,
+        cause_c: g.cause_c,
+        cause_d: g.cause_d,
+        contributory_causes: g.contributory_causes
+        }
+    )
+    
+    LET numbered_causes = (
+        FOR coder IN coders
+        FOR i IN 1..LENGTH(coders)
+        LET contributory_causes = (
+        FOR j IN 1..LENGTH(coder.contributory_causes)
+        RETURN {
+            [CONCAT('coder', TO_STRING(i), '_contributory_cause_', TO_STRING(j))]: coder.contributory_causes[j-1]
+        }
+        )
+        RETURN MERGE(
+        {
+            [CONCAT('coder', TO_STRING(i), '_cause_a')]: coder.cause_a,
+            [CONCAT('coder', TO_STRING(i), '_cause_b')]: coder.cause_b,
+            [CONCAT('coder', TO_STRING(i), '_cause_c')]: coder.cause_c,
+            [CONCAT('coder', TO_STRING(i), '_cause_d')]: coder.cause_d,
+        },
+        MERGE(contributory_causes[*])
+        )
+    )
+    
     RETURN MERGE(
-      {
-        [CONCAT('coder', TO_STRING(i), '_cause_a')]: coder.cause_a,
-        [CONCAT('coder', TO_STRING(i), '_cause_b')]: coder.cause_b,
-        [CONCAT('coder', TO_STRING(i), '_cause_c')]: coder.cause_c,
-        [CONCAT('coder', TO_STRING(i), '_cause_d')]: coder.cause_d,
-      },
-      MERGE(contributory_causes[*])
+        { assigned_va: va, coders: LENGTH(coders) },
+        MERGE(numbered_causes[*])
     )
-  )
-  
-  RETURN MERGE(
-    { assigned_va: va },
-    MERGE(numbered_causes[*])
-  )
-)
+    )
 
-RETURN results"""
+    RETURN results
+"""
