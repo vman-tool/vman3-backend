@@ -95,8 +95,9 @@ async def fetch_va_records(current_user:dict,paging: bool = True, page_number: i
 
 
 
-async def fetch_va_records_json(current_user:dict,paging: bool = True, page_number: int = 1, limit: int = 10, start_date: Optional[date] = None, end_date: Optional[date] = None, locations: Optional[List[str]] = None,date_type:Optional[str]=None, db: StandardDatabase = None) -> ResponseMainModel:
+async def fetch_va_records_json(current_user:dict,paging: bool = True,data_source:Optional[str]=None, task_id:Optional[str]=None, page_number: int = 1, limit: int = 10, start_date: Optional[date] = None, end_date: Optional[date] = None, locations: Optional[List[str]] = None,date_type:Optional[str]=None, db: StandardDatabase = None) -> ResponseMainModel:
     try:
+        print(data_source, task_id)
         config = await fetch_odk_config(db)
         region_field = config.field_mapping.location_level1
         # locationKey, locationLimitValues = get_location_limit_values(current_user)
@@ -131,6 +132,14 @@ async def fetch_va_records_json(current_user:dict,paging: bool = True, page_numb
         if locations:
             filters.append(f"doc.{region_field} IN @locations")
             bind_vars["locations"] = locations
+        # filter by data source and task id, THIS ID CASE WHEN WE IMPORT DATA FROM CSV, AND WE WANT THEM ONLY
+        if data_source is  None : 
+            filters.append('doc.vman_data_source !="data_source"')
+        if data_source :
+            filters.append(f'doc.vman_data_source =="{data_source}"')
+        # if task_id:
+        #     filters.append(f'doc.trackid =="{task_id}"')
+            
 
         if filters:
             query += "FILTER " + " AND ".join(filters) + " "
