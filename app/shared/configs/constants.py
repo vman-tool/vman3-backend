@@ -35,6 +35,11 @@ collections_with_indexes = {
     #    {"fields": ["id10005r"], "unique": False, "type": "persistent", "name": "idx_region"}
     # ],
     db_collections.VA_TABLE: [
+        {"fields": ["__id"], "unique": True, "type": "persistent", "name": "idx___id"},
+         {"fields": ["vman_data_source"], "unique": False, "type": "persistent", "name": "idx_vman_data_source"},
+        {"fields": ["vman_data_name"], "unique": False, "type": "persistent", "name": "idx_vman_data_name"},
+        {"fields": ["__id", "vman_data_source"], "unique": True, "type": "persistent", "name": "idx___id_vman_data_source"},
+        
         {"fields": ["id10005r"], "unique": False, "type": "persistent", "name": "idx_region"},
         {"fields": ["id10012"], "unique": False, "type": "persistent", "name": "idx_date"},
         {"fields": ["today"], "unique": False, "type": "persistent", "name": "idx_submission"},
@@ -46,7 +51,7 @@ collections_with_indexes = {
     ],
     db_collections.ROLES: [
         {"fields": ["is_deleted"], "type": "persistent", "name": "r_is_active"},
-        {"fields": ["name"], "unique": True, "type": "persistent", "name": "role_name"}
+        {"fields": ["name"], "unique": True, "type": "persistent", "name": "role_name"} ###TODO: Uncomment this line after testing
     ],
     db_collections.USER_ROLES: [
         {"fields": ["is_deleted"], "type": "persistent", "name": "ur_is_active"},
