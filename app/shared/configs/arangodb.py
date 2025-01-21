@@ -45,19 +45,21 @@ class ArangoDBClient:
     def _create_collections_sync(self):
         create_collections_and_indexes(self.db, collections_with_indexes)
 
-    async def insert_many(self, collection_name: str, documents: list[dict]):
+    async def insert_many(self, collection_name: str, documents: list[dict], overwrite_mode: str = 'ignore'):
         # Wrap the synchronous insert_many in a thread pool
-        return await run_in_threadpool(self._insert_many_sync, collection_name, documents)
+        return await run_in_threadpool(self._insert_many_sync, collection_name, documents, overwrite_mode)
 
-    def _insert_many_sync(self, collection_name: str, documents: list[dict]):
+    def _insert_many_sync(self, collection_name: str, documents: list[dict], overwrite_mode: str):
         collection = self.db.collection(collection_name)
-        result = collection.insert_many(documents)
-        return result
+        documents = [sanitize_document(doc) for doc in documents]
+        collection.insert_many(documents, overwrite=True, overwrite_mode=overwrite_mode, keep_none=False,  silent=True)
 
+
+    
     async def replace_one(self, collection_name: str, document: dict):
         # Wrap the synchronous replace_one in a thread pool
         return await run_in_threadpool(self._replace_one_sync, collection_name, document)
-    def _replace_one_sync(self, collection_name: str, document: dict):
+    def _replace_one_sync(self, collection_name: str, document: dict,data_source:str=None):
         try:
             aql_query = """
             UPSERT { __id: @id }
@@ -67,13 +69,15 @@ class ArangoDBClient:
             """
             bind_vars = {
                 '@collection': collection_name,
-                'id': document['__id'],
+                'id': document.get('__id'),
                 'document': document
             }
+            print(aql_query)
             cursor = self.db.aql.execute(aql_query, bind_vars=bind_vars,cache=True)
             result = [doc for doc in cursor]
             return result
         except Exception as e:
+            print(e)
             logger.error(f"Error during replace_one: {e}")
             raise e
 
@@ -172,3 +176,18 @@ def remove_null_values(data):
     else:
         # Return the original value if it's not None
         return data
+
+
+def sanitize_document(document):
+    """
+    Recursively sanitize a document to replace +inf, -inf, and NaN with valid JSON-compatible values.
+    """
+    if isinstance(document, dict):
+        return {key: sanitize_document(value) for key, value in document.items()}
+    elif isinstance(document, list):
+        return [sanitize_document(value) for value in document]
+    elif isinstance(document, float):
+        # Replace +inf, -inf, and NaN with None (or other default)
+        if math.isinf(document) or math.isnan(document):
+            return None
+    return document
