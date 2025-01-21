@@ -16,7 +16,7 @@ from app.odk.utils.odk_client import ODKClientAsync
 from app.pcva.responses.va_response_classes import VAQuestionResponseClass
 from app.settings.services.odk_configs import fetch_odk_config
 from app.shared.configs.arangodb import (ArangoDBClient, get_arangodb_client,
-                                         remove_null_values)
+                                         remove_null_values, sanitize_document)
 from app.shared.configs.constants import db_collections
 from app.shared.configs.models import ResponseMainModel
 
@@ -295,12 +295,33 @@ async def fetch_form_questions(db: StandardDatabase):
         print(e)
         raise e
 
-async def insert_data_to_arangodb(data: dict):
+async def insert_data_to_arangodb(data: dict,data_source:str=None):
 
     try:
         data=remove_null_values(data)
+        # Sanitize the document
+        data = sanitize_document(data)
+        
+        
+
         db:ArangoDBClient = await get_arangodb_client()
         await db.replace_one(collection_name=db_collections.VA_TABLE, document=data)
+    except Exception as e:
+        print(e)
+        raise e
+async def insert_many_data_to_arangodb(data: List[dict], overwrite_mode: str = 'ignore'):
+
+    try:
+        data=remove_null_values(data)
+        print('data 0')
+        # Sanitize the document
+        data = [sanitize_document(item) for item in data]
+  
+        print('data 1')
+
+        db:ArangoDBClient = await get_arangodb_client()
+        await db.insert_many(collection_name=db_collections.VA_TABLE, documents=data,overwrite_mode = overwrite_mode)
+
     except Exception as e:
         print(e)
         raise e

@@ -4,12 +4,10 @@ from typing import List, Optional
 from arango.database import StandardDatabase
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
-from app.data_quality.services.data_quality import (
-    fetch_error_details,
-    fetch_error_list,
-    fetch_form_data,
-    save_corrections_data,
-)
+from app.data_quality.services.data_quality import (fetch_error_details,
+                                                    fetch_error_list,
+                                                    fetch_form_data,
+                                                    save_corrections_data)
 from app.shared.configs.arangodb import get_arangodb_session
 from app.users.decorators.user import get_current_user
 
@@ -33,10 +31,13 @@ async def get_error_list(
     # current_user = Depends(get_current_user)
 ):
     try:
+        print(error_type)
         errors = await fetch_error_list(
             db,
             page,
+            0,
             limit,
+            
             error_type,
             group,
             start_date,
