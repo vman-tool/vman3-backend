@@ -34,6 +34,7 @@ from app.pcva.services.icd10_services import (
 from app.pcva.services.va_records_services import (
     assign_va_service,
     code_assigned_va_service,
+    export_pcva_results,
     get_coded_va_details,
     get_coded_va_service,
     get_coders,
@@ -324,6 +325,16 @@ async def get_concordants(
     db: StandardDatabase = Depends(get_arangodb_session)):
     try:
         return  await get_concordants_va_service(current_user, db = db)
+    except Exception as e:
+        raise e
+    
+
+@pcva_router.get("/export_pcva_results", status_code=status.HTTP_200_OK)
+async def export_coded_vas(
+    current_user: User = Depends(get_current_user),
+    db: StandardDatabase = Depends(get_arangodb_session)):
+    try:
+        return  await export_pcva_results(db = db)
     except Exception as e:
         raise e
     
