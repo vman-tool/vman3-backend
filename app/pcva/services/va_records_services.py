@@ -1,8 +1,10 @@
 from datetime import datetime
+from io import BytesIO
 from typing import Dict
 from arango import ArangoError
 from arango.database import StandardDatabase
 from fastapi import HTTPException
+from fastapi.responses import FileResponse, StreamingResponse
 
 from app.pcva.models.pcva_models import ICD10, AssignedVA, CodedVA, PCVAResults
 from app.pcva.requests.va_request_classes import AssignVARequestClass, CodeAssignedVARequestClass, PCVAResultsRequestClass
@@ -15,6 +17,8 @@ from app.shared.configs.models import Pager, ResponseMainModel, VManBaseModel
 from app.odk.models.questions_models import VA_Question
 from app.settings.services.odk_configs import fetch_odk_config
 from app.users.models.role import Role, UserRole
+
+import pandas as pd
    
 
 
@@ -509,4 +513,133 @@ async def get_coders(
         return ResponseMainModel(data = coders_data, total=len(coders_data), message="Coders fetched successfully!", pager=Pager(page=page_number, limit=limit))
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to get coders: {e}")
+    
+
+async def export_pcva_results(db: StandardDatabase = None):
+    try:
+        query = f"""
+            LET coded_vas = (
+                FOR doc IN {db_collections.PCVA_RESULTS}
+                SORT doc.datetime DESC
+                COLLECT created_by = doc.created_by, assigned_va = doc.assigned_va
+                INTO grouped = doc
+                RETURN FIRST(
+                    FOR result IN grouped
+                    LIMIT 1
+                    
+                    LET cause_a = (
+                        FOR code IN {db_collections.ICD10}
+                        FILTER code.uuid == result.frameA.a
+                        RETURN CONCAT("(", code.code, ") ", code.name)
+                    )[0]
+                    LET cause_b = (
+                        FOR code IN {db_collections.ICD10}
+                        FILTER code.uuid == result.frameA.b
+                        RETURN CONCAT("(", code.code, ") ", code.name)
+                    )[0]
+                    LET cause_c = (
+                        FOR code IN {db_collections.ICD10}
+                        FILTER code.uuid == result.frameA.c
+                        RETURN CONCAT("(", code.code, ") ", code.name)
+                    )[0]
+                    LET cause_d = (
+                        FOR code IN {db_collections.ICD10}
+                        FILTER code.uuid == result.frameA.d
+                        RETURN CONCAT("(", code.code, ") ", code.name)
+                    )[0]
+                    LET contributory_causes = (
+                        FOR contrib_id IN result.frameA.contributories
+                        FOR code IN {db_collections.ICD10}
+                        FILTER code.uuid == contrib_id
+                        RETURN CONCAT("(", code.code, ") ", code.name)
+                    )
+                    
+                    RETURN {{
+                        coder: result.created_by,
+                        va: result.assigned_va,
+                        cause_a: cause_a,
+                        cause_b: cause_b,
+                        cause_c: cause_c,
+                        cause_d: cause_d,
+                        contributory_causes: contributory_causes
+                    }}
+                )
+            )
+            
+            FOR doc IN coded_vas
+            COLLECT va = doc.va INTO coders = doc
+            
+            LET numbered_causes = (
+                FOR coder IN coders
+                    FOR i IN 1..LENGTH(coders)
+                    
+                    // For numbered contributory causes (Uncomment the following lines - Not good for export data or tabular view of the data)
+                    //LET contributory_causes = (
+                    //    FOR j IN 1..LENGTH(coder.contributory_causes)
+                    //    RETURN {{
+                    //        [CONCAT('coder', TO_STRING(i), '_contributory_cause_', TO_STRING(j))]: coder.contributory_causes[j-1]
+                    //    }}
+                    //)
+                    
+                    RETURN MERGE(
+                    {{
+                        [CONCAT('coder', TO_STRING(i), '_cause_a')]: coder.cause_a,
+                        [CONCAT('coder', TO_STRING(i), '_cause_b')]: coder.cause_b,
+                        [CONCAT('coder', TO_STRING(i), '_cause_c')]: coder.cause_c,
+                        [CONCAT('coder', TO_STRING(i), '_cause_d')]: coder.cause_d,
+
+                        // For numbered contributory causes (Remove this line)
+                        [CONCAT('coder', TO_STRING(i), '_contributory_causes')]: CONCAT_SEPARATOR(", ", coder.contributory_causes)
+                    }}
+
+                    // For numbered contributory causes (Uncomment the following line)
+                    // ,
+                    // MERGE(contributory_causes[*])
+                )
+            )
+            
+            LET merged_result = MERGE(
+                {{ assigned_va: va, coders: LENGTH(coders) }},
+                MERGE(numbered_causes[*])
+            )
+            
+            LET sorted_objects = (
+                FOR key IN ATTRIBUTES(merged_result)
+                SORT key ASC
+                RETURN [key, merged_result[key]]
+            )
+            
+            RETURN ZIP(
+                sorted_objects[*][0],
+                sorted_objects[*][1]
+            )
+
+        """
+
+        results = await VManBaseModel.run_custom_query(
+            query = query,
+            db = db
+        )
+        results = [result for result in results]
+        sorted_results = sorted(results, key=lambda x: x['coders'], reverse=True)
+        columns = list(sorted_results[0].keys())
+
+        df = pd.DataFrame(sorted_results, columns=columns)
+
+        numeric_columns = df.select_dtypes(include=['float64', 'int64']).columns
+        string_columns = df.select_dtypes(include=['object']).columns
+
+        df[numeric_columns] = df[numeric_columns].fillna('')
+        df[string_columns] = df[string_columns].fillna('')
+
+        output = BytesIO()
+        with pd.ExcelWriter(output, engine="openpyxl") as writer:
+            df.to_excel(writer, index=False)
+        output.seek(0) 
+
+        headers = {"Content-Disposition": "attachment; filename=pcva_results.xlsx"}
+        return StreamingResponse(output, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", headers=headers)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to export PCVA results: {e}")
+
 
