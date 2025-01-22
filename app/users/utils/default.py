@@ -77,7 +77,7 @@ async def create_default_roles(current_user: User = None):
             ),
             RoleRequest(
                 name = "coder",
-                privileges = [AccessPrivileges.PCVA_CODE_VA, AccessPrivileges.PCVA_VIEW_VA_RECORDS]
+                privileges = [AccessPrivileges.PCVA_MODULE_ACCESS, AccessPrivileges.PCVA_CODE_VA, AccessPrivileges.PCVA_VIEW_VA_RECORDS, AccessPrivileges.USERS_VIEW_PRIVILEGES, AccessPrivileges.USERS_VIEW_ROLES]
             )
         ]
         for role in roles:
