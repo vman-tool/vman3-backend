@@ -233,3 +233,112 @@ class CoderResponseClass(BaseModel):
     phone: Union[str, None] = None
     assigned_va: Union[int, None] = None
     coded_va: Union[int, None] = None
+
+
+class PCVAResultsExportClass(PCVAResultsResponseClass):
+    assigned_va: Union[Dict, None] = None
+    cause_a: Union[str, None] = None
+    cause_b: Union[str, None] = None
+    cause_c: Union[str, None] = None
+    cause_d: Union[str, None] = None
+    cause_contributories: Union[str, None] = None
+
+"""
+    LET coded_vas = (
+      FOR doc IN pcva_results
+      SORT doc.datetime DESC
+      COLLECT created_by = doc.created_by, assigned_va = doc.assigned_va
+      INTO grouped = doc
+      RETURN FIRST(
+          FOR result IN grouped
+          LIMIT 1
+          
+          LET cause_a = (
+              FOR code IN icd10
+              FILTER code.uuid == result.frameA.a
+              RETURN CONCAT("(", code.code, ") ", code.name)
+          )[0]
+          LET cause_b = (
+              FOR code IN icd10
+              FILTER code.uuid == result.frameA.b
+              RETURN CONCAT("(", code.code, ") ", code.name)
+          )[0]
+          LET cause_c = (
+              FOR code IN icd10
+              FILTER code.uuid == result.frameA.c
+              RETURN CONCAT("(", code.code, ") ", code.name)
+          )[0]
+          LET cause_d = (
+              FOR code IN icd10
+              FILTER code.uuid == result.frameA.d
+              RETURN CONCAT("(", code.code, ") ", code.name)
+          )[0]
+          LET contributory_causes = (
+              FOR contrib_id IN result.frameA.contributories
+              FOR code IN icd10
+              FILTER code.uuid == contrib_id
+              RETURN CONCAT("(", code.code, ") ", code.name)
+          )
+          
+          RETURN {
+          coder: result.created_by,
+          va: result.assigned_va,
+          cause_a: cause_a,
+          cause_b: cause_b,
+          cause_c: cause_c,
+          cause_d: cause_d,
+          contributory_causes: contributory_causes
+          }
+      )
+      )
+  
+      FOR doc IN coded_vas
+      COLLECT va = doc.va INTO grouped_docs = doc
+      
+      LET coders = (
+          FOR g IN grouped_docs
+          RETURN {
+          cause_a: g.cause_a,
+          cause_b: g.cause_b,
+          cause_c: g.cause_c,
+          cause_d: g.cause_d,
+          contributory_causes: g.contributory_causes
+          }
+      )
+      
+      LET numbered_causes = (
+          FOR coder IN coders
+          FOR i IN 1..LENGTH(coders)
+          LET contributory_causes = (
+          FOR j IN 1..LENGTH(coder.contributory_causes)
+          RETURN {
+              [CONCAT('coder', TO_STRING(i), '_contributory_cause_', TO_STRING(j))]: coder.contributory_causes[j-1]
+          }
+          )
+          RETURN MERGE(
+          {
+              [CONCAT('coder', TO_STRING(i), '_cause_a')]: coder.cause_a,
+              [CONCAT('coder', TO_STRING(i), '_cause_b')]: coder.cause_b,
+              [CONCAT('coder', TO_STRING(i), '_cause_c')]: coder.cause_c,
+              [CONCAT('coder', TO_STRING(i), '_cause_d')]: coder.cause_d,
+          },
+          MERGE(contributory_causes[*])
+          )
+      )
+      
+      LET merged_result = MERGE(
+          { assigned_va: va, coders: LENGTH(coders) },
+          MERGE(numbered_causes[*])
+      )
+      
+      LET sorted_objects = (
+          FOR key IN ATTRIBUTES(merged_result)
+          SORT key ASC
+          RETURN [key, merged_result[key]]
+      )
+    
+      RETURN ZIP(
+        sorted_objects[*][0],
+        sorted_objects[*][1]
+      )
+"""
