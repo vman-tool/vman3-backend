@@ -23,55 +23,145 @@ import pandas as pd
 
 
 async def get_unassigned_va_service(paging: bool = True, page_number: int = 0, limit: int = 10, format_records: bool = True, coder: str = None, db: StandardDatabase = None):
-    offset = (page_number - 1) * limit if paging else 0
+    try:
+        config = await fetch_odk_config(db)
+        offset = (page_number - 1) * limit if paging else 0
 
-    query = ""
-    paginator = ""
-    bind_vars = {}
-    if paging:
-        paginator = f"LIMIT @offset, @limit"
+        query = ""
+        paginator = ""
+        bind_vars = {}
+        if paging:
+            paginator = f"LIMIT @offset, @limit"
+            bind_vars.update({
+                "offset": offset,
+                "limit": limit
+            })
+
+        
+        # TODO: Every instanceid field used has to come from settings since it's the unique VA ID identified in the VA Data records
+
+        query = f"""
+            FOR doc IN form_submissions
+                LET coders_ids = (
+                    FOR va IN {db_collections.ASSIGNED_VA}
+                    FILTER va.vaId == doc.instanceid 
+                    AND va.is_deleted == false
+                    RETURN va.coder
+                )
+
+                LET coders = (
+                    FOR user in {db_collections.USERS}
+                    FILTER user.uuid IN coders_ids
+                    RETURN {{
+                        uuid: user.uuid,
+                        name: user.name
+                    }}
+                )
+                
+                LET assignmentCount = (
+                    FOR va IN {db_collections.ASSIGNED_VA}
+                    FILTER va.vaId == doc.instanceid 
+                    AND va.is_deleted == false
+                    COLLECT WITH COUNT INTO count
+                    RETURN count
+                )[0]
+
+                FILTER doc.instanceid NOT IN (
+                    FOR va IN {db_collections.ASSIGNED_VA}
+                    FILTER { 'va.coder == @coder AND' if coder else ''} va.is_deleted == false
+                    COLLECT vaId = va.vaId WITH COUNT INTO coderCount
+                    FILTER coderCount <= @maximum_assignment
+                    RETURN vaId
+                )
+                {paginator}
+                RETURN MERGE(doc, {{assignments: assignmentCount , coders: coders}}
+            )
+        """
+
+        if coder:
+            bind_vars.update({
+                "coder": coder
+            })
         bind_vars.update({
-            "offset": offset,
-            "limit": limit
+            "maximum_assignment": 2 # TODO: This number has to come from PCVA Settings
         })
 
-    query = f"""
-        FOR doc IN form_submissions
-            LET coders = (
-                FOR va IN assigned_va
-                FILTER va.vaId == doc.instanceid 
-                AND va.is_deleted == false
-                RETURN va.coder
-            )
-            
-            LET assignmentCount = (
-                FOR va IN assigned_va
-                FILTER va.vaId == doc.instanceid 
-                AND va.is_deleted == false
-                COLLECT WITH COUNT INTO count
-                RETURN count
-            )[0]
+        query_result = await VManBaseModel.run_custom_query(query=query, bind_vars=bind_vars, db=db)
+        unassigned_data = [format_va_record(va, config) for va in query_result]
+        return ResponseMainModel(data=unassigned_data, message="Unassigned VAs fetched successfully!", total = len(unassigned_data), pager=Pager(page=page_number, limit=limit))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get unassigned va: {e}")
 
-            FILTER doc.instanceid NOT IN (
-                FOR va IN assigned_va
-                FILTER { 'va.coder == @coder AND' if coder else ''} va.is_deleted == false
-                COLLECT vaId = va.vaId WITH COUNT INTO coderCount
-                FILTER coderCount < @maximum_assignment
-                RETURN vaId
-            )
-            {paginator}
-            RETURN MERGE(doc, {{assignments: assignmentCount , coders: coders}}
-        )
-    """
+async def get_va_for_unnassignment_service(paging: bool = True, page_number: int = 0, limit: int = 10, format_records: bool = True, coder: str = None, db: StandardDatabase = None):
+    try:
+        config = await fetch_odk_config(db)
+        offset = (page_number - 1) * limit if paging else 0
 
-    if coder:
+        query = ""
+        paginator = ""
+        bind_vars = {}
+        if paging:
+            paginator = f"LIMIT @offset, @limit"
+            bind_vars.update({
+                "offset": offset,
+                "limit": limit
+            })
+
+        
+        # TODO: Every instanceid field used has to come from settings since it's the unique VA ID identified in the VA Data records
+
+        query = f"""
+            FOR doc IN form_submissions
+                LET coders_ids = (
+                    FOR va IN {db_collections.ASSIGNED_VA}
+                    FILTER va.vaId == doc.instanceid 
+                    AND va.is_deleted == false
+                    RETURN va.coder
+                )
+
+                LET coders = (
+                    FOR user in {db_collections.USERS}
+                    FILTER user.uuid IN coders_ids
+                    RETURN {{
+                        uuid: user.uuid,
+                        name: user.name
+                    }}
+                )
+                
+                LET assignmentCount = (
+                    FOR va IN {db_collections.ASSIGNED_VA}
+                    FILTER va.vaId == doc.instanceid 
+                    AND va.is_deleted == false
+                    COLLECT WITH COUNT INTO count
+                    RETURN count
+                )[0]
+
+                FILTER doc.instanceid IN (
+                    FOR va IN {db_collections.ASSIGNED_VA}
+                    FILTER { 'va.coder == @coder AND' if coder else ''} va.is_deleted == false
+                    COLLECT vaId = va.vaId WITH COUNT INTO coderCount
+                    FILTER coderCount <= @maximum_assignment
+                    RETURN vaId
+                )
+                {paginator}
+                RETURN MERGE(doc, {{assignments: assignmentCount , coders: coders}}
+            )
+        """
+
+        if coder:
+            bind_vars.update({
+                "coder": coder
+            })
         bind_vars.update({
-            "coder": coder
+            "maximum_assignment": 2 # TODO: This number has to come from PCVA Settings
         })
-    bind_vars.update({
-        "maximum_assignment": 2
-    })
-    return False
+
+        query_result = await VManBaseModel.run_custom_query(query=query, bind_vars=bind_vars, db=db)
+        unassigned_data = [format_va_record(va, config) for va in query_result]
+        return ResponseMainModel(data=unassigned_data, message="Unassigned VAs fetched successfully!", total = len(unassigned_data), pager=Pager(page=page_number, limit=limit))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get unassigned va: {e}")
+    
 
 async def assign_va_service(va_records: AssignVARequestClass, user: User,  db: StandardDatabase = None):
     try:
@@ -116,7 +206,6 @@ async def assign_va_service(va_records: AssignVARequestClass, user: User,  db: S
                 },
                 db = db
             )
-            print("Does it exists: ", existing_va_assignment_data)
             if existing_va_assignment_data:
                 if len(existing_va_assignment_data) > 1:
                     raise HTTPException(status_code=400, detail=f"Multiple assignments found for this VA with this coder")
