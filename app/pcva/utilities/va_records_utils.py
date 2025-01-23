@@ -14,14 +14,20 @@ class DataResponse(BaseModel):
     interviewDay: Optional[str] = None
     interviewerName: Optional[str] = None
     instanceid: Optional[str] = None
-    assignments: Union[List[Dict], None] = None
+    assignments: Union[Any, None] = None
+    coders: Union[List[Any], None] = None
 
 
 
 def format_va_record(raw_data: dict, config: SettingsConfigData = None) -> DataResponse:
     assignments = None
+    datacoders = None
     if 'assignments' in raw_data:
         assignments = raw_data['assignments']
+
+    if 'coders' in raw_data:
+        datacoders = raw_data['coders']
+        print(datacoders)
     # return DataResponse(
     #     id=raw_data.get("_key", ""),
     #     vaId=raw_data.get("__id", ""),
@@ -46,5 +52,6 @@ def format_va_record(raw_data: dict, config: SettingsConfigData = None) -> DataR
         interviewDay=raw_data.get(f"{today_field}", "today"),
         interviewerName=raw_data.get(f"{interview_name_field}", "id10007"),
         instanceid=raw_data.get("instanceid", ""),
-        assignments=assignments
+        assignments=assignments,
+        coders = datacoders
     )
