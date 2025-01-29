@@ -42,7 +42,8 @@ from app.pcva.services.va_records_services import (
     get_form_questions_service,
     get_unassigned_va_service,
     get_va_assignment_service,
-    get_va_for_unnassignment_service,
+    get_uncoded_assignment_service,
+    unassign_va_service,
 )
 from app.shared.configs.arangodb import get_arangodb_session
 from app.shared.configs.models import ResponseMainModel
@@ -108,7 +109,7 @@ async def get_va_for_unnassignment(
     try:
         allowPaging = paging if paging is not None else True
         
-        return await get_va_for_unnassignment_service(paging = allowPaging, page_number = page_number, limit = limit, coder = coder, db=db)
+        return await get_uncoded_assignment_service(paging = allowPaging, page_number = page_number, limit = limit, coder = coder, db=db)
         
     except Exception as e:
         raise e
@@ -302,6 +303,20 @@ async def assign_va(
 
     try:
         return await assign_va_service(vaAssignment, User(**user), db)    
+    except Exception as e:
+        raise e
+
+@pcva_router.post(
+        "/unassign-va", 
+        status_code=status.HTTP_201_CREATED, 
+        description="vaIds should be array of vaId. coder must have a user uuid")
+async def unassign_va(
+    vaAssignment: AssignVARequestClass,
+    user: User = Depends(get_current_user),
+    db: StandardDatabase = Depends(get_arangodb_session)):
+
+    try:
+        return await unassign_va_service(vaAssignment, User(**user), db)    
     except Exception as e:
         raise e
 

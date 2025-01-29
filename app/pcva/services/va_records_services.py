@@ -101,7 +101,7 @@ async def get_unassigned_va_service(paging: bool = True, page_number: int = 0, l
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to get unassigned va: {e}")
 
-async def get_va_for_unnassignment_service(paging: bool = True, page_number: int = 0, limit: int = 10, format_records: bool = True, coder: str = None, db: StandardDatabase = None):
+async def get_uncoded_assignment_service(paging: bool = True, page_number: int = 0, limit: int = 10, format_records: bool = True, coder: str = None, db: StandardDatabase = None):
     try:
         config = await fetch_odk_config(db)
         offset = (page_number - 1) * limit if paging else 0
@@ -132,7 +132,10 @@ async def get_va_for_unnassignment_service(paging: bool = True, page_number: int
                     LET coders = (
                         FOR user IN {db_collections.USERS}
                         FILTER user.uuid IN coders_ids
-                        RETURN user.name
+                        RETURN {{
+                            uuid: user.uuid,
+                            name: user.name
+                        }}
                     )
                     
                     LET assignmentCount = (
@@ -239,7 +242,58 @@ async def assign_va_service(va_records: AssignVARequestClass, user: User,  db: S
                 saved_object = await va_object.save(db = db)
             va_assignment_data.append(await AssignVAResponseClass.get_structured_assignment(assignment=saved_object, db = db))
         
-        return va_assignment_data
+        return ResponseMainModel(data=va_assignment_data, message="VA Assigned successfully!")
+    except Exception as e:
+        raise e
+
+async def unassign_va_service(va_records: AssignVARequestClass, user: User,  db: StandardDatabase = None):
+    try:
+        if not va_records.coder:
+            raise HTTPException(status_code=400, detail=f"Coder not specified specified")
+        
+        is_valid_coder = await record_exists(db_collections.USERS, uuid = va_records.coder, db = db)
+        
+        if not (is_valid_coder):
+            raise HTTPException(status_code=400, detail=f"Invalid coder specified")
+
+        vaIds  = va_records.vaIds
+        failed_vas = []
+        for vaId in vaIds:
+
+            # TODO: Use instanceid or vaid field from the settings
+            is_valid_va = await record_exists(db_collections.VA_TABLE, custom_fields={"__id": vaId}, db = db)
+            
+            if not is_valid_va:
+                failed_vas.append({
+                    "va": vaId,
+                    "error": "This va id does not exist."
+                })
+                continue
+
+            existing_va_assignment_data = await AssignedVA.get_many(
+                filters= {
+                    "vaId": vaId,
+                    "coder": va_records.coder
+                },
+                db = db
+            )
+            if existing_va_assignment_data:
+                if not len(existing_va_assignment_data) == 1:
+                    failed_vas.append({
+                        "va": vaId,
+                        "error": "This va id for this coder has multiple existence."
+                    })
+                    continue
+                existing_object = AssignedVA(**existing_va_assignment_data[0])
+                await AssignedVA.delete(doc_uuid = existing_object.uuid, deleted_by = user.uuid, db = db)
+            else:
+                failed_vas.append({
+                    "va": vaId,
+                    "error": "This va assignment for this coder does not exist."
+                })
+                continue
+        
+        return ResponseMainModel(data=failed_vas, message="VA Unassigned successfully!")
     except Exception as e:
         raise e
 
