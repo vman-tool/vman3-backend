@@ -561,7 +561,7 @@ async def get_concordants_va_service(user, db: StandardDatabase = None):
 
         LET coded_assigned_vas = (
             FOR assigned_va in assigned_vas
-              FOR coded_va in {db_collections.CODED_VA}
+              FOR coded_va in {db_collections.PCVA_RESULTS}
                 FILTER coded_va.assigned_va == assigned_va.vaId
                 SORT coded_va.datetime DESC
                 COLLECT assigned_va_id = coded_va.assigned_va INTO grouped
