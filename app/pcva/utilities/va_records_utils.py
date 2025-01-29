@@ -27,31 +27,22 @@ def format_va_record(raw_data: dict, config: SettingsConfigData = None) -> DataR
 
     if 'coders' in raw_data:
         datacoders = raw_data['coders']
-        print(datacoders)
-    # return DataResponse(
-    #     id=raw_data.get("_key", ""),
-    #     vaId=raw_data.get("__id", ""),
-    #     region=raw_data.get("id10005r", ""),
-    #     district=raw_data.get("id10005d", ""),
-    #     interviewDay=raw_data.get("today", ""),
-    #     interviewerName=raw_data.get("id10007", ""),
-    #     instanceid=raw_data.get("instanceid", ""),
-    #     instanceid=raw_data.get("instanceid", ""),
-    # )
 
     region_field = config.field_mapping.location_level1
     vaid_field = config.field_mapping.va_id
+    instance_field = config.field_mapping.instance_id
     district_field = config.field_mapping.location_level2
     interview_name_field = config.field_mapping.interviewer_name
     today_field = config.field_mapping.date
+
     return DataResponse(
         id=raw_data.get("_key", ""),
-        vaId=raw_data.get(f"instanceid", "vaid"),
+        vaId=raw_data.get(f"{instance_field}", vaid_field),
         region=raw_data.get(f"{region_field}", "id10005r"),
         district=raw_data.get(f"{district_field}", "id10005d"),
         interviewDay=raw_data.get(f"{today_field}", "today"),
         interviewerName=raw_data.get(f"{interview_name_field}", "id10007"),
-        instanceid=raw_data.get("instanceid", ""),
+        instanceid=raw_data.get(f"{instance_field}", ""),
         assignments=assignments,
         coders = datacoders
     )

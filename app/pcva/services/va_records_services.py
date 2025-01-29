@@ -41,41 +41,49 @@ async def get_unassigned_va_service(paging: bool = True, page_number: int = 0, l
         # TODO: Every instanceid field used has to come from settings since it's the unique VA ID identified in the VA Data records
 
         query = f"""
-            FOR doc IN form_submissions
-                LET coders_ids = (
-                    FOR va IN {db_collections.ASSIGNED_VA}
-                    FILTER va.vaId == doc.instanceid 
-                    AND va.is_deleted == false
-                    RETURN va.coder
-                )
+            LET result = (
+                FOR doc IN {db_collections.VA_TABLE}
+                    LET coders_ids = (
+                        FOR va IN {db_collections.ASSIGNED_VA}
+                        FILTER va.vaId == doc.instanceid 
+                        AND va.is_deleted == false
+                        RETURN va.coder
+                    )
 
-                LET coders = (
-                    FOR user in {db_collections.USERS}
-                    FILTER user.uuid IN coders_ids
-                    RETURN {{
-                        uuid: user.uuid,
-                        name: user.name
-                    }}
+                    LET coders = (
+                        FOR user IN {db_collections.USERS}
+                        FILTER user.uuid IN coders_ids
+                        RETURN {{
+                            uuid: user.uuid,
+                            name: user.name
+                        }}
+                    )
+                    
+                    LET assignmentCount = (
+                        FOR va IN {db_collections.ASSIGNED_VA}
+                        FILTER va.vaId == doc.instanceid 
+                        AND va.is_deleted == false
+                        COLLECT WITH COUNT INTO count
+                        RETURN count
+                    )[0]
+
+                    FILTER doc.instanceid NOT IN (
+                        FOR va IN {db_collections.ASSIGNED_VA}
+                        FILTER { 'va.coder == @coder AND' if coder else ''} va.is_deleted == false
+                        COLLECT vaId = va.vaId WITH COUNT INTO coderCount
+                        FILTER coderCount <= @maximum_assignment
+                        RETURN vaId
+                    )
+                    //{paginator}
+                    RETURN MERGE(doc, {{assignments: assignmentCount , coders: coders}})
                 )
+            LET data = {'SLICE(result, @offset, @limit)' if paging else 'result'} 
                 
-                LET assignmentCount = (
-                    FOR va IN {db_collections.ASSIGNED_VA}
-                    FILTER va.vaId == doc.instanceid 
-                    AND va.is_deleted == false
-                    COLLECT WITH COUNT INTO count
-                    RETURN count
-                )[0]
 
-                FILTER doc.instanceid NOT IN (
-                    FOR va IN {db_collections.ASSIGNED_VA}
-                    FILTER { 'va.coder == @coder AND' if coder else ''} va.is_deleted == false
-                    COLLECT vaId = va.vaId WITH COUNT INTO coderCount
-                    FILTER coderCount <= @maximum_assignment
-                    RETURN vaId
-                )
-                {paginator}
-                RETURN MERGE(doc, {{assignments: assignmentCount , coders: coders}}
-            )
+            RETURN {{
+                total: LENGTH(result),
+                data: data
+            }}
         """
 
         if coder:
@@ -87,8 +95,9 @@ async def get_unassigned_va_service(paging: bool = True, page_number: int = 0, l
         })
 
         query_result = await VManBaseModel.run_custom_query(query=query, bind_vars=bind_vars, db=db)
-        unassigned_data = [format_va_record(va, config) for va in query_result]
-        return ResponseMainModel(data=unassigned_data, message="Unassigned VAs fetched successfully!", total = len(unassigned_data), pager=Pager(page=page_number, limit=limit))
+        query_result = query_result.next()
+        unassigned_data = [format_va_record(va, config) for va in query_result['data']]
+        return ResponseMainModel(data=unassigned_data, message="Unassigned VAs fetched successfully!", total = query_result["total"], pager=Pager(page=page_number, limit=limit))
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to get unassigned va: {e}")
 
@@ -114,18 +123,15 @@ async def get_va_for_unnassignment_service(paging: bool = True, page_number: int
             FOR doc IN form_submissions
                 LET coders_ids = (
                     FOR va IN {db_collections.ASSIGNED_VA}
-                    FILTER va.vaId == doc.instanceid 
+                    FILTER va.vaId == doc.instanceid AND va.coder != @coder
                     AND va.is_deleted == false
                     RETURN va.coder
                 )
-
+                
                 LET coders = (
-                    FOR user in {db_collections.USERS}
+                    FOR user IN {db_collections.USERS}
                     FILTER user.uuid IN coders_ids
-                    RETURN {{
-                        uuid: user.uuid,
-                        name: user.name
-                    }}
+                    RETURN user.name
                 )
                 
                 LET assignmentCount = (
@@ -135,17 +141,20 @@ async def get_va_for_unnassignment_service(paging: bool = True, page_number: int
                     COLLECT WITH COUNT INTO count
                     RETURN count
                 )[0]
-
+                
                 FILTER doc.instanceid IN (
                     FOR va IN {db_collections.ASSIGNED_VA}
-                    FILTER { 'va.coder == @coder AND' if coder else ''} va.is_deleted == false
+                    FILTER va.coder == @coder AND va.is_deleted == false
+                    AND va.vaId NOT IN (
+                        FOR result IN {db_collections.PCVA_RESULTS}
+                        FILTER result.created_by == @coder
+                        RETURN result.{db_collections.ASSIGNED_VA}
+                    )
                     COLLECT vaId = va.vaId WITH COUNT INTO coderCount
                     FILTER coderCount <= @maximum_assignment
                     RETURN vaId
                 )
-                {paginator}
-                RETURN MERGE(doc, {{assignments: assignmentCount , coders: coders}}
-            )
+                RETURN MERGE(doc, {{assignments: assignmentCount , coders: coders}})
         """
 
         if coder:
