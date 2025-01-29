@@ -80,12 +80,11 @@ async def get_va_records(
     except Exception as e:
         raise e
 
-@pcva_router.get("/get-unassigned_va", status_code=status.HTTP_200_OK)
-async def get_va_records(
+@pcva_router.get("/get-unassigned-va", status_code=status.HTTP_200_OK)
+async def get_unassigned_va_records(
     paging: Optional[bool] = Query(None, alias="paging"),
     page_number: Optional[int] = Query(1, alias="page_number"),
     limit: Optional[int] = Query(10, alias="limit"),
-    format_records: Optional[bool] = Query(True, alias="format_records"),
     coder: Optional[str] = Query(None, alias="coder"),
     db: StandardDatabase = Depends(get_arangodb_session)) -> ResponseMainModel:
 
@@ -337,7 +336,7 @@ async def code_assigned_va(
     except Exception as e:
         raise e
 
-@pcva_router.get("/get_concordants", status_code=status.HTTP_200_OK)
+@pcva_router.get("/get-concordants", status_code=status.HTTP_200_OK)
 async def get_concordants(
     current_user: User = Depends(get_current_user),
     db: StandardDatabase = Depends(get_arangodb_session)):
@@ -347,7 +346,7 @@ async def get_concordants(
         raise e
     
 
-@pcva_router.get("/export_pcva_results", status_code=status.HTTP_200_OK)
+@pcva_router.get("/export-pcva-results", status_code=status.HTTP_200_OK)
 async def export_coded_vas(
     current_user: User = Depends(get_current_user),
     db: StandardDatabase = Depends(get_arangodb_session)):
@@ -357,7 +356,7 @@ async def export_coded_vas(
         raise e
     
 
-@pcva_router.get("/form_questions", status_code=status.HTTP_200_OK)
+@pcva_router.get("/form-questions", status_code=status.HTTP_200_OK)
 async def get_form_questions(
     questions_keys: Optional[str] = Query(None, alias="question_id", description="If you need many, separate questons keys by comma, Do not specify to get all the questions"),
     current_user: User = Depends(get_arangodb_session),
