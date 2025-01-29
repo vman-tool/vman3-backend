@@ -42,6 +42,7 @@ from app.pcva.services.va_records_services import (
     get_form_questions_service,
     get_unassigned_va_service,
     get_va_assignment_service,
+    get_va_for_unnassignment_service,
 )
 from app.shared.configs.arangodb import get_arangodb_session
 from app.shared.configs.models import ResponseMainModel
@@ -92,6 +93,22 @@ async def get_unassigned_va_records(
         allowPaging = paging if paging is not None else True
         
         return await get_unassigned_va_service(paging = allowPaging, page_number = page_number, limit = limit, coder = coder, db=db)
+        
+    except Exception as e:
+        raise e
+
+@pcva_router.get("/get-uncoded-assigned-va", status_code=status.HTTP_200_OK)
+async def get_va_for_unnassignment(
+    paging: Optional[bool] = Query(None, alias="paging"),
+    page_number: Optional[int] = Query(1, alias="page_number"),
+    limit: Optional[int] = Query(10, alias="limit"),
+    coder: Optional[str] = Query(None, alias="coder"),
+    db: StandardDatabase = Depends(get_arangodb_session)) -> ResponseMainModel:
+
+    try:
+        allowPaging = paging if paging is not None else True
+        
+        return await get_va_for_unnassignment_service(paging = allowPaging, page_number = page_number, limit = limit, coder = coder, db=db)
         
     except Exception as e:
         raise e
