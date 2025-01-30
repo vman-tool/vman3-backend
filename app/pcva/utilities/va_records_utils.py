@@ -143,7 +143,6 @@ async def get_categorised_pcva_results(coder_uuid: str = None, paging: bool = No
             total_concordants: LENGTH(concordants),
             total_discordants: LENGTH(discordants)
         }}
-        //d2ebc5c2-8cfd-454b-a21c-0e06bf8d07fc
     """
 
     categorised_results = await VManBaseModel.run_custom_query(query = query, bind_vars = bind_vars, db=db)
