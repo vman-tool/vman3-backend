@@ -5,6 +5,7 @@ from pydantic import BaseModel
 
 from app.settings.models.settings import SettingsConfigData
 from app.shared.configs.models import VManBaseModel
+from app.shared.configs.constants import db_collections
 
 
 
@@ -72,7 +73,7 @@ async def get_categorised_pcva_results(coder_uuid: str = None, paging: bool = No
 
     query = f"""
         LET coders_coded = (
-            FOR coded IN pcva_results
+            FOR coded IN {db_collections.PCVA_RESULTS}
             FILTER coded.created_by == @coder AND coded.is_deleted == false
             SORT coded.datetime DESC
             COLLECT assigned_va = coded.assigned_va INTO latest
@@ -83,7 +84,7 @@ async def get_categorised_pcva_results(coder_uuid: str = None, paging: bool = No
             FOR va IN coders_coded
             LET coder_count = LENGTH(
                 UNIQUE(
-                    FOR r IN pcva_results
+                    FOR r IN {db_collections.PCVA_RESULTS}
                     FILTER r.assigned_va == va
                     RETURN r.created_by
                 )
@@ -93,7 +94,7 @@ async def get_categorised_pcva_results(coder_uuid: str = None, paging: bool = No
         )
 
         LET results = (
-        FOR result in pcva_results
+        FOR result in {db_collections.PCVA_RESULTS}
             FILTER result.assigned_va IN vas_with_multiple_coders
             SORT result.datetime DESC
             COLLECT va_group = result.assigned_va, user = result.created_by 
