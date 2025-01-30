@@ -370,10 +370,11 @@ async def code_assigned_va(
 
 @pcva_router.get("/get-concordants", status_code=status.HTTP_200_OK)
 async def get_concordants(
+    coder: str = Query(None, alias="coder"),
     current_user: User = Depends(get_current_user),
     db: StandardDatabase = Depends(get_arangodb_session)):
     try:
-        return  await get_concordants_va_service(current_user, db = db)
+        return  await get_concordants_va_service(coder = coder, db = db)
     except Exception as e:
         raise e
     
