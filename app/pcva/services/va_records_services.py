@@ -12,7 +12,7 @@ from app.pcva.responses.va_response_classes import AssignVAResponseClass, CodedV
 from app.shared.configs.constants import AccessPrivileges, db_collections
 from app.shared.utils.database_utilities import add_query_filters, record_exists, replace_object_values
 from app.users.models.user import User
-from app.pcva.utilities.va_records_utils import format_va_record
+from app.pcva.utilities.va_records_utils import format_va_record, get_categorised_pcva_results
 from app.shared.configs.models import Pager, ResponseMainModel, VManBaseModel
 from app.odk.models.questions_models import VA_Question
 from app.settings.services.odk_configs import fetch_odk_config
@@ -551,47 +551,17 @@ async def get_coded_va_details(paging: bool, page_number: int = None, limit: int
         raise HTTPException(status_code=500, detail=f"Failed to get coded vas: {e}")
     
 
-async def get_concordants_va_service(user, db: StandardDatabase = None):
-    query = f"""
-        LET assigned_vas = (
-            FOR doc in {db_collections.ASSIGNED_VA}
-            FILTER doc.coder == @user_id
-            RETURN doc
-        )
-
-        LET coded_assigned_vas = (
-            FOR assigned_va in assigned_vas
-              FOR coded_va in {db_collections.PCVA_RESULTS}
-                FILTER coded_va.assigned_va == assigned_va.vaId
-                SORT coded_va.datetime DESC
-                COLLECT assigned_va_id = coded_va.assigned_va INTO grouped
-                LET latest_coded_vas = (
-                    FOR g IN grouped[*].coded_va
-                        COLLECT created_by = g.created_by INTO coder_group
-                        LET latest_record = FIRST(coder_group[* FILTER CURRENT.datetime == MAX(coder_group[*].datetime)])
-                        RETURN latest_record.g
-                )
-                RETURN latest_coded_vas
-        )
-
-        
-        FOR coded_assigned_va in coded_assigned_vas
-            RETURN coded_assigned_va[*]
-    """
-    bind_vars = {
-        "user_id": user["uuid"]
-    }
-    
-    codedVAs = await VManBaseModel.run_custom_query(query, bind_vars, db)
-    
-    formattedCodedVA = []
-    for codedVA_group in codedVAs:
-        codedVA_group_temp = []
-        for codedVA in codedVA_group:
-            codedVA_group_temp.append(await CodedVAResponseClass.get_structured_codedVA(codedVA, db))
-        formattedCodedVA.append(codedVA_group_temp)
-    
-    return formattedCodedVA
+async def get_concordants_va_service(
+        paging: bool = None,
+        page_number: int = None,
+        limit: int = None, 
+        coder: str = None, 
+        db: StandardDatabase = None):
+    try:
+        results = await get_categorised_pcva_results(coder_uuid = coder, db=db)
+        return results
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get concordants: {e}")
 
 async def get_form_questions_service(filters: Dict = None, db: StandardDatabase = None):
     questions = await VA_Question.get_many(paging=False, filters=filters, db=db)

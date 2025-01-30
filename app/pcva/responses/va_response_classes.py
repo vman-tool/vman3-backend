@@ -244,56 +244,63 @@ class PCVAResultsExportClass(PCVAResultsResponseClass):
     cause_contributories: Union[str, None] = None
 
 """
-    LET coders_coded = (
+   LET coders_coded = (
     FOR coded IN pcva_results
     FILTER coded.created_by == @coder AND coded.is_deleted == false
     SORT coded.datetime DESC
     COLLECT assigned_va = coded.assigned_va INTO latest
     RETURN FIRST(latest[*].coded).assigned_va
-    )
+  )
 
-    //RETURN coders_coded
-
-    LET vas_with_multiple_coders = (
-        FOR va IN coders_coded
-        LET coder_count = LENGTH(
-            UNIQUE(
-                FOR r IN pcva_results
-                FILTER r.assigned_va == va
-                RETURN r.created_by
-            )
-        )
-        FILTER coder_count > 1
-        RETURN va
-    )
-
-    //RETURN vas_with_multiple_coders
-
-
+LET vas_with_multiple_coders = (
     FOR va IN coders_coded
-    let coders_count = UNIQUE(
-        FOR r IN pcva_results
-        FILTER r.assigned_va == va
-        RETURN r.created_by)
-    RETURN {
-        va: va,
-        count: coders_count
-    }
+    LET coder_count = LENGTH(
+        UNIQUE(
+            FOR r IN pcva_results
+            FILTER r.assigned_va == va
+            RETURN r.created_by
+        )
+    )
+    FILTER coder_count > 1
+    RETURN va
+)
 
-
-
-    //FOR result in pcva_results
-    //FILTER result.assigned_va IN vas_with_multiple_coders
-    //SORT result.datetime DESC
-    //COLLECT coder = result.created_by INTO latest
-    //RETURN {
-    //    va: FIRST(latest[*].result).assigned_va,
-    //    coder: FIRST(latest[*].result).created_by,
-    //    cause_a: FIRST(latest[*].result).frameA.a,
-    //    cause_b: FIRST(latest[*].result).frameA.b,
-    //    cause_c: FIRST(latest[*].result).frameA.c,
-    //    cause_d: FIRST(latest[*].result).frameA.d
-    //}
+FOR result in pcva_results
+  FILTER result.assigned_va IN vas_with_multiple_coders
+  SORT result.datetime DESC
+  COLLECT va_group = result.assigned_va, user = result.created_by 
+  INTO userResults = {
+    result: result,
+    datetime: result.datetime
+  }
+  
+  LET latestResult = (
+    FOR r IN userResults
+    SORT r.datetime DESC
+    LIMIT 1
+    RETURN r.result
+  )[0]
+  
+  COLLECT va = va_group INTO vaResults = {
+    latest: latestResult
+  }
+  
+LET priorityValues = (
+    FOR r IN vaResults[*].latest
+    RETURN (
+        r.frameA.d != null ? r.frameA.d :
+        r.frameA.c != null ? r.frameA.c :
+        r.frameA.b != null ? r.frameA.b :
+        r.frameA.a
+    )
+)
+LET matchCount = LENGTH(
+    FOR pv IN priorityValues
+    COLLECT val = pv WITH COUNT INTO count
+    FILTER count >= 2 // #TODO: grab this concordance level from the configurations in settings
+    RETURN count
+)
+RETURN matchCount > 0 ? vaResults[*].latest : null
 
     //d2ebc5c2-8cfd-454b-a21c-0e06bf8d07fc
 """
