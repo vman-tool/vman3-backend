@@ -39,6 +39,7 @@ from app.pcva.services.va_records_services import (
     get_coded_va_service,
     get_coders,
     get_concordants_va_service,
+    get_discordants_va_service,
     get_form_questions_service,
     get_unassigned_va_service,
     get_va_assignment_service,
@@ -370,11 +371,27 @@ async def code_assigned_va(
 
 @pcva_router.get("/get-concordants", status_code=status.HTTP_200_OK)
 async def get_concordants(
+    paging: bool = Query(None, alias='paging'),
+    page_number: int = Query(1, alias='page_number'),
+    limit: int = Query(10, alias='limit'),
     coder: str = Query(None, alias="coder"),
     current_user: User = Depends(get_current_user),
     db: StandardDatabase = Depends(get_arangodb_session)):
     try:
-        return  await get_concordants_va_service(coder = coder, db = db)
+        return  await get_concordants_va_service(paging = paging, page_number = page_number, limit = limit, coder = coder, db = db)
+    except Exception as e:
+        raise e
+
+@pcva_router.get("/get-discordants", status_code=status.HTTP_200_OK)
+async def get_concordants(
+    paging: bool = Query(None, alias='paging'),
+    page_number: int = Query(1, alias='page_number'),
+    limit: int = Query(10, alias='limit'),
+    coder: str = Query(None, alias="coder"),
+    current_user: User = Depends(get_current_user),
+    db: StandardDatabase = Depends(get_arangodb_session)):
+    try:
+        return  await get_discordants_va_service(paging = paging, page_number = page_number, limit = limit, coder = coder, db = db)
     except Exception as e:
         raise e
     
