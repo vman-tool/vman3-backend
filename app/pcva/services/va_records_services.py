@@ -561,7 +561,7 @@ async def get_concordants_va_service(
         results = await get_categorised_pcva_results(coder_uuid = coder, paging = paging, page_number = page_number, limit = limit,  db=db)
         concordants = results.get("concordants", "")
         total_concordants = results.get("total_concordants", "")
-        return ResponseMainModel(data=concordants, message="Concordants VAs fetched successfully", total=len(total_concordants))
+        return ResponseMainModel(data=concordants, message="Concordants VAs fetched successfully", total=total_concordants, pager=Pager(page=page_number, limit=limit) if paging else None)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to get concordants: {e}")
 
@@ -576,7 +576,7 @@ async def get_discordants_va_service(
         results = await get_categorised_pcva_results(coder_uuid = coder, paging = paging, page_number = page_number, limit = limit,  db=db)
         discordants = results.get("discordants", "")
         total_discordants = results.get("total_discordants", "")
-        return ResponseMainModel(data=discordants, message="Discordants VAs fetched successfully", total=len(total_discordants))
+        return ResponseMainModel(data=discordants, message="Discordants VAs fetched successfully", total=total_discordants, pager=Pager(page=page_number, limit=limit) if paging else None)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to get discordants: {e}")
     
