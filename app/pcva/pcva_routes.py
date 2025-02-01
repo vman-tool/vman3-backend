@@ -404,7 +404,7 @@ async def get_discordant_messages(
     current_user: User = Depends(get_current_user),
     db: StandardDatabase = Depends(get_arangodb_session)):
     try:
-        return  await get_discordant_messages_service(va_id=va_id, db = db)
+        return  await get_discordant_messages_service(va_id=va_id, coder=current_user.get("uuid", ""), db = db)
     except Exception as e:
         raise e
 
@@ -423,11 +423,11 @@ async def discordants_chat(
         while True:
             message = await websocket.receive_text()
 
-            saved_message = await save_discordant_message_service(va_id = va_id, user_id = current_user.uuid, message = message, db = db)
+            saved_message = await save_discordant_message_service(va_id = va_id, user_id = current_user.get("uuid", ""), message = message, db = db)
 
             await request.app.state.websocket__manager.broadcast(json.dumps(saved_message))
     except WebSocketDisconnect:
-        request.app.state.websocket__manager.disconnect(va_id, websocket)
+        await request.app.state.websocket__manager.disconnect(va_id, websocket)
     
 
 @pcva_router.get("/export-pcva-results", status_code=status.HTTP_200_OK)

@@ -1,7 +1,10 @@
 from typing import Dict, List
+import asyncio
 
 from fastapi import WebSocket
 
+
+connections_lock = asyncio.Lock()
 
 class WebSocketManager:
     def __init__(self):
@@ -9,15 +12,18 @@ class WebSocketManager:
 
     async def connect(self, task_id: str, websocket: WebSocket):
         await websocket.accept()
-        if task_id not in self.active_connections:
-            self.active_connections[task_id] = []
-        self.active_connections[task_id].append(websocket)
 
-    def disconnect(self, task_id: str, websocket: WebSocket):
-        if task_id in self.active_connections:
-            self.active_connections[task_id].remove(websocket)
-            if not self.active_connections[task_id]:
-                del self.active_connections[task_id]
+        async with connections_lock:
+            if task_id not in self.active_connections:
+                self.active_connections[task_id] = []
+            self.active_connections[task_id].append(websocket)
+
+    async def disconnect(self, task_id: str, websocket: WebSocket):
+        async with connections_lock:
+            if task_id in self.active_connections:
+                self.active_connections[task_id].remove(websocket)
+                if not self.active_connections[task_id]:
+                    del self.active_connections[task_id]
 
     async def send_personal_message(self, message: str, websocket: WebSocket):
         await websocket.send_text(message)
