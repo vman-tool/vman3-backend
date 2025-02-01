@@ -105,7 +105,7 @@ async def get():
 #              data=await websocket.receive_text()  # Keep the connection open
 #              await websocket.send_text(f"Message text was: {data}")
 #     except WebSocketDisconnect:
-#         websocket__manager.disconnect(websocket)
+#         await websocket__manager.disconnect(websocket)
 
 
 
@@ -118,7 +118,7 @@ async def get():
 #             # Handle incoming data here if needed
 #             await websocket__manager.send_personal_message(f"Message received for task {task_id}: {data}", websocket)
 #     except WebSocketDisconnect:
-#         websocket__manager.disconnect(task_id, websocket)
+#         await websocket__manager.disconnect(task_id, websocket)
 
 # @app.websocket("/vman/api/v1/ws/odk_progress/{task_id}")
 # async def odk_progress(websocket: WebSocket,task_id: str):
@@ -131,7 +131,7 @@ async def get():
 #             await websocket__manager.send_personal_message(f"Message received for task {task_id}: {data}", websocket)
 #             # await asyncio.sleep(1)  # Simulate progress update every second
 #     except WebSocketDisconnect:
-#         websocket__manager.disconnect(task_id, websocket)
+#         await websocket__manager.disconnect(task_id, websocket)
         
  
 @app.websocket("/vman/api/v1/ws/ccva_progress/{task_id}")
@@ -143,7 +143,7 @@ async def websocket_va_1(websocket: WebSocket, task_id: str):
             # Send a personalized message based on task_id
             await websocket__manager.send_personal_message(f"Message received for task {task_id}: {data}", websocket)
     except WebSocketDisconnect:
-        websocket__manager.disconnect(task_id, websocket)
+        await websocket__manager.disconnect(task_id, websocket)
 
 @app.websocket("/vman/api/v1/ws/odk_progress/{task_id}")
 async def odk_progress(websocket: WebSocket, task_id: str):
@@ -154,4 +154,4 @@ async def odk_progress(websocket: WebSocket, task_id: str):
             # Send updates for the progress of the specific task_id
             await websocket__manager.send_personal_message(f"Message received for task {task_id}: {data}", websocket)
     except WebSocketDisconnect:
-        websocket__manager.disconnect(task_id, websocket)
+        await websocket__manager.disconnect(task_id, websocket)
