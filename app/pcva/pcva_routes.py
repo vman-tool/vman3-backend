@@ -3,7 +3,7 @@ import json
 from typing import Any, Dict, List, Optional, Union
 
 from arango.database import StandardDatabase
-from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, WebSocket, WebSocketDisconnect, status, Request
 import pandas as pd
 
 from app.pcva.requests.icd10_request_classes import (
@@ -39,11 +39,13 @@ from app.pcva.services.va_records_services import (
     get_coded_va_service,
     get_coders,
     get_concordants_va_service,
+    get_discordant_messages_service,
     get_discordants_va_service,
     get_form_questions_service,
     get_unassigned_va_service,
     get_va_assignment_service,
     get_uncoded_assignment_service,
+    save_discordant_message_service,
     unassign_va_service,
 )
 from app.shared.configs.arangodb import get_arangodb_session
@@ -383,7 +385,7 @@ async def get_concordants(
         raise e
 
 @pcva_router.get("/get-discordants", status_code=status.HTTP_200_OK)
-async def get_concordants(
+async def get_discordants(
     paging: bool = Query(None, alias='paging'),
     page_number: int = Query(1, alias='page_number'),
     limit: int = Query(10, alias='limit'),
@@ -394,6 +396,38 @@ async def get_concordants(
         return  await get_discordants_va_service(paging = paging, page_number = page_number, limit = limit, coder = coder, db = db)
     except Exception as e:
         raise e
+    
+
+@pcva_router.get("/get-discordants-messages/{va_id}", status_code=status.HTTP_200_OK)
+async def get_discordant_messages(
+    va_id: str,
+    current_user: User = Depends(get_current_user),
+    db: StandardDatabase = Depends(get_arangodb_session)):
+    try:
+        return  await get_discordant_messages_service(va_id=va_id, db = db)
+    except Exception as e:
+        raise e
+
+@pcva_router.websocket("/discordants/chat/{va_id}")
+async def discordants_chat(
+    websocket: WebSocket, 
+    request: Request,
+    va_id: str,
+    current_user: User = Depends(get_current_user),
+    db: StandardDatabase = Depends(get_arangodb_session)
+    ):
+
+    await request.app.state.websocket__manager.connect(va_id, websocket)
+    
+    try:
+        while True:
+            message = await websocket.receive_text()
+
+            saved_message = await save_discordant_message_service(va_id = va_id, user_id = current_user.uuid, message = message, db = db)
+
+            await request.app.state.websocket__manager.broadcast(json.dumps(saved_message))
+    except WebSocketDisconnect:
+        request.app.state.websocket__manager.disconnect(va_id, websocket)
     
 
 @pcva_router.get("/export-pcva-results", status_code=status.HTTP_200_OK)

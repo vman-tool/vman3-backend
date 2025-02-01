@@ -6,7 +6,7 @@ from arango.database import StandardDatabase
 from fastapi import HTTPException
 from fastapi.responses import FileResponse, StreamingResponse
 
-from app.pcva.models.pcva_models import ICD10, AssignedVA, CodedVA, PCVAResults
+from app.pcva.models.pcva_models import ICD10, AssignedVA, CodedVA, PCVAMessages, PCVAResults
 from app.pcva.requests.va_request_classes import AssignVARequestClass, CodeAssignedVARequestClass, PCVAResultsRequestClass
 from app.pcva.responses.va_response_classes import AssignVAResponseClass, CodedVAResponseClass, CoderResponseClass, PCVAResultsResponseClass, VAQuestionResponseClass
 from app.shared.configs.constants import AccessPrivileges, db_collections
@@ -474,21 +474,48 @@ async def get_coded_va_service(paging: bool, page_number: int = None, limit: int
         if coder:
             query = f"""
                 FOR va_record IN {db_collections.VA_TABLE}
+                FILTER va_record.instanceid IN (
+                    LET coders_coded = (
+                        FOR coded IN {db_collections.PCVA_RESULTS}
+                        FILTER coded.created_by == @coder AND coded.is_deleted == false
+                        SORT coded.datetime DESC
+                        COLLECT assigned_va = coded.assigned_va INTO latest
+                        RETURN FIRST(latest[*].coded)
+                    )
+
+                    FOR va IN coders_coded
+                    LET coder_count = LENGTH(
+                        UNIQUE(
+                            FOR r IN {db_collections.PCVA_RESULTS}
+                            FILTER r.assigned_va == va.assigned_va
+                            RETURN r.created_by
+                        )
+                    )
+                    FILTER coder_count == 1
+                    {paginator}
+                    RETURN va.assigned_va
+                    
+                )
+                RETURN va_record
+            """
+
+            bind_vars.update({
+                "coder": coder,
+            }) 
+        else:
+            query = f"""
+                FOR va_record IN {db_collections.VA_TABLE}
                     FILTER va_record.instanceid IN (
                         FOR va IN {db_collections.PCVA_RESULTS}
-                            FILTER va.created_by == @coder AND va.is_deleted == false
+                            FILTER va.is_deleted == false
                             SORT va.datetime DESC
-                            COLLECT assignecount_assigned_vasd_va = va.assigned_va
+                            COLLECT assigned_va = va.assigned_va
                             INTO latest_records = va.assigned_va
                             {paginator}
                             RETURN FIRST(latest_records)
                     )
                     RETURN va_record
             """
-
-            bind_vars.update({
-                "coder": coder,
-            })
         coded_vas = await VManBaseModel.run_custom_query(query = query, bind_vars = bind_vars, db = db)
         config = await fetch_odk_config(db)
         coded_data = [format_va_record(va, config) for va in coded_vas]
@@ -560,8 +587,18 @@ async def get_concordants_va_service(
     try:
         results = await get_categorised_pcva_results(coder_uuid = coder, paging = paging, page_number = page_number, limit = limit,  db=db)
         concordants = results.get("concordants", "")
+        query = f"""
+            FOR va IN {db_collections.VA_TABLE}
+            FILTER va.instanceid IN @concordants
+            RETURN va
+        """
+
+        bind_vars = {
+            "concordants": [va["assigned_va"] for va in concordants]
+        }
+        va_data = VManBaseModel.run_custom_query(query=query, bind_vars=bind_vars, db=db)
         total_concordants = results.get("total_concordants", "")
-        return ResponseMainModel(data=concordants, message="Concordants VAs fetched successfully", total=total_concordants, pager=Pager(page=page_number, limit=limit) if paging else None)
+        return ResponseMainModel(data=va_data, message="Concordants VAs fetched successfully", total=total_concordants, pager=Pager(page=page_number, limit=limit) if paging else None)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to get concordants: {e}")
 
@@ -575,8 +612,20 @@ async def get_discordants_va_service(
     try:
         results = await get_categorised_pcva_results(coder_uuid = coder, paging = paging, page_number = page_number, limit = limit,  db=db)
         discordants = results.get("discordants", "")
+
+        query = f"""
+            FOR va IN {db_collections.VA_TABLE}
+            FILTER va.instanceid IN @discordants
+            RETURN va
+        """
+
+        bind_vars = {
+            "discordants": [va["assigned_va"] for va in discordants]
+        }
+        va_data = VManBaseModel.run_custom_query(query=query, bind_vars=bind_vars, db=db)
+
         total_discordants = results.get("total_discordants", "")
-        return ResponseMainModel(data=discordants, message="Discordants VAs fetched successfully", total=total_discordants, pager=Pager(page=page_number, limit=limit) if paging else None)
+        return ResponseMainModel(data={"va_data": va_data, "discordants": discordants}, message="Discordants VAs fetched successfully", total=total_discordants, pager=Pager(page=page_number, limit=limit) if paging else None)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to get discordants: {e}")
     
@@ -793,5 +842,42 @@ async def export_pcva_results(db: StandardDatabase = None):
         return StreamingResponse(output, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", headers=headers)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to export PCVA results: {e}")
+    
+
+
+async def save_discordant_message_service(va_id: str, user_id: str, message: str, db: StandardDatabase = None):
+    try:
+        discordant_message = {
+            "va_id": va_id,
+            "message": message,
+            "created_by": user_id,
+            "read_by": [user_id]
+        }
+        discordant_message_object = await PCVAMessages(**discordant_message).save(db)
+        return ResponseMainModel(data=discordant_message_object, message="Discordant message saved successfully!")
+    
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to save discordant message: {e}")
+
+async def get_discordant_messages_service(va_id: str, db: StandardDatabase = None):
+    try:
+        if not db.has_collection(PCVAMessages.get_collection_name()):
+            PCVAMessages.init_collection(db)
+            
+        query = f"""
+            FOR message IN {db_collections.PCVA_MESSAGES}
+            FILTER message.va == @va
+            SORT message.created_at ASC
+            RETURN message
+        """
+        bind_vars = {
+            "va": va_id
+        }
+
+        discordant_messages = await PCVAMessages.run_custom_query(query=query, bind_vars=bind_vars, db = db)
+        return ResponseMainModel(data=discordant_messages, message="Discordant message fetched successfully!")
+    
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to save discordant message: {e}")
 
 
