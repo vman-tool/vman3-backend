@@ -587,6 +587,8 @@ async def get_concordants_va_service(
     try:
         results = await get_categorised_pcva_results(coder_uuid = coder, paging = paging, page_number = page_number, limit = limit,  db=db)
         concordants = results.get("concordants", "")
+        vas = [va[0].get("assigned_va", "") for va in concordants]
+        
         query = f"""
             FOR va IN {db_collections.VA_TABLE}
             FILTER va.instanceid IN @concordants
@@ -594,11 +596,15 @@ async def get_concordants_va_service(
         """
 
         bind_vars = {
-            "concordants": [va["assigned_va"] for va in concordants]
+            "concordants": vas
         }
         va_data = VManBaseModel.run_custom_query(query=query, bind_vars=bind_vars, db=db)
+        
+        config = await fetch_odk_config(db)
+        
         total_concordants = results.get("total_concordants", "")
-        return ResponseMainModel(data=va_data, message="Concordants VAs fetched successfully", total=total_concordants, pager=Pager(page=page_number, limit=limit) if paging else None)
+
+        return ResponseMainModel(data=[format_va_record(va, config) for va in va_data], message="Concordants VAs fetched successfully", total=total_concordants, pager=Pager(page=page_number, limit=limit) if paging else None)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to get concordants: {e}")
 
@@ -626,8 +632,11 @@ async def get_discordants_va_service(
         }
         va_data = await VManBaseModel.run_custom_query(query=query, bind_vars=bind_vars, db=db)
 
+        config = await fetch_odk_config(db)
+
         total_discordants = results.get("total_discordants", "")
-        return ResponseMainModel(data={"va_data": va_data, "discordants": discordants}, message="Discordants VAs fetched successfully", total=total_discordants, pager=Pager(page=page_number, limit=limit) if paging else None)
+
+        return ResponseMainModel(data=[format_va_record(va, config) for va in va_data], message="Discordants VAs fetched successfully", total=total_discordants, pager=Pager(page=page_number, limit=limit) if paging else None)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to get discordants: {e}")
     

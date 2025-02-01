@@ -398,7 +398,7 @@ async def get_discordants(
         raise e
     
 
-@pcva_router.get("/get-discordants-messages/{va_id}", status_code=status.HTTP_200_OK)
+@pcva_router.get("/get-discordant-messages/{va_id}", status_code=status.HTTP_200_OK)
 async def get_discordant_messages(
     va_id: str,
     current_user: User = Depends(get_current_user),
