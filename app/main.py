@@ -50,6 +50,7 @@ def create_application():
 app = create_application()
 register_error_handlers(app)
 websocket__manager = websocket_manager.WebSocketManager()
+app.state.websocket__manager = websocket__manager
 
 origins = config('CORS_ALLOWED_ORIGINS', default="*").split(',')
 app.add_middleware(
