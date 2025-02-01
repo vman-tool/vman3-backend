@@ -613,6 +613,8 @@ async def get_discordants_va_service(
         results = await get_categorised_pcva_results(coder_uuid = coder, paging = paging, page_number = page_number, limit = limit,  db=db)
         discordants = results.get("discordants", "")
 
+        vas = [va[0].get("assigned_va", "") for va in discordants]
+
         query = f"""
             FOR va IN {db_collections.VA_TABLE}
             FILTER va.instanceid IN @discordants
@@ -620,9 +622,9 @@ async def get_discordants_va_service(
         """
 
         bind_vars = {
-            "discordants": [va["assigned_va"] for va in discordants]
+            "discordants": vas
         }
-        va_data = VManBaseModel.run_custom_query(query=query, bind_vars=bind_vars, db=db)
+        va_data = await VManBaseModel.run_custom_query(query=query, bind_vars=bind_vars, db=db)
 
         total_discordants = results.get("total_discordants", "")
         return ResponseMainModel(data={"va_data": va_data, "discordants": discordants}, message="Discordants VAs fetched successfully", total=total_discordants, pager=Pager(page=page_number, limit=limit) if paging else None)
@@ -859,19 +861,42 @@ async def save_discordant_message_service(va_id: str, user_id: str, message: str
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to save discordant message: {e}")
 
-async def get_discordant_messages_service(va_id: str, db: StandardDatabase = None):
+async def get_discordant_messages_service(va_id: str, coder: str, db: StandardDatabase = None):
     try:
         if not db.has_collection(PCVAMessages.get_collection_name()):
             PCVAMessages.init_collection(db)
+
+        if not va_id:
+            raise HTTPException(status_code=400, detail="VA ID is required.")
+        
+        if not coder:
+            raise HTTPException(status_code=400, detail="Coder ID is required.")
             
         query = f"""
-            FOR message IN {db_collections.PCVA_MESSAGES}
-            FILTER message.va == @va
-            SORT message.created_at ASC
-            RETURN message
+            LET discordant = (
+                FOR doc in {db_collections.PCVA_RESULTS}
+                FILTER doc.assigned_va == @va AND doc.created_by == @coder
+                SORT doc.datetime DESC
+                COLLECT created_by = doc.created_by, assigned_va = doc.assigned_va
+                INTO latest_records = doc
+                RETURN FIRST(latest_records)
+            )
+
+            LET messages = (
+                FOR message IN {db_collections.PCVA_MESSAGES}
+                FILTER message.va == @va
+                SORT message.created_at ASC
+                RETURN message
+            )
+
+            RETURN {{
+                discordant: discordant,
+                messages: messages
+            }}
         """
         bind_vars = {
-            "va": va_id
+            "va": va_id,
+            "coder": coder
         }
 
         discordant_messages = await PCVAMessages.run_custom_query(query=query, bind_vars=bind_vars, db = db)
