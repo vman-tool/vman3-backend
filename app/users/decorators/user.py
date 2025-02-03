@@ -3,7 +3,7 @@
 from functools import wraps
 from typing import List
 
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, WebSocket, status
 from fastapi.security import OAuth2PasswordBearer
 from arango.database import StandardDatabase
 
@@ -22,7 +22,26 @@ async def get_current_user(token: str = Depends(oauth2_scheme), db = Depends(get
     user = await get_token_user(token=token, db=db)
     if user is  not None:
         return user
-    raise HTTPException(status_code=401, detail="Not authorised..")    
+    raise HTTPException(status_code=401, detail="Not authorised..")
+
+async def get_current_user_ws(websocket: WebSocket, db = Depends(get_arangodb_session)):
+    try:
+        
+        token = websocket.query_params.get("token")
+        if not token:
+            token = websocket.headers.get("sec-websocket-protocol")
+            if token and token.startswith("Bearer "):
+                token = token.split(" ")[1]
+
+        if not token:
+            raise HTTPException(status_code=401, detail="Not authorized")
+        
+
+        user = await get_current_user(token, db=db)
+        
+        return user
+    except Exception as e:
+        raise HTTPException(status_code=401, detail="Failed to authorize")
 
 
 def created_by_decorator(func):

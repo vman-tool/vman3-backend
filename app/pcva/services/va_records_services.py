@@ -1,5 +1,6 @@
 from datetime import datetime
 from io import BytesIO
+import json
 from typing import Dict
 from arango import ArangoError
 from arango.database import StandardDatabase
@@ -858,14 +859,20 @@ async def export_pcva_results(db: StandardDatabase = None):
 
 async def save_discordant_message_service(va_id: str, user_id: str, message: str, db: StandardDatabase = None):
     try:
-        discordant_message = {
-            "va_id": va_id,
-            "message": message,
-            "created_by": user_id,
-            "read_by": [user_id]
+        discordant_message_object = await PCVAMessages(
+            va=va_id,
+            message=message,
+            created_by=user_id,
+            read_by=[user_id]
+        ).save(db)
+        message_object = {
+            "va_id": discordant_message_object.get("va",""),
+            "message": discordant_message_object.get("message",""),
+            "read_by": discordant_message_object.get("read_by",""),
+            "created_by": discordant_message_object.get("created_by",""),
+            "created_at": discordant_message_object.get("created_at","")
         }
-        discordant_message_object = await PCVAMessages(**discordant_message).save(db)
-        return ResponseMainModel(data=discordant_message_object, message="Discordant message saved successfully!")
+        return json.dumps(message_object)
     
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to save discordant message: {e}")
@@ -893,9 +900,16 @@ async def get_discordant_messages_service(va_id: str, coder: str, db: StandardDa
 
             LET messages = (
                 FOR message IN {db_collections.PCVA_MESSAGES}
-                FILTER message.va == @va
+                FILTER message.va == @va AND message.is_deleted == false
                 SORT message.created_at ASC
-                RETURN message
+                RETURN {{
+                    uuid: message.uuid,
+                    va: message.va,
+                    message: message.message,
+                    read_by: message.read_by,
+                    created_by: message.created_by,
+                    created_at: message.created_at   
+                }}
             )
 
             RETURN {{
@@ -913,5 +927,24 @@ async def get_discordant_messages_service(va_id: str, coder: str, db: StandardDa
     
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to save discordant message: {e}")
+    
+
+async def read_discordants_message(va_id: str, user_uuid: str = None, db: StandardDatabase = None):
+    try:
+        query = f"""
+            FOR message IN {db_collections.PCVA_MESSAGES}
+                FILTER message.va == @va_id AND POSITION(message.read_by, @user) == -1
+
+                UPDATE {{ read_by: APPEND(message.read_by, [@user], true) }} IN {db_collections.PCVA_MESSAGES}
+        """
+        bind_vars = {
+            "va_id": va_id,
+            "user": user_uuid
+        }
+
+        await PCVAMessages.run_custom_query(query=query, bind_vars=bind_vars, db=db)
+        return ResponseMainModel(message="Message read successfully!")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to read message: {e}")
 
 
