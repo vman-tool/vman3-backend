@@ -1,8 +1,11 @@
 from contextlib import asynccontextmanager
+import json
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from arango import Request
+from arango.database import StandardDatabase
 from decouple import config
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import Depends, FastAPI, Query, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
 from loguru import logger
@@ -11,6 +14,10 @@ from app import routes
 from app.shared.middlewares.error_handlers import register_error_handlers
 from app.users.utils.default import default_account_creation
 from app.utilits import websocket_manager
+from app.shared.configs.arangodb import get_arangodb_session
+from app.users.decorators.user import get_current_user, get_current_user_ws
+from app.users.models.user import User
+from app.pcva.services.va_records_services import save_discordant_message_service
 
 logger.add("./../app.log", rotation="500 MB")
 scheduler = AsyncIOScheduler()
@@ -55,7 +62,6 @@ app.state.websocket__manager = websocket__manager
 origins = config('CORS_ALLOWED_ORIGINS', default="*").split(',')
 app.add_middleware(
     CORSMiddleware,
-    
     allow_origins=origins,
     allow_credentials=True,
     allow_methods=["*"],
@@ -155,3 +161,34 @@ async def odk_progress(websocket: WebSocket, task_id: str):
             await websocket__manager.send_personal_message(f"Message received for task {task_id}: {data}", websocket)
     except WebSocketDisconnect:
         await websocket__manager.disconnect(task_id, websocket)
+
+
+@app.websocket("/vman/api/v1/ws/discordants/chat/{va_id}")
+async def discordants_chat(
+    websocket: WebSocket,
+    va_id: str,
+    current_user: User = Depends(get_current_user_ws),
+    db: StandardDatabase = Depends(get_arangodb_session)
+    ):
+
+    await websocket__manager.connect(va_id, websocket)
+    
+    try:      
+        while True:
+            try:
+                message = await websocket__manager.safe_receive_text(websocket)
+                if message:
+                    message_text = json.loads(message)
+                    text_message = message_text.get("text", "")
+                    saved_message = await save_discordant_message_service(va_id = va_id, user_id = current_user.get('uuid', ""), message = text_message, db = db)
+                    await websocket__manager.broadcast(task_id=va_id, message=saved_message)
+            except WebSocketDisconnect:
+                await websocket__manager.disconnect(va_id, websocket)
+                break
+            except Exception as e:
+                logger.error(f"Error in WebSocket communication: {e}")
+                await websocket__manager.send_personal_message(message=json.dumps({"error": f"{e}"}), websocket=websocket)
+                continue
+    except Exception as e:
+        logger.error(f"Unexpected error: {e}")
+        await websocket__manager.disconnect(va_id, websocket)

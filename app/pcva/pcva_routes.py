@@ -45,12 +45,13 @@ from app.pcva.services.va_records_services import (
     get_unassigned_va_service,
     get_va_assignment_service,
     get_uncoded_assignment_service,
+    read_discordants_message,
     save_discordant_message_service,
     unassign_va_service,
 )
 from app.shared.configs.arangodb import get_arangodb_session
 from app.shared.configs.models import ResponseMainModel
-from app.users.decorators.user import get_current_user, oauth2_scheme
+from app.users.decorators.user import get_current_user, get_current_user_ws, oauth2_scheme
 from app.users.models.user import User
 from app.shared.services.va_records import shared_fetch_va_records
 
@@ -59,6 +60,12 @@ pcva_router = APIRouter(
     tags=["PCVA"],
     responses={404: {"description": "Not found"}},
     dependencies=[Depends(oauth2_scheme), Depends(get_current_user)]
+)
+
+pcva_socket_router = APIRouter(
+    prefix="/pcva",
+    tags=["PCVA"],
+    responses={404: {"description": "Not found"}},
 )
 
 
@@ -407,28 +414,17 @@ async def get_discordant_messages(
         return  await get_discordant_messages_service(va_id=va_id, coder=current_user.get("uuid", ""), db = db)
     except Exception as e:
         raise e
-
-@pcva_router.websocket("/discordants/chat/{va_id}")
-async def discordants_chat(
-    websocket: WebSocket, 
-    request: Request,
+    
+@pcva_router.post("/messages/{va_id}/read")
+async def mark_message_as_read(
     va_id: str,
     current_user: User = Depends(get_current_user),
     db: StandardDatabase = Depends(get_arangodb_session)
     ):
-
-    await request.app.state.websocket__manager.connect(va_id, websocket)
-    
     try:
-        while True:
-            message = await websocket.receive_text()
-
-            saved_message = await save_discordant_message_service(va_id = va_id, user_id = current_user.get("uuid", ""), message = message, db = db)
-
-            await request.app.state.websocket__manager.broadcast(json.dumps(saved_message))
-    except WebSocketDisconnect:
-        await request.app.state.websocket__manager.disconnect(va_id, websocket)
-    
+        return await read_discordants_message(va_id=va_id, user_uuid=current_user.get("uuid", ""), db=db)
+    except Exception as e:
+        raise e                           
 
 @pcva_router.get("/export-pcva-results", status_code=status.HTTP_200_OK)
 async def export_coded_vas(
