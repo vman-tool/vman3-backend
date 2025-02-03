@@ -1,5 +1,6 @@
 from typing import Dict, List, Optional
 import asyncio
+from decouple import config
 
 from fastapi import WebSocket, WebSocketDisconnect
 
@@ -33,7 +34,7 @@ class WebSocketManager:
             for connection in self.active_connections[task_id]:
                 await connection.send_text(message)
 
-    async def safe_receive_text(self, websocket: WebSocket, timeout: float = 60.0) -> Optional[str]:
+    async def safe_receive_text(self, websocket: WebSocket, timeout: float = config('REFRESH_TOKEN_EXPIRE_MINUTES', default=10, cast=float)*60.0) -> Optional[str]:
         """
         Safely receive WebSocket text with timeout and error handling.
         Returns None if the connection is closed or errored.
