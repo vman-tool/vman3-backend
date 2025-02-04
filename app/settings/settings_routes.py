@@ -207,6 +207,7 @@ async def upload_csv(
         contents = await file.read()
         df = pd.read_csv(io.StringIO(contents.decode('utf-8')), low_memory=False)
 
+
         if 'instanceID' in df.columns:
             df['instanceid'] = df['instanceID']
             df.drop(columns=['instanceID'], inplace=True)
@@ -223,7 +224,7 @@ async def upload_csv(
         
         df['version_number'] = '1.0'
         df['trackid'] = task_id
-   
+        df.columns = map(str.lower, df.columns)
 
         # Convert DataFrame back to a list of dictionaries
         recordsDF = df.to_dict(orient='records')
