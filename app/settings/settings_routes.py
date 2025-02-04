@@ -5,16 +5,27 @@ from typing import List, Optional
 
 import pandas as pd
 from arango.database import StandardDatabase
-from fastapi import (APIRouter, BackgroundTasks, Body, Depends, File,
-                     HTTPException, Query, UploadFile, status)
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    Body,
+    Depends,
+    File,
+    HTTPException,
+    Query,
+    UploadFile,
+    status,
+)
 
 from app.ccva.services.ccva_upload import insert_all_csv_data
 from app.settings.models.settings import ImagesConfigData, SettingsConfigData
-from app.settings.services.odk_configs import (add_configs_settings,
-                                               fetch_configs_settings,
-                                               get_questioners_fields,
-                                               get_system_images,
-                                               save_system_images)
+from app.settings.services.odk_configs import (
+    add_configs_settings,
+    fetch_configs_settings,
+    get_questioners_fields,
+    get_system_images,
+    save_system_images,
+)
 from app.shared.configs.arangodb import get_arangodb_session
 from app.shared.configs.constants import AccessPrivileges
 from app.shared.configs.models import ResponseMainModel
@@ -219,6 +230,7 @@ async def upload_csv(
         print('before insert_all_csv_data', len(recordsDF))
         
         await insert_all_csv_data(recordsDF)
+        print('after insert_all_csv_data')
 
         return ResponseMainModel(data={"task_id": task_id, "total_records": 0,}, message="CCVA is running with uploaded CSV data...")
 
