@@ -1,18 +1,19 @@
 from datetime import datetime
 from io import BytesIO
+import json
 from typing import Dict
 from arango import ArangoError
 from arango.database import StandardDatabase
 from fastapi import HTTPException
 from fastapi.responses import FileResponse, StreamingResponse
 
-from app.pcva.models.pcva_models import ICD10, AssignedVA, CodedVA, PCVAResults
+from app.pcva.models.pcva_models import ICD10, AssignedVA, CodedVA, PCVAMessages, PCVAResults
 from app.pcva.requests.va_request_classes import AssignVARequestClass, CodeAssignedVARequestClass, PCVAResultsRequestClass
 from app.pcva.responses.va_response_classes import AssignVAResponseClass, CodedVAResponseClass, CoderResponseClass, PCVAResultsResponseClass, VAQuestionResponseClass
 from app.shared.configs.constants import AccessPrivileges, db_collections
 from app.shared.utils.database_utilities import add_query_filters, record_exists, replace_object_values
 from app.users.models.user import User
-from app.pcva.utilities.va_records_utils import format_va_record
+from app.pcva.utilities.va_records_utils import format_va_record, get_categorised_pcva_results
 from app.shared.configs.models import Pager, ResponseMainModel, VManBaseModel
 from app.odk.models.questions_models import VA_Question
 from app.settings.services.odk_configs import fetch_odk_config
@@ -23,55 +24,169 @@ import pandas as pd
 
 
 async def get_unassigned_va_service(paging: bool = True, page_number: int = 0, limit: int = 10, format_records: bool = True, coder: str = None, db: StandardDatabase = None):
-    offset = (page_number - 1) * limit if paging else 0
+    try:
+        config = await fetch_odk_config(db)
+        offset = (page_number - 1) * limit if paging else 0
 
-    query = ""
-    paginator = ""
-    bind_vars = {}
-    if paging:
-        paginator = f"LIMIT @offset, @limit"
+        query = ""
+        paginator = ""
+        bind_vars = {}
+        if paging:
+            paginator = f"LIMIT @offset, @limit"
+            bind_vars.update({
+                "offset": offset,
+                "limit": limit
+            })
+
+        
+        # TODO: Every instanceid field used has to come from settings since it's the unique VA ID identified in the VA Data records
+
+        query = f"""
+            LET result = (
+                FOR doc IN {db_collections.VA_TABLE}
+                    LET coders_ids = (
+                        FOR va IN {db_collections.ASSIGNED_VA}
+                        FILTER va.vaId == doc.instanceid 
+                        AND va.is_deleted == false
+                        RETURN va.coder
+                    )
+
+                    LET coders = (
+                        FOR user IN {db_collections.USERS}
+                        FILTER user.uuid IN coders_ids
+                        RETURN {{
+                            uuid: user.uuid,
+                            name: user.name
+                        }}
+                    )
+                    
+                    LET assignmentCount = (
+                        FOR va IN {db_collections.ASSIGNED_VA}
+                        FILTER va.vaId == doc.instanceid 
+                        AND va.is_deleted == false
+                        COLLECT WITH COUNT INTO count
+                        RETURN count
+                    )[0]
+
+                    FILTER doc.instanceid NOT IN (
+                        FOR va IN {db_collections.ASSIGNED_VA}
+                        FILTER { 'va.coder == @coder AND' if coder else ''} va.is_deleted == false
+                        COLLECT vaId = va.vaId WITH COUNT INTO coderCount
+                        FILTER coderCount <= @maximum_assignment
+                        RETURN vaId
+                    )
+                    //{paginator}
+                    RETURN MERGE(doc, {{assignments: assignmentCount , coders: coders}})
+                )
+            LET data = {'SLICE(result, @offset, @limit)' if paging else 'result'} 
+                
+
+            RETURN {{
+                total: LENGTH(result),
+                data: data
+            }}
+        """
+
+        if coder:
+            bind_vars.update({
+                "coder": coder
+            })
         bind_vars.update({
-            "offset": offset,
-            "limit": limit
+            "maximum_assignment": 2 # TODO: This number has to come from PCVA Settings
         })
 
-    query = f"""
-        FOR doc IN form_submissions
-            LET coders = (
-                FOR va IN assigned_va
-                FILTER va.vaId == doc.instanceid 
-                AND va.is_deleted == false
-                RETURN va.coder
-            )
-            
-            LET assignmentCount = (
-                FOR va IN assigned_va
-                FILTER va.vaId == doc.instanceid 
-                AND va.is_deleted == false
-                COLLECT WITH COUNT INTO count
-                RETURN count
-            )[0]
+        query_result = await VManBaseModel.run_custom_query(query=query, bind_vars=bind_vars, db=db)
+        query_result = query_result.next()
+        unassigned_data = [format_va_record(va, config) for va in query_result['data']]
+        return ResponseMainModel(data=unassigned_data, message="Unassigned VAs fetched successfully!", total = query_result["total"], pager=Pager(page=page_number, limit=limit))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get unassigned va: {e}")
 
-            FILTER doc.instanceid NOT IN (
-                FOR va IN assigned_va
-                FILTER { 'va.coder == @coder AND' if coder else ''} va.is_deleted == false
-                COLLECT vaId = va.vaId WITH COUNT INTO coderCount
-                FILTER coderCount < @maximum_assignment
-                RETURN vaId
-            )
-            {paginator}
-            RETURN MERGE(doc, {{assignments: assignmentCount , coders: coders}}
-        )
-    """
+async def get_uncoded_assignment_service(paging: bool = True, page_number: int = 0, limit: int = 10, format_records: bool = True, coder: str = None, db: StandardDatabase = None):
+    try:
+        config = await fetch_odk_config(db)
+        offset = (page_number - 1) * limit if paging else 0
 
-    if coder:
+        query = ""
+        paginator = ""
+        bind_vars = {}
+        if paging:
+            paginator = f"LIMIT @offset, @limit"
+            bind_vars.update({
+                "offset": offset,
+                "limit": limit
+            })
+
+        
+        # TODO: Every instanceid field used has to come from settings since it's the unique VA ID identified in the VA Data records
+
+        query = f"""
+            LET result = (
+                FOR doc IN form_submissions
+                    LET coders_ids = (
+                        FOR va IN {db_collections.ASSIGNED_VA}
+                        FILTER va.vaId == doc.instanceid AND va.coder != @coder
+                        AND va.is_deleted == false
+                        RETURN va.coder
+                    )
+                    
+                    LET coders = (
+                        FOR user IN {db_collections.USERS}
+                        FILTER user.uuid IN coders_ids
+                        RETURN {{
+                            uuid: user.uuid,
+                            name: user.name
+                        }}
+                    )
+                    
+                    LET assignmentCount = (
+                        FOR va IN {db_collections.ASSIGNED_VA}
+                        FILTER va.vaId == doc.instanceid 
+                        AND va.is_deleted == false
+                        COLLECT WITH COUNT INTO count
+                        RETURN count
+                    )[0]
+                    
+                    FILTER doc.instanceid IN (
+                        FOR va IN {db_collections.ASSIGNED_VA}
+                        FILTER va.coder == @coder AND va.is_deleted == false
+                        AND va.vaId NOT IN (
+                            FOR result IN {db_collections.PCVA_RESULTS}
+                            FILTER result.created_by == @coder
+                            RETURN result.{db_collections.ASSIGNED_VA}
+                        )
+                        COLLECT vaId = va.vaId WITH COUNT INTO coderCount
+                        FILTER coderCount <= @maximum_assignment
+                        RETURN vaId
+                    )
+                    //{paginator}
+                    RETURN MERGE(doc, {{assignments: assignmentCount , coders: coders}})
+                )
+
+            LET data = {'SLICE(result, @offset, @limit)' if paging else 'result'} 
+                
+
+            RETURN {{
+                total: LENGTH(result),
+                data: data
+            }}
+        """
+
+        if coder:
+            bind_vars.update({
+                "coder": coder
+            })
         bind_vars.update({
-            "coder": coder
+            "maximum_assignment": 2 # TODO: This number has to come from PCVA Settings
         })
-    bind_vars.update({
-        "maximum_assignment": 2
-    })
-    return False
+
+        query_result = await VManBaseModel.run_custom_query(query=query, bind_vars=bind_vars, db=db)
+        query_result = query_result.next()
+        unassigned_data = [format_va_record(va, config) for va in query_result['data']]
+        return ResponseMainModel(data=unassigned_data, message="Assigned VAs fetched successfully!", total = query_result["total"], pager=Pager(page=page_number, limit=limit))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get assigned va: {e}")
+    
 
 async def assign_va_service(va_records: AssignVARequestClass, user: User,  db: StandardDatabase = None):
     try:
@@ -116,7 +231,6 @@ async def assign_va_service(va_records: AssignVARequestClass, user: User,  db: S
                 },
                 db = db
             )
-            print("Does it exists: ", existing_va_assignment_data)
             if existing_va_assignment_data:
                 if len(existing_va_assignment_data) > 1:
                     raise HTTPException(status_code=400, detail=f"Multiple assignments found for this VA with this coder")
@@ -129,7 +243,58 @@ async def assign_va_service(va_records: AssignVARequestClass, user: User,  db: S
                 saved_object = await va_object.save(db = db)
             va_assignment_data.append(await AssignVAResponseClass.get_structured_assignment(assignment=saved_object, db = db))
         
-        return va_assignment_data
+        return ResponseMainModel(data=va_assignment_data, message="VA Assigned successfully!")
+    except Exception as e:
+        raise e
+
+async def unassign_va_service(va_records: AssignVARequestClass, user: User,  db: StandardDatabase = None):
+    try:
+        if not va_records.coder:
+            raise HTTPException(status_code=400, detail=f"Coder not specified specified")
+        
+        is_valid_coder = await record_exists(db_collections.USERS, uuid = va_records.coder, db = db)
+        
+        if not (is_valid_coder):
+            raise HTTPException(status_code=400, detail=f"Invalid coder specified")
+
+        vaIds  = va_records.vaIds
+        failed_vas = []
+        for vaId in vaIds:
+
+            # TODO: Use instanceid or vaid field from the settings
+            is_valid_va = await record_exists(db_collections.VA_TABLE, custom_fields={"__id": vaId}, db = db)
+            
+            if not is_valid_va:
+                failed_vas.append({
+                    "va": vaId,
+                    "error": "This va id does not exist."
+                })
+                continue
+
+            existing_va_assignment_data = await AssignedVA.get_many(
+                filters= {
+                    "vaId": vaId,
+                    "coder": va_records.coder
+                },
+                db = db
+            )
+            if existing_va_assignment_data:
+                if not len(existing_va_assignment_data) == 1:
+                    failed_vas.append({
+                        "va": vaId,
+                        "error": "This va id for this coder has multiple existence."
+                    })
+                    continue
+                existing_object = AssignedVA(**existing_va_assignment_data[0])
+                await AssignedVA.delete(doc_uuid = existing_object.uuid, deleted_by = user.uuid, db = db)
+            else:
+                failed_vas.append({
+                    "va": vaId,
+                    "error": "This va assignment for this coder does not exist."
+                })
+                continue
+        
+        return ResponseMainModel(data=failed_vas, message="VA Unassigned successfully!")
     except Exception as e:
         raise e
 
@@ -310,21 +475,48 @@ async def get_coded_va_service(paging: bool, page_number: int = None, limit: int
         if coder:
             query = f"""
                 FOR va_record IN {db_collections.VA_TABLE}
+                FILTER va_record.instanceid IN (
+                    LET coders_coded = (
+                        FOR coded IN {db_collections.PCVA_RESULTS}
+                        FILTER coded.created_by == @coder AND coded.is_deleted == false
+                        SORT coded.datetime DESC
+                        COLLECT assigned_va = coded.assigned_va INTO latest
+                        RETURN FIRST(latest[*].coded)
+                    )
+
+                    FOR va IN coders_coded
+                    LET coder_count = LENGTH(
+                        UNIQUE(
+                            FOR r IN {db_collections.PCVA_RESULTS}
+                            FILTER r.assigned_va == va.assigned_va
+                            RETURN r.created_by
+                        )
+                    )
+                    FILTER coder_count == 1
+                    {paginator}
+                    RETURN va.assigned_va
+                    
+                )
+                RETURN va_record
+            """
+
+            bind_vars.update({
+                "coder": coder,
+            }) 
+        else:
+            query = f"""
+                FOR va_record IN {db_collections.VA_TABLE}
                     FILTER va_record.instanceid IN (
                         FOR va IN {db_collections.PCVA_RESULTS}
-                            FILTER va.created_by == @coder AND va.is_deleted == false
+                            FILTER va.is_deleted == false
                             SORT va.datetime DESC
-                            COLLECT assignecount_assigned_vasd_va = va.assigned_va
+                            COLLECT assigned_va = va.assigned_va
                             INTO latest_records = va.assigned_va
                             {paginator}
                             RETURN FIRST(latest_records)
                     )
                     RETURN va_record
             """
-
-            bind_vars.update({
-                "coder": coder,
-            })
         coded_vas = await VManBaseModel.run_custom_query(query = query, bind_vars = bind_vars, db = db)
         config = await fetch_odk_config(db)
         coded_data = [format_va_record(va, config) for va in coded_vas]
@@ -387,47 +579,68 @@ async def get_coded_va_details(paging: bool, page_number: int = None, limit: int
         raise HTTPException(status_code=500, detail=f"Failed to get coded vas: {e}")
     
 
-async def get_concordants_va_service(user, db: StandardDatabase = None):
-    query = f"""
-        LET assigned_vas = (
-            FOR doc in {db_collections.ASSIGNED_VA}
-            FILTER doc.coder == @user_id
-            RETURN doc
-        )
-
-        LET coded_assigned_vas = (
-            FOR assigned_va in assigned_vas
-              FOR coded_va in {db_collections.CODED_VA}
-                FILTER coded_va.assigned_va == assigned_va.vaId
-                SORT coded_va.datetime DESC
-                COLLECT assigned_va_id = coded_va.assigned_va INTO grouped
-                LET latest_coded_vas = (
-                    FOR g IN grouped[*].coded_va
-                        COLLECT created_by = g.created_by INTO coder_group
-                        LET latest_record = FIRST(coder_group[* FILTER CURRENT.datetime == MAX(coder_group[*].datetime)])
-                        RETURN latest_record.g
-                )
-                RETURN latest_coded_vas
-        )
-
+async def get_concordants_va_service(
+        paging: bool = None,
+        page_number: int = None,
+        limit: int = None, 
+        coder: str = None, 
+        db: StandardDatabase = None):
+    try:
+        results = await get_categorised_pcva_results(coder_uuid = coder, paging = paging, page_number = page_number, limit = limit,  db=db)
+        concordants = results.get("concordants", "")
+        vas = [va[0].get("assigned_va", "") for va in concordants]
         
-        FOR coded_assigned_va in coded_assigned_vas
-            RETURN coded_assigned_va[*]
-    """
-    bind_vars = {
-        "user_id": user["uuid"]
-    }
+        query = f"""
+            FOR va IN {db_collections.VA_TABLE}
+            FILTER va.instanceid IN @concordants
+            RETURN va
+        """
+
+        bind_vars = {
+            "concordants": vas
+        }
+        va_data = VManBaseModel.run_custom_query(query=query, bind_vars=bind_vars, db=db)
+        
+        config = await fetch_odk_config(db)
+        
+        total_concordants = results.get("total_concordants", "")
+
+        return ResponseMainModel(data=[format_va_record(va, config) for va in va_data], message="Concordants VAs fetched successfully", total=total_concordants, pager=Pager(page=page_number, limit=limit) if paging else None)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get concordants: {e}")
+
+
+async def get_discordants_va_service(
+        paging: bool = None,
+        page_number: int = None,
+        limit: int = None, 
+        coder: str = None, 
+        db: StandardDatabase = None):
+    try:
+        results = await get_categorised_pcva_results(coder_uuid = coder, paging = paging, page_number = page_number, limit = limit,  db=db)
+        discordants = results.get("discordants", "")
+
+        vas = [va[0].get("assigned_va", "") for va in discordants]
+
+        query = f"""
+            FOR va IN {db_collections.VA_TABLE}
+            FILTER va.instanceid IN @discordants
+            RETURN va
+        """
+
+        bind_vars = {
+            "discordants": vas
+        }
+        va_data = await VManBaseModel.run_custom_query(query=query, bind_vars=bind_vars, db=db)
+
+        config = await fetch_odk_config(db)
+
+        total_discordants = results.get("total_discordants", "")
+
+        return ResponseMainModel(data=[format_va_record(va, config) for va in va_data], message="Discordants VAs fetched successfully", total=total_discordants, pager=Pager(page=page_number, limit=limit) if paging else None)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get discordants: {e}")
     
-    codedVAs = await VManBaseModel.run_custom_query(query, bind_vars, db)
-    
-    formattedCodedVA = []
-    for codedVA_group in codedVAs:
-        codedVA_group_temp = []
-        for codedVA in codedVA_group:
-            codedVA_group_temp.append(await CodedVAResponseClass.get_structured_codedVA(codedVA, db))
-        formattedCodedVA.append(codedVA_group_temp)
-    
-    return formattedCodedVA
 
 async def get_form_questions_service(filters: Dict = None, db: StandardDatabase = None):
     questions = await VA_Question.get_many(paging=False, filters=filters, db=db)
@@ -641,5 +854,101 @@ async def export_pcva_results(db: StandardDatabase = None):
         return StreamingResponse(output, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", headers=headers)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to export PCVA results: {e}")
+    
+
+
+async def save_discordant_message_service(va_id: str, user_id: str, message: str, db: StandardDatabase = None):
+    try:
+        discordant_message_object = await PCVAMessages(
+            va=va_id,
+            message=message,
+            created_by=user_id,
+            read_by=[user_id]
+        ).save(db)
+        message_object = {
+            "uuid": discordant_message_object.get("uuid",""),
+            "va": discordant_message_object.get("va",""),
+            "message": discordant_message_object.get("message",""),
+            "read_by": discordant_message_object.get("read_by",""),
+            "created_by": discordant_message_object.get("created_by",""),
+            "created_at": discordant_message_object.get("created_at","")
+        }
+        return json.dumps(message_object)
+    
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to save discordant message: {e}")
+
+async def get_discordant_messages_service(va_id: str, coder: str, db: StandardDatabase = None):
+    try:
+        if not db.has_collection(PCVAMessages.get_collection_name()):
+            PCVAMessages.init_collection(db)
+
+        if not va_id:
+            raise HTTPException(status_code=400, detail="VA ID is required.")
+        
+        if not coder:
+            raise HTTPException(status_code=400, detail="Coder ID is required.")
+            
+        query = f"""
+            LET discordant = (
+                FOR doc in {db_collections.PCVA_RESULTS}
+                FILTER doc.assigned_va == @va AND doc.created_by == @coder
+                SORT doc.datetime DESC
+                COLLECT created_by = doc.created_by, assigned_va = doc.assigned_va
+                INTO latest_records = doc
+                RETURN FIRST(latest_records)
+            )
+
+            LET messages = (
+                FOR message IN {db_collections.PCVA_MESSAGES}
+                FILTER message.va == @va AND message.is_deleted == false
+                SORT message.created_at ASC
+                RETURN {{
+                    uuid: message.uuid,
+                    va: message.va,
+                    message: message.message,
+                    read_by: message.read_by,
+                    created_by: message.created_by,
+                    created_at: message.created_at   
+                }}
+            )
+
+            RETURN {{
+                discordant: discordant,
+                messages: messages
+            }}
+        """
+        bind_vars = {
+            "va": va_id,
+            "coder": coder
+        }
+
+        discordant_messages_cursor = await PCVAMessages.run_custom_query(query=query, bind_vars=bind_vars, db = db)
+        discordant_messages = discordant_messages_cursor.next()
+
+        discordant_messages['discordant'] = [await PCVAResultsResponseClass.get_structured_codedVA(pcva_result = discordant_messages['discordant'][0], db = db)]
+        return ResponseMainModel(data=discordant_messages, message="Discordant message fetched successfully!")
+    
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to save discordant message: {e}")
+    
+
+async def read_discordants_message(va_id: str, user_uuid: str = None, db: StandardDatabase = None):
+    try:
+        query = f"""
+            FOR message IN {db_collections.PCVA_MESSAGES}
+                FILTER message.va == @va_id AND POSITION(message.read_by, @user) == -1
+
+                UPDATE {{ read_by: APPEND(message.read_by, [@user], true) }} IN {db_collections.PCVA_MESSAGES}
+        """
+        bind_vars = {
+            "va_id": va_id,
+            "user": user_uuid
+        }
+
+        await PCVAMessages.run_custom_query(query=query, bind_vars=bind_vars, db=db)
+        return ResponseMainModel(message="Message read successfully!")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to read message: {e}")
 
 
