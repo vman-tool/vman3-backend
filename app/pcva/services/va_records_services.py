@@ -866,7 +866,8 @@ async def save_discordant_message_service(va_id: str, user_id: str, message: str
             read_by=[user_id]
         ).save(db)
         message_object = {
-            "va_id": discordant_message_object.get("va",""),
+            "uuid": discordant_message_object.get("uuid",""),
+            "va": discordant_message_object.get("va",""),
             "message": discordant_message_object.get("message",""),
             "read_by": discordant_message_object.get("read_by",""),
             "created_by": discordant_message_object.get("created_by",""),
