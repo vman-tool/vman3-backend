@@ -923,8 +923,11 @@ async def get_discordant_messages_service(va_id: str, coder: str, db: StandardDa
             "coder": coder
         }
 
-        discordant_messages = await PCVAMessages.run_custom_query(query=query, bind_vars=bind_vars, db = db)
-        return ResponseMainModel(data=discordant_messages.next(), message="Discordant message fetched successfully!")
+        discordant_messages_cursor = await PCVAMessages.run_custom_query(query=query, bind_vars=bind_vars, db = db)
+        discordant_messages = discordant_messages_cursor.next()
+
+        discordant_messages['discordant'] = [await PCVAResultsResponseClass.get_structured_codedVA(pcva_result = discordant_messages['discordant'][0], db = db)]
+        return ResponseMainModel(data=discordant_messages, message="Discordant message fetched successfully!")
     
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to save discordant message: {e}")
