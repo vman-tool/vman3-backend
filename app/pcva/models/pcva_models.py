@@ -103,3 +103,12 @@ class PCVAResults(VManBaseModel):
     @classmethod
     def get_collection_name(cls) -> str:
         return db_collections.PCVA_RESULTS
+
+class PCVAMessages(VManBaseModel):
+    va: str
+    message: str
+    read_by: Union[List[str], None] = None
+
+    @classmethod
+    def get_collection_name(cls) -> str:
+        return db_collections.PCVA_MESSAGES

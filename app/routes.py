@@ -29,6 +29,7 @@ def create_main_router():
     main_router.include_router(users_routes.guest_router)
     main_router.include_router(users_routes.auth_router)
     main_router.include_router(pcva_routes.pcva_router)
+    main_router.include_router(pcva_routes.pcva_socket_router)
     main_router.include_router(ccva_routes.ccva_router)
     main_router.include_router(records_routes.data_router)
     main_router.include_router(statistics_routes.statistics_router)
