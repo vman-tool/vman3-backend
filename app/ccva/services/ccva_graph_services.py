@@ -28,16 +28,24 @@ async def fetch_db_processed_ccva_graphs(
     db: StandardDatabase = None
 ) -> ResponseMainModel:
     try:
-        print(selected_success_type)
+
         # print(start_date, end_date, locations, date_type,'dated')
         # date_type= submission_date death_date interview_date
 
-        locationKey, locationLimitValues = get_location_limit_values(current_user)
-        if locationKey == 'id10005r':
-            locationKey = 'locationLevel1'
-        elif locationKey == 'id10005d':
-            locationKey = 'locationLevel2'
+        # locationKey, locationLimitValues = get_location_limit_values(current_user)
+        # if locationKey == 'id10005r':
+        #     locationKey = 'locationLevel1'
+        # elif locationKey == 'id10005d':
+        #     locationKey = 'locationLevel2'
+        config = await fetch_odk_config(db)
+        region_field = config.field_mapping.location_level1
 
+        district_field = config.field_mapping.location_level2
+        locationKey, locationLimitValues = get_location_limit_values(current_user)
+        if locationKey == region_field:
+            locationKey = 'locationLevel1'
+        elif locationKey == district_field:
+            locationKey = 'locationLevel2'
         
     
         config = await fetch_odk_config(db)
