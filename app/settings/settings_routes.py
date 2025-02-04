@@ -1,15 +1,24 @@
+import io
+import uuid
+from datetime import date
 from typing import List, Optional
-from arango.database import StandardDatabase
-from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
 
+import pandas as pd
+from arango.database import StandardDatabase
+from fastapi import (APIRouter, BackgroundTasks, Body, Depends, File,
+                     HTTPException, Query, UploadFile, status)
+
+from app.ccva.services.ccva_upload import insert_all_csv_data
 from app.settings.models.settings import ImagesConfigData, SettingsConfigData
 from app.settings.services.odk_configs import (add_configs_settings,
                                                fetch_configs_settings,
-                                               get_questioners_fields, get_system_images, save_system_images)
+                                               get_questioners_fields,
+                                               get_system_images,
+                                               save_system_images)
 from app.shared.configs.arangodb import get_arangodb_session
+from app.shared.configs.constants import AccessPrivileges
 from app.shared.configs.models import ResponseMainModel
 from app.shared.services.va_records import get_field_value_from_va_records
-from app.shared.configs.constants import AccessPrivileges
 from app.users.decorators.user import check_privileges, get_current_user
 from app.utilits.helpers import delete_file, save_file
 
@@ -162,4 +171,58 @@ async def delete_system_images(
 
 
 
+@settings_router.post("/upload-csv", status_code=status.HTTP_200_OK)
+async def upload_csv(
+    background_tasks: BackgroundTasks,
+    file: UploadFile = File(...),
+    unique_id: Optional[str] = Body ('KEY', alias="unique_id"),
+    # oauth = Depends(oauth2_scheme),
 
+    current_user: Optional[str] = Depends(get_current_user),
+    start_date: Optional[date] = Body(None, alias="start_date"),
+    end_date: Optional[date] = Body(None, alias="end_date"),
+    date_type: Optional[str]=Query(None, alias="date_type"),
+    db: StandardDatabase = Depends(get_arangodb_session)
+):
+
+
+    try:
+
+        # # Generate task ID
+        task_id = str(uuid.uuid4())
+        
+
+        # Read CSV file
+        contents = await file.read()
+        df = pd.read_csv(io.StringIO(contents.decode('utf-8')), low_memory=False)
+
+        if 'instanceID' in df.columns:
+            df['instanceid'] = df['instanceID']
+            df.drop(columns=['instanceID'], inplace=True)
+        if 'instanceid' not in df.columns:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Instance ID (instanceid) not found in the uploaded CSV")
+        if unique_id not in df.columns:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Unique ID not found in the uploaded CSV")
+       # Add additional fields to the DataFrame
+        df['vman_data_source'] = 'uploaded_csv'
+        df['vman_data_name'] = 't'
+        df['__id'] =df[unique_id]
+
+         
+        
+        df['version_number'] = '1.0'
+        df['trackid'] = task_id
+   
+
+        # Convert DataFrame back to a list of dictionaries
+        recordsDF = df.to_dict(orient='records')
+        print('before insert_all_csv_data', len(recordsDF))
+        
+        await insert_all_csv_data(recordsDF)
+
+        return ResponseMainModel(data={"task_id": task_id, "total_records": 0,}, message="CCVA is running with uploaded CSV data...")
+
+    except Exception as e:
+        # Raising the error so FastAPI can handle it
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+   
