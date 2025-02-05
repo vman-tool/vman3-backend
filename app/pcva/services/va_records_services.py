@@ -22,12 +22,15 @@ from app.users.models.role import Role, UserRole
 import pandas as pd
 
 from app.pcva.requests.configurations_request_classes import PCVAConfigurationsRequest
+from app.pcva.utilities.pcva_utils import fetch_pcva_settings
    
 
 
 async def get_unassigned_va_service(paging: bool = True, page_number: int = 0, limit: int = 10, format_records: bool = True, coder: str = None, db: StandardDatabase = None):
     try:
         config = await fetch_odk_config(db)
+        pcva_config = await fetch_pcva_settings(db)
+        
         offset = (page_number - 1) * limit if paging else 0
 
         query = ""
@@ -48,7 +51,7 @@ async def get_unassigned_va_service(paging: bool = True, page_number: int = 0, l
                 FOR doc IN {db_collections.VA_TABLE}
                     LET coders_ids = (
                         FOR va IN {db_collections.ASSIGNED_VA}
-                        FILTER va.vaId == doc.instanceid 
+                        FILTER va.vaId == doc.{config.field_mapping.instance_id} 
                         AND va.is_deleted == false
                         RETURN va.coder
                     )
@@ -64,7 +67,7 @@ async def get_unassigned_va_service(paging: bool = True, page_number: int = 0, l
                     
                     LET assignmentCount = (
                         FOR va IN {db_collections.ASSIGNED_VA}
-                        FILTER va.vaId == doc.instanceid 
+                        FILTER va.vaId == doc.{config.field_mapping.instance_id} 
                         AND va.is_deleted == false
                         COLLECT WITH COUNT INTO count
                         RETURN count
@@ -94,7 +97,7 @@ async def get_unassigned_va_service(paging: bool = True, page_number: int = 0, l
                 "coder": coder
             })
         bind_vars.update({
-            "maximum_assignment": 2 # TODO: This number has to come from PCVA Settings
+            "maximum_assignment": pcva_config.vaAssignmentLimit
         })
 
         query_result = await VManBaseModel.run_custom_query(query=query, bind_vars=bind_vars, db=db)
@@ -107,6 +110,7 @@ async def get_unassigned_va_service(paging: bool = True, page_number: int = 0, l
 async def get_uncoded_assignment_service(paging: bool = True, page_number: int = 0, limit: int = 10, format_records: bool = True, coder: str = None, db: StandardDatabase = None):
     try:
         config = await fetch_odk_config(db)
+        pcva_config = await fetch_pcva_settings(db)
         offset = (page_number - 1) * limit if paging else 0
 
         query = ""
@@ -127,7 +131,7 @@ async def get_uncoded_assignment_service(paging: bool = True, page_number: int =
                 FOR doc IN form_submissions
                     LET coders_ids = (
                         FOR va IN {db_collections.ASSIGNED_VA}
-                        FILTER va.vaId == doc.instanceid AND va.coder != @coder
+                        FILTER va.vaId == doc.{config.field_mapping.instance_id} AND va.coder != @coder
                         AND va.is_deleted == false
                         RETURN va.coder
                     )
@@ -143,7 +147,7 @@ async def get_uncoded_assignment_service(paging: bool = True, page_number: int =
                     
                     LET assignmentCount = (
                         FOR va IN {db_collections.ASSIGNED_VA}
-                        FILTER va.vaId == doc.instanceid 
+                        FILTER va.vaId == doc.{config.field_mapping.instance_id} 
                         AND va.is_deleted == false
                         COLLECT WITH COUNT INTO count
                         RETURN count
@@ -179,7 +183,7 @@ async def get_uncoded_assignment_service(paging: bool = True, page_number: int =
                 "coder": coder
             })
         bind_vars.update({
-            "maximum_assignment": 2 # TODO: This number has to come from PCVA Settings
+            "maximum_assignment": pcva_config.vaAssignmentLimit
         })
 
         query_result = await VManBaseModel.run_custom_query(query=query, bind_vars=bind_vars, db=db)
@@ -223,7 +227,9 @@ async def assign_va_service(va_records: AssignVARequestClass, user: User,  db: S
                     "created_at": datetime.now().isoformat(),
                 }
             va_object = AssignedVA(**va_data)
-            is_valid_va = await record_exists(db_collections.VA_TABLE, custom_fields={"__id": vaId}, db = db)
+
+            config = await fetch_odk_config(db)
+            is_valid_va = await record_exists(db_collections.VA_TABLE, custom_fields={config.field_mapping.instance_id: vaId}, db = db)
             if not is_valid_va:
                 continue
             existing_va_assignment_data = await AssignedVA.get_many(
@@ -263,8 +269,8 @@ async def unassign_va_service(va_records: AssignVARequestClass, user: User,  db:
         failed_vas = []
         for vaId in vaIds:
 
-            # TODO: Use instanceid or vaid field from the settings
-            is_valid_va = await record_exists(db_collections.VA_TABLE, custom_fields={"__id": vaId}, db = db)
+            config = await fetch_odk_config(db)
+            is_valid_va = await record_exists(db_collections.VA_TABLE, custom_fields={config.field_mapping.instance_id: vaId}, db = db)
             
             if not is_valid_va:
                 failed_vas.append({
@@ -305,6 +311,7 @@ async def get_va_assignment_service(paging: bool, page_number: int = None, limit
     
     try:
         config = await fetch_odk_config(db)
+        pcva_config = await fetch_pcva_settings(db)
 
         offset = (page_number - 1) * limit if paging else 0
         
@@ -336,7 +343,7 @@ async def get_va_assignment_service(paging: bool, page_number: int = None, limit
             )
             LET assigned_vas = (
                 FOR va_record IN {db_collections.VA_TABLE}
-                FILTER va_record.instanceid IN (
+                FILTER va_record.{config.field_mapping.instance_id} IN (
                     FOR va IN {db_collections.ASSIGNED_VA}
                         FILTER va.coder == @coder 
                         AND va.is_deleted == false 
@@ -379,7 +386,8 @@ async def get_va_assignment_service(paging: bool, page_number: int = None, limit
 async def code_assigned_va_service(coded_va: PCVAResultsRequestClass = None, current_user: User = None, db: StandardDatabase = None):
         try:
             # 1. Check if va exists in the db and is already assigned
-            is_va_existing = await record_exists(db_collections.VA_TABLE, custom_fields = { "__id": coded_va.assigned_va}, db = db)
+            config = await fetch_odk_config(db)
+            is_va_existing = await record_exists(db_collections.VA_TABLE, custom_fields = {config.field_mapping.instance_id: coded_va.assigned_va}, db = db)
             is_user_assigned = await record_exists(
                 collection_name = db_collections.ASSIGNED_VA, 
                 custom_fields= {
@@ -462,7 +470,8 @@ async def code_assigned_va_service(coded_va: PCVAResultsRequestClass = None, cur
 
 async def get_coded_va_service(paging: bool, page_number: int = None, limit: int = None, include_deleted: bool = None, va: str = None, coder: str = None, current_user = None, db: StandardDatabase = None):
     try:
-    
+        config = await fetch_odk_config(db)
+
         offset = (page_number - 1) * limit if paging else 0
 
         query = ""
@@ -477,7 +486,7 @@ async def get_coded_va_service(paging: bool, page_number: int = None, limit: int
         if coder:
             query = f"""
                 FOR va_record IN {db_collections.VA_TABLE}
-                FILTER va_record.instanceid IN (
+                FILTER va_record.{config.field_mapping.instance_id} IN (
                     LET coders_coded = (
                         FOR coded IN {db_collections.PCVA_RESULTS}
                         FILTER coded.created_by == @coder AND coded.is_deleted == false
@@ -508,7 +517,7 @@ async def get_coded_va_service(paging: bool, page_number: int = None, limit: int
         else:
             query = f"""
                 FOR va_record IN {db_collections.VA_TABLE}
-                    FILTER va_record.instanceid IN (
+                    FILTER va_record.{config.field_mapping.instance_id} IN (
                         FOR va IN {db_collections.PCVA_RESULTS}
                             FILTER va.is_deleted == false
                             SORT va.datetime DESC
@@ -520,7 +529,7 @@ async def get_coded_va_service(paging: bool, page_number: int = None, limit: int
                     RETURN va_record
             """
         coded_vas = await VManBaseModel.run_custom_query(query = query, bind_vars = bind_vars, db = db)
-        config = await fetch_odk_config(db)
+
         coded_data = [format_va_record(va, config) for va in coded_vas]
         return ResponseMainModel(data = coded_data, total=len(coded_data), message="Coded VAs fetched successfully!", pager=Pager(page=page_number, limit=limit)) 
     
@@ -588,13 +597,14 @@ async def get_concordants_va_service(
         coder: str = None, 
         db: StandardDatabase = None):
     try:
+        config = await fetch_odk_config(db)
         results = await get_categorised_pcva_results(coder_uuid = coder, paging = paging, page_number = page_number, limit = limit,  db=db)
         concordants = results.get("concordants", "")
         vas = [va[0].get("assigned_va", "") for va in concordants]
         
         query = f"""
             FOR va IN {db_collections.VA_TABLE}
-            FILTER va.instanceid IN @concordants
+            FILTER va.{config.field_mapping.instance_id} IN @concordants
             RETURN va
         """
 
@@ -602,8 +612,6 @@ async def get_concordants_va_service(
             "concordants": vas
         }
         va_data = VManBaseModel.run_custom_query(query=query, bind_vars=bind_vars, db=db)
-        
-        config = await fetch_odk_config(db)
         
         total_concordants = results.get("total_concordants", "")
 
@@ -619,6 +627,7 @@ async def get_discordants_va_service(
         coder: str = None, 
         db: StandardDatabase = None):
     try:
+        config = await fetch_odk_config(db)
         results = await get_categorised_pcva_results(coder_uuid = coder, paging = paging, page_number = page_number, limit = limit,  db=db)
         discordants = results.get("discordants", "")
 
@@ -626,7 +635,7 @@ async def get_discordants_va_service(
 
         query = f"""
             FOR va IN {db_collections.VA_TABLE}
-            FILTER va.instanceid IN @discordants
+            FILTER va.{config.field_mapping.consent_id} IN @discordants
             RETURN va
         """
 
@@ -634,8 +643,6 @@ async def get_discordants_va_service(
             "discordants": vas
         }
         va_data = await VManBaseModel.run_custom_query(query=query, bind_vars=bind_vars, db=db)
-
-        config = await fetch_odk_config(db)
 
         total_discordants = results.get("total_discordants", "")
 
