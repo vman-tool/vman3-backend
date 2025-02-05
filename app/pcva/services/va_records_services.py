@@ -7,7 +7,7 @@ from arango.database import StandardDatabase
 from fastapi import HTTPException
 from fastapi.responses import FileResponse, StreamingResponse
 
-from app.pcva.models.pcva_models import ICD10, AssignedVA, CodedVA, PCVAMessages, PCVAResults
+from app.pcva.models.pcva_models import ICD10, AssignedVA, CodedVA, PCVAConfigurations, PCVAMessages, PCVAResults
 from app.pcva.requests.va_request_classes import AssignVARequestClass, CodeAssignedVARequestClass, PCVAResultsRequestClass
 from app.pcva.responses.va_response_classes import AssignVAResponseClass, CodedVAResponseClass, CoderResponseClass, PCVAResultsResponseClass, VAQuestionResponseClass
 from app.shared.configs.constants import AccessPrivileges, db_collections
@@ -20,6 +20,8 @@ from app.settings.services.odk_configs import fetch_odk_config
 from app.users.models.role import Role, UserRole
 
 import pandas as pd
+
+from app.pcva.requests.configurations_request_classes import PCVAConfigurationsRequest
    
 
 
@@ -948,6 +950,38 @@ async def read_discordants_message(va_id: str, user_uuid: str = None, db: Standa
 
         await PCVAMessages.run_custom_query(query=query, bind_vars=bind_vars, db=db)
         return ResponseMainModel(message="Message read successfully!")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to read message: {e}")
+
+
+async def get_configurations_service(db: StandardDatabase = None):
+    try:
+        
+        configuration = await PCVAConfigurations.get_many(db=db)
+
+        if len(configuration) > 0:
+            return ResponseMainModel(data = PCVAConfigurationsRequest(**configuration[0]), message="PCVA Configuration fetched successfully!")
+
+        return ResponseMainModel(data = configuration, message="PCVA Configuration set successfully!")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to read message: {e}")
+
+async def save_configurations_service(configs: PCVAConfigurationsRequest = None, current_user: User = None, db: StandardDatabase = None):
+    try:
+        if configs.concordanceLevel > configs.vaAssignmentLimit:
+            raise HTTPException(status_code=400, detail=f"Concordance level has to be less than assignment limit")
+        
+        configuration = await PCVAConfigurations.get_many(db=db)
+
+        if len(configuration) > 0:
+            config_object = replace_object_values(configs.model_dump(), configuration[0])
+            saved = await PCVAConfigurations(**config_object).update(updated_by=current_user.uuid, db=db)
+
+        else:
+            config_object = configs.model_dump()
+            config_object["created_by"] = current_user.uuid
+            saved = await PCVAConfigurations(**config_object).save(db=db)
+        return ResponseMainModel(data = PCVAConfigurationsRequest(**saved), message="PCVA Configuration set successfully!")
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to read message: {e}")
 
