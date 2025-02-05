@@ -3,7 +3,7 @@ import json
 from typing import Any, Dict, List, Optional, Union
 
 from arango.database import StandardDatabase
-from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, WebSocket, WebSocketDisconnect, status, Request
 import pandas as pd
 
 from app.pcva.requests.icd10_request_classes import (
@@ -39,20 +39,36 @@ from app.pcva.services.va_records_services import (
     get_coded_va_service,
     get_coders,
     get_concordants_va_service,
+    get_configurations_service,
+    get_discordant_messages_service,
+    get_discordants_va_service,
     get_form_questions_service,
+    get_unassigned_va_service,
     get_va_assignment_service,
+    get_uncoded_assignment_service,
+    read_discordants_message,
+    save_configurations_service,
+    save_discordant_message_service,
+    unassign_va_service,
 )
 from app.shared.configs.arangodb import get_arangodb_session
 from app.shared.configs.models import ResponseMainModel
-from app.users.decorators.user import get_current_user, oauth2_scheme
+from app.users.decorators.user import get_current_user, get_current_user_ws, oauth2_scheme
 from app.users.models.user import User
 from app.shared.services.va_records import shared_fetch_va_records
+from app.pcva.requests.configurations_request_classes import PCVAConfigurationsRequest
 
 pcva_router = APIRouter(
     prefix="/pcva",
     tags=["PCVA"],
     responses={404: {"description": "Not found"}},
     dependencies=[Depends(oauth2_scheme), Depends(get_current_user)]
+)
+
+pcva_socket_router = APIRouter(
+    prefix="/pcva",
+    tags=["PCVA"],
+    responses={404: {"description": "Not found"}},
 )
 
 
@@ -75,6 +91,38 @@ async def get_va_records(
                 "instanceid": va_id
             }
         return await shared_fetch_va_records(paging = allowPaging, page_number = page_number, limit = limit, include_assignment = include_assignment, filters=filters, format_records=format_records, db=db)
+        
+    except Exception as e:
+        raise e
+
+@pcva_router.get("/get-unassigned-va", status_code=status.HTTP_200_OK)
+async def get_unassigned_va_records(
+    paging: Optional[bool] = Query(None, alias="paging"),
+    page_number: Optional[int] = Query(1, alias="page_number"),
+    limit: Optional[int] = Query(10, alias="limit"),
+    coder: Optional[str] = Query(None, alias="coder"),
+    db: StandardDatabase = Depends(get_arangodb_session)) -> ResponseMainModel:
+
+    try:
+        allowPaging = paging if paging is not None else True
+        
+        return await get_unassigned_va_service(paging = allowPaging, page_number = page_number, limit = limit, coder = coder, db=db)
+        
+    except Exception as e:
+        raise e
+
+@pcva_router.get("/get-uncoded-assigned-va", status_code=status.HTTP_200_OK)
+async def get_va_for_unnassignment(
+    paging: Optional[bool] = Query(None, alias="paging"),
+    page_number: Optional[int] = Query(1, alias="page_number"),
+    limit: Optional[int] = Query(10, alias="limit"),
+    coder: Optional[str] = Query(None, alias="coder"),
+    db: StandardDatabase = Depends(get_arangodb_session)) -> ResponseMainModel:
+
+    try:
+        allowPaging = paging if paging is not None else True
+        
+        return await get_uncoded_assignment_service(paging = allowPaging, page_number = page_number, limit = limit, coder = coder, db=db)
         
     except Exception as e:
         raise e
@@ -271,6 +319,20 @@ async def assign_va(
     except Exception as e:
         raise e
 
+@pcva_router.post(
+        "/unassign-va", 
+        status_code=status.HTTP_201_CREATED, 
+        description="vaIds should be array of vaId. coder must have a user uuid")
+async def unassign_va(
+    vaAssignment: AssignVARequestClass,
+    user: User = Depends(get_current_user),
+    db: StandardDatabase = Depends(get_arangodb_session)):
+
+    try:
+        return await unassign_va_service(vaAssignment, User(**user), db)    
+    except Exception as e:
+        raise e
+
 @pcva_router.get("/get-coded-va", status_code=status.HTTP_200_OK)
 async def get_coded_va(
     coder: Optional[str] = Query(None, alias="coder"),
@@ -319,17 +381,55 @@ async def code_assigned_va(
     except Exception as e:
         raise e
 
-@pcva_router.get("/get_concordants", status_code=status.HTTP_200_OK)
+@pcva_router.get("/get-concordants", status_code=status.HTTP_200_OK)
 async def get_concordants(
+    paging: bool = Query(None, alias='paging'),
+    page_number: int = Query(1, alias='page_number'),
+    limit: int = Query(10, alias='limit'),
+    coder: str = Query(None, alias="coder"),
     current_user: User = Depends(get_current_user),
     db: StandardDatabase = Depends(get_arangodb_session)):
     try:
-        return  await get_concordants_va_service(current_user, db = db)
+        return  await get_concordants_va_service(paging = paging, page_number = page_number, limit = limit, coder = coder, db = db)
+    except Exception as e:
+        raise e
+
+@pcva_router.get("/get-discordants", status_code=status.HTTP_200_OK)
+async def get_discordants(
+    paging: bool = Query(None, alias='paging'),
+    page_number: int = Query(1, alias='page_number'),
+    limit: int = Query(10, alias='limit'),
+    coder: str = Query(None, alias="coder"),
+    current_user: User = Depends(get_current_user),
+    db: StandardDatabase = Depends(get_arangodb_session)):
+    try:
+        return  await get_discordants_va_service(paging = paging, page_number = page_number, limit = limit, coder = coder, db = db)
     except Exception as e:
         raise e
     
 
-@pcva_router.get("/export_pcva_results", status_code=status.HTTP_200_OK)
+@pcva_router.get("/get-discordant-messages/{va_id}", status_code=status.HTTP_200_OK)
+async def get_discordant_messages(
+    va_id: str,
+    current_user: User = Depends(get_current_user),
+    db: StandardDatabase = Depends(get_arangodb_session)):
+    try:
+        return  await get_discordant_messages_service(va_id=va_id, coder=current_user.get("uuid", ""), db = db)
+    except Exception as e:
+        raise e
+    
+@pcva_router.post("/messages/{va_id}/read")
+async def mark_message_as_read(
+    va_id: str,
+    current_user: User = Depends(get_current_user),
+    db: StandardDatabase = Depends(get_arangodb_session)
+    ):
+    try:
+        return await read_discordants_message(va_id=va_id, user_uuid=current_user.get("uuid", ""), db=db)
+    except Exception as e:
+        raise e                           
+
+@pcva_router.get("/export-pcva-results", status_code=status.HTTP_200_OK)
 async def export_coded_vas(
     current_user: User = Depends(get_current_user),
     db: StandardDatabase = Depends(get_arangodb_session)):
@@ -339,7 +439,7 @@ async def export_coded_vas(
         raise e
     
 
-@pcva_router.get("/form_questions", status_code=status.HTTP_200_OK)
+@pcva_router.get("/form-questions", status_code=status.HTTP_200_OK)
 async def get_form_questions(
     questions_keys: Optional[str] = Query(None, alias="question_id", description="If you need many, separate questons keys by comma, Do not specify to get all the questions"),
     current_user: User = Depends(get_arangodb_session),
@@ -354,5 +454,27 @@ async def get_form_questions(
 
         return await get_form_questions_service(filters=filters, db=db)
 
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    
+
+@pcva_router.post("/save-configurations", status_code=status.HTTP_200_OK)
+async def save_configurations(
+    configs: PCVAConfigurationsRequest,
+    current_user: User = Depends(get_current_user),
+    db: StandardDatabase = Depends(get_arangodb_session)
+) -> ResponseMainModel:
+    try:
+        return await save_configurations_service(configs=configs, current_user=User(**current_user), db=db)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@pcva_router.get("/get-configurations", status_code=status.HTTP_200_OK)
+async def get_configurations(
+    current_user: User = Depends(get_current_user),
+    db: StandardDatabase = Depends(get_arangodb_session)
+) -> ResponseMainModel:
+    try:
+        return await get_configurations_service(db=db)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
