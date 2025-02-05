@@ -6,6 +6,7 @@ from pydantic import BaseModel
 from app.settings.models.settings import SettingsConfigData
 from app.shared.configs.models import VManBaseModel
 from app.shared.configs.constants import db_collections
+from app.pcva.utilities.pcva_utils import fetch_pcva_settings
 
 
 
@@ -52,6 +53,8 @@ def format_va_record(raw_data: dict, config: SettingsConfigData = None) -> DataR
 
 
 async def get_categorised_pcva_results(coder_uuid: str = None, paging: bool = None, page_number: int = None, limit: int = None, db: StandardDatabase = None):
+    pcva_config = await fetch_pcva_settings(db)
+
     if not coder_uuid:
         raise ValueError("Coder UUID is required")
     
@@ -126,7 +129,7 @@ async def get_categorised_pcva_results(coder_uuid: str = None, paging: bool = No
         LET matchCount = LENGTH(
             FOR pv IN priorityValues
                 COLLECT val = pv WITH COUNT INTO count
-                FILTER count >= 2
+                FILTER count >= {pcva_config.concordanceLevel}
                 RETURN count
             )
             RETURN {{
@@ -147,4 +150,5 @@ async def get_categorised_pcva_results(coder_uuid: str = None, paging: bool = No
     """
 
     categorised_results = await VManBaseModel.run_custom_query(query = query, bind_vars = bind_vars, db=db)
+
     return categorised_results.next() if categorised_results else None

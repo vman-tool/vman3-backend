@@ -635,7 +635,7 @@ async def get_discordants_va_service(
 
         query = f"""
             FOR va IN {db_collections.VA_TABLE}
-            FILTER va.{config.field_mapping.consent_id} IN @discordants
+            FILTER va.{config.field_mapping.instance_id} IN @discordants
             RETURN va
         """
 
