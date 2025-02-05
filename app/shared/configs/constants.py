@@ -17,6 +17,7 @@ class db_collections():
     ASSIGNED_VA: str = 'assigned_va'
     PCVA_RESULTS: str = 'pcva_results'
     PCVA_MESSAGES: str = 'pcva_messages'
+    PCVA_CONFIGURATION: str = 'pcva_configuration'
     DOWNLOAD_TRACKER: str   ='download_tracker'
     DOWNLOAD_PROCESS_TRACKER: str   ='download_process_tracker'
     SYSTEM_CONFIGS: str = 'system_configs'
@@ -83,6 +84,11 @@ collections_with_indexes = {
         {"fields": ["created_by"], "type": "persistent", "name": "message_sender"},
         {"fields": ["is_deleted"], "type": "persistent", "name": "message_is_deleted"},
         {"fields": ["va"], "unique": False, "type": "persistent", "name": "va_record"}
+    ],
+    db_collections.PCVA_CONFIGURATION: [
+        {"fields": ["created_by"], "type": "persistent", "name": "configuration_creator"},
+        {"fields": ["updated_by"], "type": "persistent", "name": "configuration_updator"},
+        {"fields": ["is_deleted"], "type": "persistent", "name": "message_is_deleted"},
     ],
     db_collections.DOWNLOAD_TRACKER: [],
     db_collections.DOWNLOAD_PROCESS_TRACKER: [],

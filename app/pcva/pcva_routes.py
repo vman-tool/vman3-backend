@@ -39,6 +39,7 @@ from app.pcva.services.va_records_services import (
     get_coded_va_service,
     get_coders,
     get_concordants_va_service,
+    get_configurations_service,
     get_discordant_messages_service,
     get_discordants_va_service,
     get_form_questions_service,
@@ -46,6 +47,7 @@ from app.pcva.services.va_records_services import (
     get_va_assignment_service,
     get_uncoded_assignment_service,
     read_discordants_message,
+    save_configurations_service,
     save_discordant_message_service,
     unassign_va_service,
 )
@@ -54,6 +56,7 @@ from app.shared.configs.models import ResponseMainModel
 from app.users.decorators.user import get_current_user, get_current_user_ws, oauth2_scheme
 from app.users.models.user import User
 from app.shared.services.va_records import shared_fetch_va_records
+from app.pcva.requests.configurations_request_classes import PCVAConfigurationsRequest
 
 pcva_router = APIRouter(
     prefix="/pcva",
@@ -451,5 +454,27 @@ async def get_form_questions(
 
         return await get_form_questions_service(filters=filters, db=db)
 
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    
+
+@pcva_router.post("/save-configurations", status_code=status.HTTP_200_OK)
+async def save_configurations(
+    configs: PCVAConfigurationsRequest,
+    current_user: User = Depends(get_current_user),
+    db: StandardDatabase = Depends(get_arangodb_session)
+) -> ResponseMainModel:
+    try:
+        return await save_configurations_service(configs=configs, current_user=User(**current_user), db=db)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@pcva_router.get("/get-configurations", status_code=status.HTTP_200_OK)
+async def get_configurations(
+    current_user: User = Depends(get_current_user),
+    db: StandardDatabase = Depends(get_arangodb_session)
+) -> ResponseMainModel:
+    try:
+        return await get_configurations_service(db=db)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
