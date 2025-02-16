@@ -922,9 +922,18 @@ async def get_discordant_messages_service(va_id: str, coder: str, db: StandardDa
                 }}
             )
 
+            LET coders = (
+                FOR doc IN pcva_results
+                FILTER doc.assigned_va == @va
+                COLLECT created_by = doc.created_by
+                RETURN created_by
+            )
+
+
             RETURN {{
                 discordant: discordant,
-                messages: messages
+                messages: messages,
+                coders: coders
             }}
         """
         bind_vars = {
