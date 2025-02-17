@@ -100,6 +100,9 @@ class PCVAResults(VManBaseModel):
     clinicalNotes: Union[str, None] = None
     datetime: Union[str, None] = Field(default_factory=lambda: datetime.now().isoformat())
 
+    class Config:
+        extra = "allow"
+
     @classmethod
     def get_collection_name(cls) -> str:
         return db_collections.PCVA_RESULTS
