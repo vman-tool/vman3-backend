@@ -72,7 +72,7 @@ class ArangoDBClient:
                 'id': document.get('__id'),
                 'document': document
             }
-            print(aql_query)
+     
             cursor = self.db.aql.execute(aql_query, bind_vars=bind_vars,cache=True)
             result = [doc for doc in cursor]
             return result
