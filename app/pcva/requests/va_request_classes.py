@@ -28,3 +28,5 @@ class PCVAResultsRequestClass(BaseModel):
     fetalOrInfant: Union[FetalOrInfant, Dict, None] = None
     pregnantDeceased: Union[PregnantDeceased, Dict, None] = None
     clinicalNotes: Union[str, None] = None
+    class Config:
+        extra = "allow"
