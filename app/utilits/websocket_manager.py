@@ -1,7 +1,11 @@
-from typing import Dict, List
+from typing import Dict, List, Optional
+import asyncio
+from decouple import config
 
-from fastapi import WebSocket
+from fastapi import WebSocket, WebSocketDisconnect
 
+
+connections_lock = asyncio.Lock()
 
 class WebSocketManager:
     def __init__(self):
@@ -9,15 +13,18 @@ class WebSocketManager:
 
     async def connect(self, task_id: str, websocket: WebSocket):
         await websocket.accept()
-        if task_id not in self.active_connections:
-            self.active_connections[task_id] = []
-        self.active_connections[task_id].append(websocket)
 
-    def disconnect(self, task_id: str, websocket: WebSocket):
-        if task_id in self.active_connections:
-            self.active_connections[task_id].remove(websocket)
-            if not self.active_connections[task_id]:
-                del self.active_connections[task_id]
+        async with connections_lock:
+            if task_id not in self.active_connections:
+                self.active_connections[task_id] = []
+            self.active_connections[task_id].append(websocket)
+
+    async def disconnect(self, task_id: str, websocket: WebSocket):
+        async with connections_lock:
+            if task_id in self.active_connections:
+                self.active_connections[task_id].remove(websocket)
+                if not self.active_connections[task_id]:
+                    del self.active_connections[task_id]
 
     async def send_personal_message(self, message: str, websocket: WebSocket):
         await websocket.send_text(message)
@@ -26,6 +33,27 @@ class WebSocketManager:
         if task_id in self.active_connections:
             for connection in self.active_connections[task_id]:
                 await connection.send_text(message)
+
+    async def safe_receive_text(self, websocket: WebSocket, timeout: float = config('REFRESH_TOKEN_EXPIRE_MINUTES', default=10, cast=float)*60.0) -> Optional[str]:
+        """
+        Safely receive WebSocket text with timeout and error handling.
+        Returns None if the connection is closed or errored.
+        """
+        try:
+            receive_task = asyncio.create_task(websocket.receive_text())
+            
+            message = await asyncio.wait_for(receive_task, timeout=timeout)
+            return message
+            
+        except asyncio.TimeoutError:
+            print("WebSocket receive operation timed out")
+            return TimeoutError("Websocket connection timed out.")
+        except WebSocketDisconnect as e:
+            print(f"WebSocket disconnected during receive: {e}")
+            return e
+        except Exception as e:
+            print(f"Error during WebSocket receive: {str(e)}")
+            raise e
 
 # from typing import Dict, List
 
