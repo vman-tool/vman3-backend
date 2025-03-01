@@ -43,6 +43,7 @@ from app.pcva.services.va_records_services import (
     get_discordant_messages_service,
     get_discordants_va_service,
     get_form_questions_service,
+    get_pcva_results,
     get_unassigned_va_service,
     get_va_assignment_service,
     get_uncoded_assignment_service,
@@ -428,6 +429,19 @@ async def mark_message_as_read(
         return await read_discordants_message(va_id=va_id, user_uuid=current_user.get("uuid", ""), db=db)
     except Exception as e:
         raise e                           
+
+@pcva_router.get("/get-pcva-results", status_code=status.HTTP_200_OK)
+async def get_coded_vas(
+    paging: bool = Query(None, alias='paging'),
+    page_number: int = Query(1, alias='page_number'),
+    limit: int = Query(10, alias='limit'),
+    coder: str = Query(None, alias="coder"),
+    current_user: User = Depends(get_current_user),
+    db: StandardDatabase = Depends(get_arangodb_session)):
+    try:
+        return  await get_pcva_results(paging = paging, page_number = page_number, limit = limit, coder = coder, db = db)
+    except Exception as e:
+        raise e
 
 @pcva_router.get("/export-pcva-results", status_code=status.HTTP_200_OK)
 async def export_coded_vas(
