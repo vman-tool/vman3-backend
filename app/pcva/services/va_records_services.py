@@ -680,7 +680,7 @@ async def get_coders(
         query = f"""
 
             LET coder_role = (
-                FOR doc IN {db_collections.ROLES}
+                FOR do c IN {db_collections.ROLES}
                 FILTER @coders_privileges ALL IN doc.privileges AND doc.is_deleted == false
                 RETURN doc.uuid
             )
@@ -796,6 +796,7 @@ async def export_pcva_results(db: StandardDatabase = None):
                     FOR i IN 1..LENGTH(coders)
                     
                     // For numbered contributory causes (Uncomment the following lines - Not good for export data or tabular view of the data)
+                    
                     //LET contributory_causes = (
                     //    FOR j IN 1..LENGTH(coder.contributory_causes)
                     //    RETURN {{
@@ -809,6 +810,10 @@ async def export_pcva_results(db: StandardDatabase = None):
                         [CONCAT('coder', TO_STRING(i), '_cause_b')]: coder.cause_b,
                         [CONCAT('coder', TO_STRING(i), '_cause_c')]: coder.cause_c,
                         [CONCAT('coder', TO_STRING(i), '_cause_d')]: coder.cause_d,
+                        [CONCAT('coder', TO_STRING(i), '_underlying')]: coder.cause_d != null ? coder.cause_d :
+                                                                        coder.cause_c != null ? coder.cause_c :
+                                                                        coder.cause_b != null ? coder.cause_b :
+                                                                        coder.cause_a,
 
                         // For numbered contributory causes (Remove this line)
                         [CONCAT('coder', TO_STRING(i), '_contributory_causes')]: CONCAT_SEPARATOR(", ", coder.contributory_causes)
