@@ -23,7 +23,7 @@ import pandas as pd
 
 from app.pcva.requests.configurations_request_classes import PCVAConfigurationsRequest
 from app.pcva.utilities.pcva_utils import fetch_pcva_settings
-from backend.app.shared.utils.response import populate_user_fields
+from app.shared.utils.response import populate_user_fields
    
 
 
