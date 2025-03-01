@@ -23,6 +23,7 @@ import pandas as pd
 
 from app.pcva.requests.configurations_request_classes import PCVAConfigurationsRequest
 from app.pcva.utilities.pcva_utils import fetch_pcva_settings
+from app.shared.utils.response import populate_user_fields
    
 
 
@@ -80,7 +81,7 @@ async def get_unassigned_va_service(paging: bool = True, page_number: int = 0, l
                         FILTER coderCount <= @maximum_assignment
                         RETURN vaId
                     )
-                    //{paginator}
+                    {paginator}
                     RETURN MERGE(doc, {{assignments: assignmentCount , coders: coders}})
                 )
             LET data = {'SLICE(result, @offset, @limit)' if paging else 'result'} 
@@ -735,7 +736,84 @@ async def get_coders(
         return ResponseMainModel(data = coders_data, total=len(coders_data), message="Coders fetched successfully!", pager=Pager(page=page_number, limit=limit))
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to get coders: {e}")
-    
+
+
+async def get_pcva_results(
+        paging: int = None,
+        page_number: int = None,
+        limit: int = None,
+        db: StandardDatabase = None):
+    try:
+
+        offset = (page_number - 1) * limit if paging else 0
+
+        paginator = ""
+        bind_vars = {}
+        if paging:
+            paginator = f"LIMIT @offset, @limit"
+            bind_vars.update({
+                "offset": offset,
+                "limit": limit
+            })
+
+        query = f"""
+            FOR doc IN {db_collections.PCVA_RESULTS}
+            SORT doc.datetime DESC
+            COLLECT created_by = doc.created_by, assigned_va = doc.assigned_va INTO grouped
+            {paginator}
+            RETURN FIRST(
+                FOR group IN grouped
+                    LIMIT 1
+                    LET result = group.doc
+                    LET cause_a = (
+                        FOR code IN {db_collections.ICD10}
+                        FILTER code.uuid == result.frameA.a
+                        RETURN CONCAT("(", code.code, ") ", code.name)
+                    )[0]
+                    LET cause_b = (
+                        FOR code IN {db_collections.ICD10}
+                        FILTER code.uuid == result.frameA.b
+                        RETURN CONCAT("(", code.code, ") ", code.name)
+                    )[0]
+                    LET cause_c = (
+                        FOR code IN {db_collections.ICD10}
+                        FILTER code.uuid == result.frameA.c
+                        RETURN CONCAT("(", code.code, ") ", code.name)
+                    )[0]
+                    LET cause_d = (
+                        FOR code IN {db_collections.ICD10}
+                        FILTER code.uuid == result.frameA.d
+                        RETURN CONCAT("(", code.code, ") ", code.name)
+                    )[0]
+                    LET contributory_causes = (
+                        FOR contrib_id IN (result.frameA.contributories || [])
+                        FOR code IN {db_collections.ICD10}
+                        FILTER code.uuid == contrib_id
+                        RETURN CONCAT("(", code.code, ") ", code.name)
+                    )
+                    
+                    RETURN {{
+                        coder: result.created_by,
+                        va: result.assigned_va,
+                        cause_a: cause_a,
+                        cause_b: cause_b,
+                        cause_c: cause_c,
+                        cause_d: cause_d,
+                        contributory_causes: contributory_causes
+                    }}
+            )
+        """
+
+        results = await VManBaseModel.run_custom_query(query=query, bind_vars=bind_vars, db=db)
+        if not results:
+            return ResponseMainModel(data=[], message="No PCVA results found!")
+        pcva_results = []
+        for result in results:
+            result = await populate_user_fields(data = result, specific_fields=["coder"], db=db)
+            pcva_results.append(result) 
+        return ResponseMainModel(data=pcva_results, message="PCVA results fetched successfully!", pager=Pager(page=page_number, limit=limit) if paging else None)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get PCVA results: {e}")
 
 async def export_pcva_results(db: StandardDatabase = None):
     try:
@@ -770,7 +848,7 @@ async def export_pcva_results(db: StandardDatabase = None):
                         RETURN CONCAT("(", code.code, ") ", code.name)
                     )[0]
                     LET contributory_causes = (
-                        FOR contrib_id IN result.frameA.contributories
+                        FOR contrib_id IN (result.frameA.contributories || [])
                         FOR code IN {db_collections.ICD10}
                         FILTER code.uuid == contrib_id
                         RETURN CONCAT("(", code.code, ") ", code.name)
@@ -796,6 +874,7 @@ async def export_pcva_results(db: StandardDatabase = None):
                     FOR i IN 1..LENGTH(coders)
                     
                     // For numbered contributory causes (Uncomment the following lines - Not good for export data or tabular view of the data)
+                    
                     //LET contributory_causes = (
                     //    FOR j IN 1..LENGTH(coder.contributory_causes)
                     //    RETURN {{
@@ -809,6 +888,10 @@ async def export_pcva_results(db: StandardDatabase = None):
                         [CONCAT('coder', TO_STRING(i), '_cause_b')]: coder.cause_b,
                         [CONCAT('coder', TO_STRING(i), '_cause_c')]: coder.cause_c,
                         [CONCAT('coder', TO_STRING(i), '_cause_d')]: coder.cause_d,
+                        [CONCAT('coder', TO_STRING(i), '_underlying')]: coder.cause_d != null ? coder.cause_d :
+                                                                        coder.cause_c != null ? coder.cause_c :
+                                                                        coder.cause_b != null ? coder.cause_b :
+                                                                        coder.cause_a,
 
                         // For numbered contributory causes (Remove this line)
                         [CONCAT('coder', TO_STRING(i), '_contributory_causes')]: CONCAT_SEPARATOR(", ", coder.contributory_causes)
