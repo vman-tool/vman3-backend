@@ -439,7 +439,7 @@ async def get_coded_vas(
     current_user: User = Depends(get_current_user),
     db: StandardDatabase = Depends(get_arangodb_session)):
     try:
-        return  await get_pcva_results(paging = paging, page_number = page_number, limit = limit, coder = coder, db = db)
+        return  await get_pcva_results(paging = paging, page_number = page_number, limit = limit, db = db)
     except Exception as e:
         raise e
 

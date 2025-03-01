@@ -747,7 +747,6 @@ async def get_pcva_results(
 
         offset = (page_number - 1) * limit if paging else 0
 
-        query = ""
         paginator = ""
         bind_vars = {}
         if paging:
@@ -759,13 +758,13 @@ async def get_pcva_results(
 
         query = f"""
             FOR doc IN {db_collections.PCVA_RESULTS}
-            SORT doc.datetime ASC
+            SORT doc.datetime DESC
             COLLECT created_by = doc.created_by, assigned_va = doc.assigned_va INTO grouped
             {paginator}
             RETURN FIRST(
-                FOR result IN grouped
+                FOR group IN grouped
                     LIMIT 1
-                    
+                    LET result = group.doc
                     LET cause_a = (
                         FOR code IN {db_collections.ICD10}
                         FILTER code.uuid == result.frameA.a
@@ -787,7 +786,7 @@ async def get_pcva_results(
                         RETURN CONCAT("(", code.code, ") ", code.name)
                     )[0]
                     LET contributory_causes = (
-                        FOR contrib_id IN result.frameA.contributories
+                        FOR contrib_id IN (result.frameA.contributories || [])
                         FOR code IN {db_collections.ICD10}
                         FILTER code.uuid == contrib_id
                         RETURN CONCAT("(", code.code, ") ", code.name)
@@ -849,7 +848,7 @@ async def export_pcva_results(db: StandardDatabase = None):
                         RETURN CONCAT("(", code.code, ") ", code.name)
                     )[0]
                     LET contributory_causes = (
-                        FOR contrib_id IN result.frameA.contributories
+                        FOR contrib_id IN (result.frameA.contributories || [])
                         FOR code IN {db_collections.ICD10}
                         FILTER code.uuid == contrib_id
                         RETURN CONCAT("(", code.code, ") ", code.name)
