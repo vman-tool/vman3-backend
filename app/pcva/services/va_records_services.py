@@ -81,7 +81,7 @@ async def get_unassigned_va_service(paging: bool = True, page_number: int = 0, l
                         FILTER coderCount <= @maximum_assignment
                         RETURN vaId
                     )
-                    //{paginator}
+                    {paginator}
                     RETURN MERGE(doc, {{assignments: assignmentCount , coders: coders}})
                 )
             LET data = {'SLICE(result, @offset, @limit)' if paging else 'result'} 
@@ -681,7 +681,7 @@ async def get_coders(
         query = f"""
 
             LET coder_role = (
-                FOR do c IN {db_collections.ROLES}
+                FOR doc IN {db_collections.ROLES}
                 FILTER @coders_privileges ALL IN doc.privileges AND doc.is_deleted == false
                 RETURN doc.uuid
             )
