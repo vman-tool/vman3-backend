@@ -4,9 +4,10 @@ from arango.database import StandardDatabase
 from fastapi import HTTPException, status
 
 from app.odk.utils.odk_client import ODKClientAsync
-from app.settings.models.settings import ImagesConfigData, OdkConfigModel, SettingsConfigData
+from app.settings.models.settings import ImagesConfigData, SettingsConfigData
 from app.shared.configs.constants import db_collections
 from app.shared.configs.models import ResponseMainModel
+from app.shared.middlewares.exceptions import BadRequestException
 from app.shared.utils.database_utilities import replace_object_values
 
 
@@ -16,7 +17,21 @@ async def fetch_odk_config(db: StandardDatabase) -> SettingsConfigData:
         raise ValueError("ODK configuration not found in the database")
     # Ensure config_data is a dictionary
     if isinstance(config_data, dict):
-        return  SettingsConfigData(**config_data)  
+        config = SettingsConfigData(**config_data)
+        
+        # Validate required fields in field_mapping
+        if (config.field_mapping.submitted_date is None or 
+            config.field_mapping.death_date is None or 
+            config.field_mapping.interview_date is None):
+            raise BadRequestException("Either Submitted, Death, or Interview date field is not set in the configuration")
+
+        if (config.field_mapping.location_level1 is None or 
+            config.field_mapping.is_adult is None or 
+            config.field_mapping.is_child is None or 
+            config.field_mapping.is_neonate is None):
+            raise BadRequestException("One or more required fields are not set in the configuration")
+
+        return config
     else:
         raise ValueError("ODK configuration data is not in the expected format")
 

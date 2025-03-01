@@ -42,24 +42,41 @@ async def fetch_db_processed_ccva_graphs(
 
         district_field = config.field_mapping.location_level2
         locationKey, locationLimitValues = get_location_limit_values(current_user)
+
         if locationKey == region_field:
             locationKey = 'locationLevel1'
         elif locationKey == district_field:
             locationKey = 'locationLevel2'
         
-    
+        print(config.field_mapping)
         config = await fetch_odk_config(db)
+        death_date = config.field_mapping.death_date or 'id10023'
+        submitted_date = config.field_mapping.submitted_date or 'submissiondate'
+        interview_date = config.field_mapping.interview_date or 'id10012'
+            
         if date_type is not None:
             if date_type == 'submission_date':
-                today_field = 'submitted_date'
+                today_field = submitted_date
             elif date_type == 'death_date':
-                today_field = 'death_date'
+                today_field = death_date
             elif date_type == 'interview_date':
-                today_field = 'interview_date'
+                today_field = interview_date
             else:
-                today_field = 'date' or config.field_mapping.date 
+                today_field = config.field_mapping.date 
         else:
-            today_field = 'date' or config.field_mapping.date 
+            today_field = config.field_mapping.date 
+            
+        # if date_type is not None:
+        #     if date_type == 'submission_date':
+        #         today_field = 'submitted_date'
+        #     elif date_type == 'death_date':
+        #         today_field = 'death_date'
+        #     elif date_type == 'interview_date':
+        #         today_field = 'interview_date'
+        #     else:
+        #         today_field = 'date' or config.field_mapping.date 
+        # else:
+        #     today_field = 'date' or config.field_mapping.date 
             
         collection_name = db_collections.CCVA_RESULTS  # Use the actual collection name here
         if ccva_id is not None:
@@ -293,8 +310,8 @@ async def fetch_db_processed_ccva_graphs(
         bind_vars = {
             "taskId": ccva_task_id
         }
-        print(query)
 
+        # print(query, 'query',ccva_task_id)
         cursor = db.aql.execute(query, bind_vars=bind_vars, cache=True)
         data = [document for document in cursor]
 
