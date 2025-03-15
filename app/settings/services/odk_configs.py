@@ -11,7 +11,20 @@ from app.shared.middlewares.exceptions import BadRequestException
 from app.shared.utils.database_utilities import replace_object_values
 
 
-async def fetch_odk_config(db: StandardDatabase) -> SettingsConfigData:
+def validate_configs(config: SettingsConfigData):
+    if (config.field_mapping.submitted_date is None or 
+        config.field_mapping.death_date is None or 
+        config.field_mapping.interview_date is None):
+        raise BadRequestException("Either Submitted, Death, or Interview date field is not set in the configuration")
+
+    if (config.field_mapping.location_level1 is None or 
+        config.field_mapping.is_adult is None or 
+        config.field_mapping.is_child is None or 
+        config.field_mapping.is_neonate is None):
+        raise BadRequestException("One or more required fields are not set in the configuration")
+    
+
+async def fetch_odk_config(db: StandardDatabase, validate_configs: bool = False) -> SettingsConfigData:
     config_data = db.collection(db_collections.SYSTEM_CONFIGS).get('vman_config')  # Assumes 'vman_config' is the key
     if not config_data:
         raise ValueError("ODK configuration not found in the database")
@@ -20,16 +33,8 @@ async def fetch_odk_config(db: StandardDatabase) -> SettingsConfigData:
         config = SettingsConfigData(**config_data)
         
         # Validate required fields in field_mapping
-        if (config.field_mapping.submitted_date is None or 
-            config.field_mapping.death_date is None or 
-            config.field_mapping.interview_date is None):
-            raise BadRequestException("Either Submitted, Death, or Interview date field is not set in the configuration")
-
-        if (config.field_mapping.location_level1 is None or 
-            config.field_mapping.is_adult is None or 
-            config.field_mapping.is_child is None or 
-            config.field_mapping.is_neonate is None):
-            raise BadRequestException("One or more required fields are not set in the configuration")
+        if validate_configs:
+            validate_configs(config)
 
         return config
     else:
