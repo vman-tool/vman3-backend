@@ -74,7 +74,7 @@ async def run_ccva(db: StandardDatabase, records:ResponseMainModel, task_id: str
 
        
         # Fetch the  configuration
-        config = await fetch_odk_config(db)
+        config = await fetch_odk_config(db, True)
         id_col = config.field_mapping.instance_id
         date_col = config.field_mapping.date
         # Run the CCVA process in a thread pool, with real-time updates
@@ -446,7 +446,7 @@ async def getVADataAndMergeWithResults(db: StandardDatabase, results: list):
     from app.settings.services.odk_configs import fetch_odk_config
 
     # Fetch configurations asynchronously
-    config = await fetch_odk_config(db)
+    config = await fetch_odk_config(db, True)
 
     # Extract field mappings from the configuration
     is_adult = config.field_mapping.is_adult
