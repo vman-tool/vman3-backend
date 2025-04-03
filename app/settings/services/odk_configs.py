@@ -24,21 +24,27 @@ def validate_configs(config: SettingsConfigData):
         raise BadRequestException("One or more required fields are not set in the configuration")
     
 
-async def fetch_odk_config(db: StandardDatabase, validate_configs: bool = False) -> SettingsConfigData:
-    config_data = db.collection(db_collections.SYSTEM_CONFIGS).get('vman_config')  # Assumes 'vman_config' is the key
-    if not config_data:
-        raise ValueError("ODK configuration not found in the database")
-    # Ensure config_data is a dictionary
-    if isinstance(config_data, dict):
-        config = SettingsConfigData(**config_data)
-        
-        # Validate required fields in field_mapping
-        if validate_configs:
-            validate_configs(config)
+async def fetch_odk_config(db: StandardDatabase, is_validate_configs: bool = False) -> SettingsConfigData:
+    try:
+        config_data = db.collection(db_collections.SYSTEM_CONFIGS).get('vman_config')  # Assumes 'vman_config' is the key
+        if not config_data:
+            raise ValueError("ODK configuration not found in the database")
 
-        return config
-    else:
-        raise ValueError("ODK configuration data is not in the expected format")
+        # Ensure config_data is a dictionary
+        if isinstance(config_data, dict):
+            config = SettingsConfigData(**config_data)
+            
+            # Validate required fields in field_mapping
+            if is_validate_configs:
+                validate_configs(config)
+
+            return config
+        else:
+            raise ValueError("ODK configuration data is not in the expected format")
+    except Exception as e:
+        print(e)
+        raise ValueError(e)
+
 
 
 async def fetch_configs_settings(db: StandardDatabase = None):
