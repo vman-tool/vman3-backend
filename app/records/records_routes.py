@@ -11,6 +11,7 @@ from app.records.services.regions_data import get_unique_regions
 from app.shared.configs.arangodb import get_arangodb_session
 from app.shared.configs.models import ResponseMainModel
 from app.users.decorators.user import get_current_user
+from app.utilits.db_logger import db_logger, log_to_db
 
 # from sqlalchemy.orm import Session
 
@@ -24,7 +25,7 @@ data_router = APIRouter(
 
 
 
-        
+@log_to_db(context="get_va_records", log_args=True)        
 @data_router.get("", status_code=status.HTTP_200_OK, response_model=ResponseMainModel)
 async def get_va_records(
       current_user = Depends(get_current_user),
@@ -49,7 +50,7 @@ async def get_va_records(
         date_type=date_type,
         db=db)
     return response
-
+@log_to_db(context="get_fetch_va_map_records", log_args=True)      
 @data_router.get("/maps", status_code=status.HTTP_200_OK, response_model=ResponseMainModel)
 async def get_fetch_va_map_records(
       current_user = Depends(get_current_user),
@@ -77,7 +78,7 @@ async def get_fetch_va_map_records(
     return response
 
 
-
+@log_to_db(context="fetch_unique_regions", log_args=True)      
 @data_router.get("/unique-regions", response_model=ResponseMainModel)
 async def fetch_unique_regions(db: StandardDatabase = Depends(get_arangodb_session), current_user = Depends(get_current_user),):
     return await get_unique_regions(db,current_user)
