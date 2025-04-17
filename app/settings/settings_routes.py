@@ -340,6 +340,7 @@ async def get_cron_settings(
     except Exception as e:
         print(e)
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+    
 @log_to_db(context="save_api_cron_settings", log_args=True)
 @settings_router.post("/cron", status_code=status.HTTP_200_OK, response_model=ResponseMainModel)
 async def save_api_cron_settings(
@@ -358,7 +359,8 @@ async def save_api_cron_settings(
         
         # Save the settings
         response = await add_configs_settings(config_data, db=db)
-        await schedule_odk_fetch_job(db)
+        background_tasks.add_task(schedule_odk_fetch_job, db)
+        print("Scheduled ODK fetch job executed successfully")
         
         
         return ResponseMainModel(
