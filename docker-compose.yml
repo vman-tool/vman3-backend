@@ -38,6 +38,7 @@ services:
     env_file:
       - .env
 
+
   arangodb:
     image: arangodb/arangodb:3.12.2
     env_file:
