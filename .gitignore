@@ -59,7 +59,7 @@ cover/
 
 # IPython
 profile_default​⬤
-
+logs/
 # mypy
 */*.log
 *.log
