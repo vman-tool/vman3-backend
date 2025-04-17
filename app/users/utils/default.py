@@ -1,3 +1,4 @@
+from datetime import datetime
 import logging
 
 from decouple import config
@@ -11,9 +12,10 @@ from app.shared.configs.constants import AccessPrivileges
 from app.users.models.role import Role
 from app.users.responses.user import UserResponse
 from app.shared.configs.models import ResponseMainModel
+from app.utilits.db_logger import db_logger, log_to_db
 
 logger = logging.getLogger(__name__)
-
+@log_to_db(context="default_account_creation", log_args=True)
 async def default_account_creation( ):
     try:
         db = None
@@ -40,6 +42,7 @@ async def default_account_creation( ):
             current_user = existing_users[0]
 
         if len(existing_users) > 0:
+
             logger.info("User created successfully")
         
         

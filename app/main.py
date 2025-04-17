@@ -9,7 +9,8 @@ from fastapi import Depends, FastAPI, Query, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
 from loguru import logger
-
+from app.utilits.logger import app_logger
+from app.utilits.db_logger import db_logger, log_to_db
 from app import routes
 from app.shared.middlewares.error_handlers import register_error_handlers
 from app.users.utils.default import default_account_creation
@@ -18,8 +19,9 @@ from app.shared.configs.arangodb import get_arangodb_session
 from app.users.decorators.user import get_current_user, get_current_user_ws
 from app.users.models.user import User
 from app.pcva.services.va_records_services import save_discordant_message_service
+from app.utilits.schedeular import shutdown_scheduler, start_scheduler
 
-logger.add("./../app.log", rotation="500 MB")
+logger.add("./logs/app.log", rotation="500 MB")
 scheduler = AsyncIOScheduler()
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -31,7 +33,9 @@ async def lifespan(app: FastAPI):
     # scheduler.add_job(schedulers. scheduled_failed_chucks_retry, IntervalTrigger(minutes=60*3))
     # scheduler.add_job(data_download. fetch_odk_data_with_async, CronTrigger(hour=18, minute=0))
     scheduler.start()
-
+    await db_logger.ensure_collection()
+    
+    await start_scheduler()
     await default_account_creation()
     
     try:
@@ -39,7 +43,12 @@ async def lifespan(app: FastAPI):
     finally:
         # Application shutdown logic
         logger.info("Application shutdown")
-        scheduler.shutdown()
+            # Shutdown the scheduler
+    shutdown_scheduler()
+    
+    # Flush any remaining logs
+    await db_logger.flush_buffer()
+    scheduler.shutdown()
         
 
 def create_application():
@@ -69,7 +78,26 @@ app.add_middleware(
 )
 
 
- 
+#  Start the scheduler when the application starts
+@app.on_event("startup")
+async def startup_event():
+
+    # Log application startup
+    app_logger.info("Application starting up")
+    await db_logger.log(
+        message="Application starting up",
+        level="INFO",
+        context="startup_event",
+        module="app.main"
+    )
+    
+    # Start the scheduler
+
+    
+    app_logger.info("Application startup complete")
+
+
+    
 @app.get("/vman/api/v1", response_class=HTMLResponse)
 @app.get("/vman", response_class=HTMLResponse)
 @app.get("/", response_class=HTMLResponse)
