@@ -21,6 +21,7 @@ from app.users.models.user import User
 from app.pcva.services.va_records_services import save_discordant_message_service
 from app.utilits.schedeular import shutdown_scheduler, start_scheduler
 
+
 logger.add("./logs/app.log", rotation="500 MB")
 scheduler = AsyncIOScheduler()
 @asynccontextmanager
