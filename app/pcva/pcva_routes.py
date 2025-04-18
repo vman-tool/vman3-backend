@@ -43,6 +43,7 @@ from app.pcva.services.va_records_services import (
     get_discordant_messages_service,
     get_discordants_va_service,
     get_form_questions_service,
+    get_pcva_results,
     get_unassigned_va_service,
     get_va_assignment_service,
     get_uncoded_assignment_service,
@@ -57,6 +58,7 @@ from app.users.decorators.user import get_current_user, get_current_user_ws, oau
 from app.users.models.user import User
 from app.shared.services.va_records import shared_fetch_va_records
 from app.pcva.requests.configurations_request_classes import PCVAConfigurationsRequest
+from app.utilits.db_logger import db_logger, log_to_db
 
 pcva_router = APIRouter(
     prefix="/pcva",
@@ -71,7 +73,7 @@ pcva_socket_router = APIRouter(
     responses={404: {"description": "Not found"}},
 )
 
-
+@log_to_db(context="get_va_records", log_args=True)     
 @pcva_router.get("", status_code=status.HTTP_200_OK)
 async def get_va_records(
     paging: Optional[bool] = Query(None, alias="paging"),
@@ -94,7 +96,7 @@ async def get_va_records(
         
     except Exception as e:
         raise e
-
+@log_to_db(context="get_unassigned_va_records", log_args=True)     
 @pcva_router.get("/get-unassigned-va", status_code=status.HTTP_200_OK)
 async def get_unassigned_va_records(
     paging: Optional[bool] = Query(None, alias="paging"),
@@ -111,6 +113,8 @@ async def get_unassigned_va_records(
     except Exception as e:
         raise e
 
+
+@log_to_db(context="get_va_for_unnassignment", log_args=True)    
 @pcva_router.get("/get-uncoded-assigned-va", status_code=status.HTTP_200_OK)
 async def get_va_for_unnassignment(
     paging: Optional[bool] = Query(None, alias="paging"),
@@ -127,7 +131,7 @@ async def get_va_for_unnassignment(
     except Exception as e:
         raise e
 
-
+@log_to_db(context="get_icd10_categories", log_args=True)    
 @pcva_router.get(
         path="/icd10-categories", 
         status_code=status.HTTP_200_OK,
@@ -151,7 +155,7 @@ async def get_icd10_categories(
     except:
         raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed get icd10 categories")
 
-
+@log_to_db(context="create_icd10_categories", log_args=True)  
 @pcva_router.post("/create-icd10-categories", status_code=status.HTTP_201_CREATED)
 async def create_icd10_categories(
     categories: List[ICD10CategoryRequestClass],
@@ -163,7 +167,7 @@ async def create_icd10_categories(
     except:
         raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed create icd10 categories")
 
-
+@log_to_db(context="update_icd10_categories", log_args=True)  
 @pcva_router.post(
         path="/update-icd10-categories", 
         status_code=status.HTTP_200_OK,
@@ -178,6 +182,8 @@ async def update_icd10_categories(
     except:
         raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed update icd10 codes")
 
+
+@log_to_db(context="upload_file", log_args=True)  
 @pcva_router.post(
         path="/upload-icd10-data", 
         status_code=status.HTTP_200_OK,
@@ -209,6 +215,10 @@ async def upload_file(
     except Exception as e:
         raise e
 
+
+
+
+@log_to_db(context="get_icd10", log_args=True)  
 @pcva_router.get(
         path="/get-icd10", 
         status_code=status.HTTP_200_OK,
@@ -233,6 +243,8 @@ async def get_icd10(
     except Exception as e:
         raise e
 
+
+@log_to_db(context="create_icd10", log_args=True)  
 @pcva_router.post(
         path="/create-icd10", 
         status_code=status.HTTP_201_CREATED,
@@ -248,6 +260,7 @@ async def create_icd10(
     except:
         raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed create icd10 codes")
 
+@log_to_db(context="update_icd10", log_args=True)  
 @pcva_router.post(
         path="/update-icd10", 
         status_code=status.HTTP_200_OK,
@@ -262,6 +275,8 @@ async def update_icd10(
     except:
         raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed update icd10 codes")
 
+
+@log_to_db(context="get_assigned_va", log_args=True) 
 @pcva_router.get("/coders", status_code=status.HTTP_200_OK)
 async def get_assigned_va(
     paging: Optional[bool] = Query(False, alias="paging"),
@@ -282,6 +297,9 @@ async def get_assigned_va(
     except Exception as e:
          raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to get coders: {e}")
 
+
+
+@log_to_db(context="va-assignments", log_args=True) 
 @pcva_router.get("/va-assignments", status_code=status.HTTP_200_OK)
 async def get_assigned_va(
     paging: Optional[bool] = Query(None, alias="paging"),
@@ -304,7 +322,7 @@ async def get_assigned_va(
     except Exception as e:
         raise e
 
-
+@log_to_db(context="assign_va", log_args=True) 
 @pcva_router.post(
         "/assign-va", 
         status_code=status.HTTP_201_CREATED, 
@@ -319,6 +337,9 @@ async def assign_va(
     except Exception as e:
         raise e
 
+
+
+@log_to_db(context="unassign_va", log_args=True) 
 @pcva_router.post(
         "/unassign-va", 
         status_code=status.HTTP_201_CREATED, 
@@ -333,6 +354,7 @@ async def unassign_va(
     except Exception as e:
         raise e
 
+@log_to_db(context="get_coded_va", log_args=True) 
 @pcva_router.get("/get-coded-va", status_code=status.HTTP_200_OK)
 async def get_coded_va(
     coder: Optional[str] = Query(None, alias="coder"),
@@ -349,6 +371,8 @@ async def get_coded_va(
             db = db)
     except Exception as e:
         raise e
+
+
 
 @pcva_router.get("/get-coded-va-details/{va_id}", status_code=status.HTTP_200_OK)
 async def get_coded_va(
@@ -428,6 +452,19 @@ async def mark_message_as_read(
         return await read_discordants_message(va_id=va_id, user_uuid=current_user.get("uuid", ""), db=db)
     except Exception as e:
         raise e                           
+
+@pcva_router.get("/get-pcva-results", status_code=status.HTTP_200_OK)
+async def get_coded_vas(
+    paging: bool = Query(None, alias='paging'),
+    page_number: int = Query(1, alias='page_number'),
+    limit: int = Query(10, alias='limit'),
+    coder: str = Query(None, alias="coder"),
+    current_user: User = Depends(get_current_user),
+    db: StandardDatabase = Depends(get_arangodb_session)):
+    try:
+        return  await get_pcva_results(paging = paging, page_number = page_number, limit = limit, db = db)
+    except Exception as e:
+        raise e
 
 @pcva_router.get("/export-pcva-results", status_code=status.HTTP_200_OK)
 async def export_coded_vas(

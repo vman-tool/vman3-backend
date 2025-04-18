@@ -11,9 +11,7 @@ services:
       - REDIS_URL=redis://redis:6379
     depends_on:
       - arangodb
-<<<<<<< Updated upstream
       - redis
-
   backend:
     build: .
     command:
@@ -31,16 +29,13 @@ services:
       - '8080:8080'
     volumes:
       - ./app:/app
+      - ./logs:/vman3/logs
       - .settings.json:/vman3/settings.json
     environment:
       - PYTHONUNBUFFERED=1
       - REDIS_URL=redis://redis:6379
     env_file:
       - .env
-
-=======
-
->>>>>>> Stashed changes
   arangodb:
     image: arangodb/arangodb:3.12.2
     env_file:

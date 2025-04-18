@@ -1,6 +1,7 @@
 
 
 
+from datetime import datetime
 from arango.database import StandardDatabase
 from fastapi import (APIRouter, BackgroundTasks, Depends, HTTPException, Query,
                      status)
@@ -8,7 +9,8 @@ from fastapi import (APIRouter, BackgroundTasks, Depends, HTTPException, Query,
 from app.odk.services import data_download
 from app.shared.configs.arangodb import get_arangodb_session
 from app.shared.configs.models import ResponseMainModel
-
+from app.utilits.db_logger import db_logger, log_to_db
+from app.utilits.logger import app_logger
 odk_router = APIRouter(
     prefix="/odk",
     tags=["ODK"],
@@ -17,7 +19,7 @@ odk_router = APIRouter(
 
 
 
-
+@log_to_db(context="fetch_and_store_data", log_args=True)
 @odk_router.post("/fetch-and-store", status_code=status.HTTP_201_CREATED)
 async def fetch_and_store_data(
     start_date: str = None,
@@ -34,7 +36,7 @@ async def fetch_and_store_data(
     )
     return res
 
-
+@log_to_db(context="get_form_submission_status", log_args=True)
 @odk_router.post("/fetch_formsubmission_status", status_code=status.HTTP_200_OK)
 async def get_form_submission_status(
     background_tasks: BackgroundTasks,
@@ -70,6 +72,7 @@ async def get_form_submission_status(
         print(e)
         raise HTTPException(status_code=500, detail=str(e))
 
+@log_to_db(context="fetch_odk_data_with_async_endpoint", log_args=True)
 @odk_router.post("/fetch_endpoint_with_async", status_code=status.HTTP_200_OK)
 async def fetch_odk_data_with_async_endpoint(
     background_tasks: BackgroundTasks,
@@ -80,6 +83,10 @@ async def fetch_odk_data_with_async_endpoint(
     force_update: bool = Query(default=False),
     db: StandardDatabase = Depends(get_arangodb_session)
 ):
+    app_logger.info(f"Fetching ODK data with async: {datetime.now().isoformat()}")
+    app_logger.info(f"Start date: {start_date}, End date: {end_date}, Skip: {skip}, Top: {top}")
+    # app_logger.info(f"Force update: {force_update}")
+    # app_logger.info(f"Database: {db}")
     try:
         # Wrap the async function call inside an async function to use create_task
         async def start_fetch(total_data_count,start_date,top,skip, ):
@@ -112,6 +119,8 @@ async def fetch_odk_data_with_async_endpoint(
         print(e)
         raise HTTPException(status_code=500, detail=str(e))
 
+
+@log_to_db(context="get_form_questions", log_args=True)
 @odk_router.post("/fetch_form_questions", status_code=status.HTTP_200_OK)
 async def get_form_questions(
     db: StandardDatabase = Depends(get_arangodb_session)
