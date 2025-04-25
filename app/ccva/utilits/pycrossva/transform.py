@@ -10,7 +10,7 @@ import os
 import pandas as pd
 import numpy as np
 
-from pycrossva.configuration import Configuration, CrossVA
+from app.ccva.utilits.pycrossva.configuration import Configuration, CrossVA
 from pycrossva.utils import flexible_read
 
 SUPPORTED_INPUTS = ["2016WHOv151", "2016WHOv141", "2012WHO", "PHMRCShort"]
