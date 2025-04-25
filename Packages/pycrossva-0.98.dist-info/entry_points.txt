@@ -1,0 +1,2 @@
+[console_scripts]
+pycrossva-transform = pycrossva.scripts.pycrossva_transform:main

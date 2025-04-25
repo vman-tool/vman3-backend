@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from datetime import datetime
 from typing import List, Dict, Any
@@ -10,6 +11,7 @@ from fastapi import BackgroundTasks
 from app.shared.configs.arangodb import get_arangodb_session
 from app.shared.configs.constants import db_collections
 from app.utilits.db_logger import log_to_db
+from app.utilits.logger import app_logger
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
@@ -145,8 +147,39 @@ async def start_scheduler():
     loop = asyncio.get_event_loop()
     loop.create_task(schedule_odk_fetch_job(db))
 
-def shutdown_scheduler():
+async def shutdown_scheduler():
     """Shutdown the scheduler"""
     if scheduler.running:
         scheduler.shutdown()
         logger.info("Scheduler shut down")
+        # 1. First, flush any remaining logs in the database logger
+    try:
+        from app.utilits.db_logger import db_logger, background_processor
+        
+        # Flush the buffer
+        await db_logger.flush_buffer()
+        
+        # Stop the background processor
+        background_processor.stop()
+        
+        # Wait for the queue to be processed (with timeout)
+        background_processor.queue.join(timeout=5.0)
+        
+        app_logger.info("Database logger shutdown complete")
+    except Exception as e:
+        app_logger.error(f"Error shutting down database logger: {str(e)}")
+    
+    # 2. Then, close all handlers in the standard logger
+    try:
+        for handler in app_logger.handlers:
+            if hasattr(handler, 'close'):
+                handler.close()
+        
+        app_logger.info("Standard logger shutdown complete")
+    except Exception as e:
+        # Can't log this error through the logger since we're shutting it down
+        print(f"Error shutting down standard logger: {str(e)}")
+    
+    # 3. Allow a small delay for final log processing
+    await asyncio.sleep(0.5)
+        

@@ -1,0 +1,17 @@
+﻿New Column Name,New Column Documentation,Source Column ID,Source Column Documentation,Relationship,Condition,Prerequisite
+AB_POSIT,"Did the baby's bottom, feet, arm or hand come into the vagina before its head?",Id10403,"(Id10403) Did the baby's bottom, feet, arm or hand come out of the vagina before its head?",eq,yes,
+AB_SIZE,Was the baby of abnormal size?,Id10362,"(Id10362) At birth, was the baby of usual size?",eq,yes,
+AC_BRL,Did (s)he have breathlessness for less than 2 weeks?,Id10169,(Id10169) How long did (s)he have breathlessness?,lt,14,
+AC_CONV,Did the convulsions last for less than 10 minutes,Id10221,(Id10221) For how many minutes did the convulsions last?,lt,10,
+AC_COUGH,Did (s)he have a cough for less than 3 weeks before death?,Id10154,(Id10154) For how many days did (s)he have a cough?,lt,21,
+ADULT,Was (s)he aged 15-49 years at death?,ageInYears,Calculated field: int(${ageInDays} div 365.25),between,15 to 49,
+B_BFAC,Was the child born in a health facility?,Id10360,(Id10360) Where was the deceased born?,eq,other_health_facility,
+B_FIRST,Was this baby born from the mother's first pregnancy?,Id10394,"(Id10394) How many births, including stillbirths, did the baby's mother have before this baby?",eq,0,
+B_MORE4,"Did the baby's mother have four or more births, including stillbirths, before this pregnancy?",Id10394,"(Id10394) How many births, including stillbirths, did the baby's mother have before this baby?",ge,4,
+DIARR,Did (s)he have diarrhea?,Id10478,(Id10478) [Select any of the following words that were mentioned as present in the narrative.],contains,diarrhea,
+DIED_D1,Did the baby die within 24 hours of birth?,ageInDaysNeonate,"Calculated field: if(${ageInDays} = 'NaN' or string-length(${ageInDays}) = 0, ${age_neonate_days}, ${ageInDays})",le,1,
+DIED_D23,Did the baby die more than 24 hours after birth but within 48 hours from birth?,ageInDaysNeonate,"Calculated field: if(${ageInDays} = 'NaN' or string-length(${ageInDays}) = 0, ${age_neonate_days}, ${ageInDays})",gt,0,
+DIED_D36,Did baby die more than 48 hours from birth but within the first week of life?,ageInDaysNeonate,"Calculated field: if(${ageInDays} = 'NaN' or string-length(${ageInDays}) = 0, ${age_neonate_days}, ${ageInDays})",le,7,
+DIED_LAB,"Did she die during labour, but undelivered?",Id10312,(Id10312) Did she die during labour or delivery?,eq,yes,
+FEMALE,Was the deceased female?,Id10019,(Id10019) What was the sex of the deceased?,eq,female,
+MAGEGP1,Was this a woman aged 12 to 19 years at death?,ageInYears,Calculated field: int(${ageInDays} div 365.25),between,12 to 19,FEMALE
