@@ -26,7 +26,7 @@ import warnings
 
 from interva.data.causetext import CAUSETEXTV5
 from interva.utils import _get_dem_groups
-from vacheck.datacheck5 import datacheck5
+from app.ccva.utilits.vacheck.datacheck5 import datacheck5
 
 
 class InterVA5:
