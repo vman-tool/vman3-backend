@@ -9,7 +9,7 @@ from abc import ABC, abstractmethod
 import numpy as np
 import pandas as pd
 
-from pycrossva.utils import english_relationship
+from app.ccva.utilits.pycrossva.utils import english_relationship
 
 
 class MapCondition(ABC):

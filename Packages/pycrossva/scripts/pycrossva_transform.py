@@ -77,7 +77,7 @@ def main(input_type, output_type, src, column_id, dst, silent):
         input_file = src[i]
 
         # Automatically detect the input format if desired
-        from pycrossva.utils import flexible_read, detect_format
+        from app.ccva.utilits.pycrossva.utils import flexible_read, detect_format
         input_data = flexible_read(input_file)
         if input_type == "AUTODETECT":
             input_type = detect_format(output_type, input_data)
