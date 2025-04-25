@@ -10,7 +10,7 @@ import os
 import pandas as pd
 import numpy as np
 
-from pycrossva.configuration import Configuration, CrossVA
+from app.ccva.utilits.pycrossva.configuration import Configuration, CrossVA
 from pycrossva.utils import flexible_read
 
 SUPPORTED_INPUTS = ["2016WHOv151", "2016WHOv141", "2012WHO", "PHMRCShort"]
@@ -215,7 +215,7 @@ def transform(mapping, raw_data, raw_data_id=None, lower=False,
 
                 else:
                     raise ValueError(("Output not supported. Expected one of "
-                                      f"{supported_outputs}, but received "
+                                      f"{SUPPORTED_OUTPUTS}, but received "
                                       f"'{mapping[1]}'"))
             else:
                 raise ValueError(("Input not supported. Expected one of "

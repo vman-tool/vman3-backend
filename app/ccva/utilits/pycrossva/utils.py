@@ -129,7 +129,7 @@ def detect_format(output_format, data):
     # choose the best match (the one with the highest proportion)
 
     from pycrossva.transform import SUPPORTED_INPUTS
-    from pycrossva.configuration import Configuration, CrossVA
+    from app.ccva.utilits.pycrossva.configuration import Configuration, CrossVA
 
     config_file_path = os.path.join(os.path.split(__file__)[0],
                                     "resources/mapping_configuration_files/")
