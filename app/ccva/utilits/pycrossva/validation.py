@@ -9,7 +9,7 @@ import pandas as pd
 import numpy as np
 import re
 
-from pycrossva.utils import report_list
+from app.ccva.utilits.pycrossva.utils import report_list
 
 
 class VCheck(metaclass=ABCMeta):

@@ -8,7 +8,7 @@ import pandas as pd
 import numpy as np
 
 from pycrossva.mappings import MapCondition
-from pycrossva.utils import report_list
+from app.ccva.utilits.pycrossva.utils import report_list
 from pycrossva.validation import Validation, Err, Warn
 
 
