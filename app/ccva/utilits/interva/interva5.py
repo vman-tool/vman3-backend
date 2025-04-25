@@ -31,7 +31,7 @@ from numpy import (argsort, array, concatenate, copy, delete, nan, nanmax,
                    nansum, ndarray, where)
 from pandas import (DataFrame, Index, Series, isna, read_csv, read_excel,
                     set_option, to_numeric)
-from vacheck.datacheck5 import datacheck5
+from app.ccva.utilits.vacheck.datacheck5 import datacheck5
 
 
 class InterVA5:
