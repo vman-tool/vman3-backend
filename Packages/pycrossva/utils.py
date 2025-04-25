@@ -128,7 +128,7 @@ def detect_format(output_format, data):
     # the proportion of inputs that are present in the input data and
     # choose the best match (the one with the highest proportion)
 
-    from pycrossva.transform import SUPPORTED_INPUTS
+    from app.ccva.utilits.pycrossva.transform import SUPPORTED_INPUTS
     from app.ccva.utilits.pycrossva.configuration import Configuration, CrossVA
 
     config_file_path = os.path.join(os.path.split(__file__)[0],

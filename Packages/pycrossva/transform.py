@@ -11,7 +11,7 @@ import pandas as pd
 import numpy as np
 
 from app.ccva.utilits.pycrossva.configuration import Configuration, CrossVA
-from pycrossva.utils import flexible_read
+from app.ccva.utilits.pycrossva.utils import flexible_read
 
 SUPPORTED_INPUTS = ["2016WHOv151", "2016WHOv141", "2012WHO", "PHMRCShort"]
 SUPPORTED_OUTPUTS = ["InterVA5", "InterVA4", "InSilicoVA", "InSilicoVA_2012"]
