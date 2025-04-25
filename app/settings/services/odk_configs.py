@@ -28,6 +28,7 @@ def validate_configs(config: SettingsConfigData):
 @log_to_db(context="fetch_odk_config", log_args=True)
 async def fetch_odk_config(db: StandardDatabase, is_validate_configs: bool = False) -> SettingsConfigData:
     try:
+        
         config_data = db.collection(db_collections.SYSTEM_CONFIGS).get('vman_config')  # Assumes 'vman_config' is the key
         if not config_data:
             await db_logger.log(
@@ -48,6 +49,7 @@ async def fetch_odk_config(db: StandardDatabase, is_validate_configs: bool = Fal
 
             return config
         else:
+            print("ODK configuration data is not in the expected format")
             await db_logger.log(
             message="ODK configuration data is not in the expected format" ,
             level=db_logger.LogLevel.ERROR,

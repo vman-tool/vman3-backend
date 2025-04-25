@@ -9,8 +9,8 @@ from typing import Dict, Optional
 import numpy as np
 import pandas as pd
 from arango.database import StandardDatabase
-from interva.utils import csmf
-from pycrossva.transform import transform
+from app.ccva.utilits.interva.utils import csmf
+from app.ccva.utilits.pycrossva.transform import transform
 
 from app.ccva.models.ccva_models import InterVA5Progress
 from app.ccva.utilits.interva.interva5 import InterVA5

@@ -2,21 +2,19 @@ from contextlib import asynccontextmanager
 import json
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
-from arango import Request
 from arango.database import StandardDatabase
 from decouple import config
-from fastapi import Depends, FastAPI, Query, WebSocket, WebSocketDisconnect
+from fastapi import Depends, FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
 from loguru import logger
-from app.utilits.logger import app_logger
-from app.utilits.db_logger import db_logger, log_to_db
+from app.utilits.db_logger import DBLogger, db_logger, get_db_logger
 from app import routes
 from app.shared.middlewares.error_handlers import register_error_handlers
 from app.users.utils.default import default_account_creation
 from app.utilits import websocket_manager
 from app.shared.configs.arangodb import get_arangodb_session
-from app.users.decorators.user import get_current_user, get_current_user_ws
+from app.users.decorators.user import get_current_user_ws
 from app.users.models.user import User
 from app.pcva.services.va_records_services import save_discordant_message_service
 from app.utilits.schedeular import shutdown_scheduler, start_scheduler
@@ -33,9 +31,9 @@ async def lifespan(app: FastAPI):
 
     # scheduler.add_job(schedulers. scheduled_failed_chucks_retry, IntervalTrigger(minutes=60*3))
     # scheduler.add_job(data_download. fetch_odk_data_with_async, CronTrigger(hour=18, minute=0))
-    scheduler.start()
-    await db_logger.ensure_collection()
-    
+    # scheduler.start()
+    # await db_logger.ensure_collection()
+    await get_db_logger()
     await start_scheduler()
     await default_account_creation()
     
@@ -80,23 +78,25 @@ app.add_middleware(
 
 
 #  Start the scheduler when the application starts
-@app.on_event("startup")
-async def startup_event():
+# @app.on_event("startup")
+# async def startup_event():
 
-    # Log application startup
-    app_logger.info("Application starting up")
-    await db_logger.log(
-        message="Application starting up",
-        level="INFO",
-        context="startup_event",
-        module="app.main"
-    )
+#     # Log application startup
+#     app_logger.info("Application starting up")
+#     await db_logger.log(
+#         message="Application starting up",
+#         level="INFO",
+#         context="startup_event",
+#         module="app.main"
+#     )
     
-    # Start the scheduler
+#     # Start the scheduler
 
     
-    app_logger.info("Application startup complete")
-
+#     app_logger.info("Application startup complete")
+# db_logger = DBLogger()
+# # Add the middleware
+# app.add_middleware(GlobalErrorMiddleware)
 
     
 @app.get("/vman/api/v1", response_class=HTMLResponse)
