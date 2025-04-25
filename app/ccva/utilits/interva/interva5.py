@@ -25,8 +25,8 @@ from math import isclose
 from os import chdir, getcwd, mkdir, path
 from pkgutil import get_data
 
-from interva.data.causetext import CAUSETEXTV5
-from interva.utils import _get_dem_groups
+from app.ccva.utilits.interva.data.causetext import CAUSETEXTV5
+from app.ccva.utilits.interva.utils import _get_dem_groups
 from numpy import (argsort, array, concatenate, copy, delete, nan, nanmax,
                    nansum, ndarray, where)
 from pandas import (DataFrame, Index, Series, isna, read_csv, read_excel,

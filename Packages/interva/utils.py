@@ -15,7 +15,7 @@ from numpy import append, argsort, delete, nanmax, where, zeros
 from decimal import Decimal
 from math import isclose
 
-from interva.exceptions import ArgumentException
+from app.ccva.utilits.interva.exceptions import ArgumentException
 if TYPE_CHECKING:
     import interva.interva5
 
