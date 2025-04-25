@@ -42,7 +42,7 @@ data.
 
 .. code-block:: python
 
-  from pycrossva.transform import transform
+  from app.ccva.utilits.pycrossva.transform import transform
 
   transform(("2016WHOv151", "InterVA5"), "path/to/data.csv")
 
@@ -51,7 +51,7 @@ read in and process the data before calling the function.
 
 .. code-block:: python
 
-  from pycrossva.transform import transform
+  from app.ccva.utilits.pycrossva.transform import transform
 
   input_data = pd.read_csv("path/to/data.csv")
   input_data = some_special_function(input_data)
