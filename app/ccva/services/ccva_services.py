@@ -37,7 +37,9 @@ async def get_record_to_run_ccva(current_user:dict,db: StandardDatabase,data_sou
         return records
     except Exception as e:
         print(e)
-        pass
+        # logger.error(f"Error fetching ODK data: {e}")
+        # print(e)
+        raise Exception(status_code=500, detail=str(e))
         
 
         
