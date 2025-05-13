@@ -93,7 +93,10 @@ async def fetch_odk_data_initial(
             }
             
     except Exception as e:
-        print(e)
+        logger.error(f"Error fetching ODK data: {e}")
+        # print(e)
+        raise HTTPException(status_code=500, detail=str(e))
+        
 
 
 
