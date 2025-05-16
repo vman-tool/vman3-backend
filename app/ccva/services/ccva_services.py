@@ -19,7 +19,6 @@ from app.settings.services.odk_configs import fetch_odk_config
 from app.shared.configs.arangodb import null_convert_data, remove_null_values
 from app.shared.configs.constants import db_collections
 from app.shared.configs.models import ResponseMainModel
-from app.utilits import logger
 
 
 # The websocket_broadcast function for broadcasting progress updates
@@ -117,9 +116,14 @@ def runCCVA(odk_raw:pd.DataFrame, id_col: str = None,date_col:str =None,start_ti
             input_data = transform((instrument, algorithm), odk_raw, lower=True)
         print('pass here')
         # Define the output folder
-        # Modify the output folder handling in runCCVA()
-        output_folder = "/app/ccva_files/"  # Use absolute path inside container
-        os.makedirs(output_folder, exist_ok=True)  # Ensure directory exists
+        output_folder = "./ccva_files/"
+        try:
+            os.makedirs(output_folder, exist_ok=True)
+        except Exception as e:
+            print(f"Failed to create directory {output_folder}: {e}")
+            output_folder = "/tmp/ccva_files/"
+            os.makedirs(output_folder, exist_ok=True)
+        # output_folder = f"../ccva_files/{file_id}/"
         print('pass here 2')
         # Create an InterVA5 instance with the async callback
         iv5out = InterVA5(input_data,task_id=file_id, hiv=hiv, malaria=malaria, write=True, directory=output_folder, filename=file_id,start_time=start_time, update_callback=update_callback, return_checked_data=True)
@@ -136,7 +140,6 @@ def runCCVA(odk_raw:pd.DataFrame, id_col: str = None,date_col:str =None,start_ti
         
         # Run the InterVA5 analysis, with progress updates via the async callback
         iv5out.run()
-        print('check if it pass the run')
         records =  iv5out.get_indiv_prob(
             top=10,
             include_propensities=False
@@ -150,7 +153,6 @@ def runCCVA(odk_raw:pd.DataFrame, id_col: str = None,date_col:str =None,start_ti
         # print(rcd)
         if rcd == [] or rcd is None:
             ensure_task(update_callback({"progress": 0, "message": "No records found", "status": 'error',"elapsed_time": f"{(datetime.now() - start_time).seconds // 3600}:{(datetime.now() - start_time).seconds // 60 % 60}:{(datetime.now() - start_time).seconds % 60}", "task_id": file_id, "error": True}))
-            raise Exception("No records found")
             return
         # Iterate over each dictionary and add the 'task_id' field
         for record in rcd:
