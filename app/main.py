@@ -46,7 +46,7 @@ async def lifespan(app: FastAPI):
     shutdown_scheduler()
     
     # Flush any remaining logs
-    await db_logger.flush_buffer()
+    # await db_logger.flush_buffer()
     scheduler.shutdown()
         
 

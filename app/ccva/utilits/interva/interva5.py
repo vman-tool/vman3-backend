@@ -315,6 +315,8 @@ class InterVA5:
         id_inputs = va_data.iloc[:, 0]
         va_data = va_data.to_numpy()
         if va_data.shape[0] < 1:
+            elapsed_time =f"{(datetime.datetime.now() - self.start_time).seconds // 3600}:{(datetime.datetime.now() - self.start_time).seconds // 60 % 60}:{(datetime.datetime.now() - self.start_time).seconds % 60}"
+            asyncio.run(self.update_callback({"progress": 90,"message": "Running InterVA5 analysis...","elapsed_time": elapsed_time,"total_records":self.va_input.shape[0], "error": False}))
             raise IOError("error: no data input")
         N = va_data.shape[0]
         S = va_data.shape[1]
