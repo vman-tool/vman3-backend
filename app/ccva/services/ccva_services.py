@@ -136,6 +136,7 @@ def runCCVA(odk_raw:pd.DataFrame, id_col: str = None,date_col:str =None,start_ti
         
         # Run the InterVA5 analysis, with progress updates via the async callback
         iv5out.run()
+        print('check if it pass the run')
         records =  iv5out.get_indiv_prob(
             top=10,
             include_propensities=False
@@ -149,6 +150,7 @@ def runCCVA(odk_raw:pd.DataFrame, id_col: str = None,date_col:str =None,start_ti
         # print(rcd)
         if rcd == [] or rcd is None:
             ensure_task(update_callback({"progress": 0, "message": "No records found", "status": 'error',"elapsed_time": f"{(datetime.now() - start_time).seconds // 3600}:{(datetime.now() - start_time).seconds // 60 % 60}:{(datetime.now() - start_time).seconds % 60}", "task_id": file_id, "error": True}))
+            raise Exception("No records found")
             return
         # Iterate over each dictionary and add the 'task_id' field
         for record in rcd:
