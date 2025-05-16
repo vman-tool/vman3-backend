@@ -3,7 +3,7 @@ import asyncio
 import json
 import os
 import re
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, time, timedelta
 from typing import Any, Dict, Optional
 
 import numpy as np
@@ -104,117 +104,261 @@ async def run_ccva(db: StandardDatabase, records:ResponseMainModel, task_id: str
         task_results[task_id] = error_message
         
         
-def runCCVA(odk_raw:pd.DataFrame, id_col: str = None,date_col:str =None,start_time:timedelta=None, instrument: str = '2016WHOv151', algorithm: str = 'InterVA5',
-            top=10, undetermined: bool = True, malaria: str = "h", hiv: str = "h",
-            file_id: str = "unnamed_file", update_callback=None, db: StandardDatabase=None):
+# def runCCVA(odk_raw:pd.DataFrame, id_col: str = None,date_col:str =None,start_time:timedelta=None, instrument: str = '2016WHOv151', algorithm: str = 'InterVA5',
+#             top=10, undetermined: bool = True, malaria: str = "h", hiv: str = "h",
+#             file_id: str = "unnamed_file", update_callback=None, db: StandardDatabase=None):
+    
+#     try:
+#         print('pass here 0', file_id,instrument,id_col)
+#         # Transform the input data
+#         if id_col:
+#             input_data = transform((instrument, algorithm), odk_raw, raw_data_id=id_col, lower=True)
+#         else:
+#             input_data = transform((instrument, algorithm), odk_raw, lower=True)
+#         print('pass here')
+#         # Define the output folder
+#         # Modify the output folder handling in runCCVA()
+#         output_folder = "/app/ccva_files/"  # Use absolute path inside container
+#         os.makedirs(output_folder, exist_ok=True)  # Ensure directory exists
+#         print('pass here 2')
+#         # Create an InterVA5 instance with the async callback
+#         iv5out = InterVA5(input_data,task_id=file_id, hiv=hiv, malaria=malaria, write=True, directory=output_folder, filename=file_id,start_time=start_time, update_callback=update_callback, return_checked_data=True)
+
+#         asyncio.run(update_callback(InterVA5Progress(
+#         progress=7,
+#         message="Running InterVA5 analysis...",
+#         status="running",
+#         total_records=len(input_data),
+#         elapsed_time=f"{(datetime.now() - start_time).seconds // 3600}:{(datetime.now() - start_time).seconds // 60 % 60}:{(datetime.now() - start_time).seconds % 60}",
+#         task_id=file_id,
+#         error=False
+#     ).model_dump_json()))
+        
+#         # Run the InterVA5 analysis, with progress updates via the async callback
+#         iv5out.run()
+#         print('check if it pass the run')
+#         records =  iv5out.get_indiv_prob(
+#             top=10,
+#             include_propensities=False
+#         )
+#        ## TODOS: find the corect way to load data from records (fuction)
+#         rcd = records.to_dict(orient='records')
+#         # pd.DataFrame(rcd).to_csv(f"{output_folder}{file_id}_ccva_results-test.csv")
+#         # get from csv(official)
+#         rcd = pd.read_csv(f"{output_folder}{file_id}.csv").to_dict(orient='records')
+#         print(len(rcd))
+#         # print(rcd)
+#         if rcd == [] or rcd is None:
+#             ensure_task(update_callback({"progress": 0, "message": "No records found", "status": 'error',"elapsed_time": f"{(datetime.now() - start_time).seconds // 3600}:{(datetime.now() - start_time).seconds // 60 % 60}:{(datetime.now() - start_time).seconds % 60}", "task_id": file_id, "error": True}))
+#             raise Exception("No records found")
+#             return
+#         # Iterate over each dictionary and add the 'task_id' field
+#         for record in rcd:
+#             record["task_id"] = file_id
+#         # Insert the records into the database
+      
+        
+#        # get the ccva form data (individual ones, eg, locations, gender, age_group) from the database and merge with the results
+#         results_to_insert = asyncio.run(getVADataAndMergeWithResults(db, null_convert_data(rcd)))
+#         if results_to_insert is None:
+#             print("No records found")
+#             ensure_task(update_callback({"progress": 0, "message": "No records found", "status": 'error',"elapsed_time": f"{(datetime.now() - start_time).seconds // 3600}:{(datetime.now() - start_time).seconds // 60 % 60}:{(datetime.now() - start_time).seconds % 60}", "task_id": file_id, "error": True}))
+#             return
+#         print("InterVA5 analysis completed.",len(results_to_insert))
+#         db.collection(db_collections.CCVA_RESULTS).insert_many(results_to_insert, overwrite=True, overwrite_mode="update")
+#         print("CCVA results inserted into the database.")
+
+
+#         total_records = len(records)
+#         rangeDates={"start": odk_raw[date_col].max(), "end":odk_raw[date_col].min()}
+#         ## get ccva error logs to be added to the ccva_results
+#         error_logs = process_ccva_errorlogs(output_folder + file_id + "_", task_id=file_id)
+#         print("Processing error logs...")
+
+#         ccva_results= compile_ccva_results(iv5out,
+#                                            data_processed_with_results=len(results_to_insert),
+#                                            error_logs=error_logs,
+#                                            top=top,
+#                                            undetermined=undetermined,
+#                                            task_id=file_id,
+#                                            start_time= start_time,
+#                                            total_records=total_records,  
+#                                            rangeDates =rangeDates, 
+#                                            db=db)
+#         print("CCVA run is completed.")
+#         error_log_path = f"{output_folder}{file_id}_errorlogV5.txt"
+#         log_path = f"{output_folder}{file_id}.csv"
+
+        
+#         if os.path.exists(error_log_path):
+#             os.remove(error_log_path)
+#         if os.path.exists(log_path):
+#             os.remove(log_path)
+#         return ccva_results
+
+#     # except Exception as e:
+#     #     print(f"Error during CCVA analysis: {e}")
+
+#     #     ensure_task(update_callback({"progress": 0, "message": f"Error during CCVA analysis: {e}", "status": 'error',"elapsed_time": f"{(datetime.now() - start_time).seconds // 3600}:{(datetime.now() - start_time).seconds // 60 % 60}:{(datetime.now() - start_time).seconds % 60}", "task_id": file_id, "error": True}))
+#     #     # logger.error(f"Error during CCVA analysis: {e}")
+#     #     raise e
+        
+#     except Exception as e:
+#         error_data = {
+#             "progress": 0,
+#             "message": f"Error during CCVA analysis: {e}",
+#             "status": "error",
+#             "elapsed_time": f"{(datetime.now() - start_time).seconds // 3600}:{(datetime.now() - start_time).seconds // 60 % 60}:{(datetime.now() - start_time).seconds % 60}",
+#             "error": True
+#         }
+#         ensure_task(error_data, file_id)
+#         raise e
+        
+
+def runCCVA(odk_raw: pd.DataFrame, id_col: str = None, date_col: str = None, 
+           start_time: timedelta = None, instrument: str = '2016WHOv151', 
+           algorithm: str = 'InterVA5', top=10, undetermined: bool = True, 
+           malaria: str = "h", hiv: str = "h", file_id: str = "unnamed_file", 
+           update_callback=None, db: StandardDatabase = None):
     
     try:
-        print('pass here 0', file_id,instrument,id_col)
-        # Transform the input data
+        print('Starting CCVA analysis for file:', file_id)
+        
+        # 1. Transform the input data
         if id_col:
             input_data = transform((instrument, algorithm), odk_raw, raw_data_id=id_col, lower=True)
         else:
             input_data = transform((instrument, algorithm), odk_raw, lower=True)
-        print('pass here')
-        # Define the output folder
-        # Modify the output folder handling in runCCVA()
-        output_folder = "/app/ccva_files/"  # Use absolute path inside container
-        os.makedirs(output_folder, exist_ok=True)  # Ensure directory exists
-        print('pass here 2')
-        # Create an InterVA5 instance with the async callback
-        iv5out = InterVA5(input_data,task_id=file_id, hiv=hiv, malaria=malaria, write=True, directory=output_folder, filename=file_id,start_time=start_time, update_callback=update_callback, return_checked_data=True)
-
-        asyncio.run(update_callback(InterVA5Progress(
-        progress=7,
-        message="Running InterVA5 analysis...",
-        status="running",
-        total_records=len(input_data),
-        elapsed_time=f"{(datetime.now() - start_time).seconds // 3600}:{(datetime.now() - start_time).seconds // 60 % 60}:{(datetime.now() - start_time).seconds % 60}",
-        task_id=file_id,
-        error=False
-    ).model_dump_json()))
         
-        # Run the InterVA5 analysis, with progress updates via the async callback
-        iv5out.run()
-        print('check if it pass the run')
-        records =  iv5out.get_indiv_prob(
-            top=10,
-            include_propensities=False
+        # 2. Set up output directory
+        output_folder = "/app/ccva_files/"
+        os.makedirs(output_folder, exist_ok=True)
+        print(f'Output directory ready: {output_folder}')
+
+        # 3. Initialize InterVA5 with error handling
+        iv5out = InterVA5(
+            input_data,
+            task_id=file_id,
+            hiv=hiv,
+            malaria=malaria,
+            write=True,
+            directory=output_folder,
+            filename=file_id,
+            start_time=start_time,
+            update_callback=update_callback,
+            return_checked_data=True
         )
-       ## TODOS: find the corect way to load data from records (fuction)
-        rcd = records.to_dict(orient='records')
-        # pd.DataFrame(rcd).to_csv(f"{output_folder}{file_id}_ccva_results-test.csv")
-        # get from csv(official)
-        rcd = pd.read_csv(f"{output_folder}{file_id}.csv").to_dict(orient='records')
-        print(len(rcd))
-        # print(rcd)
-        if rcd == [] or rcd is None:
-            ensure_task(update_callback({"progress": 0, "message": "No records found", "status": 'error',"elapsed_time": f"{(datetime.now() - start_time).seconds // 3600}:{(datetime.now() - start_time).seconds // 60 % 60}:{(datetime.now() - start_time).seconds % 60}", "task_id": file_id, "error": True}))
-            raise Exception("No records found")
-            return
-        # Iterate over each dictionary and add the 'task_id' field
+
+        # 4. Send initial progress update
+        asyncio.run(update_callback(InterVA5Progress(
+            progress=7,
+            message="Running InterVA5 analysis...",
+            status="running",
+            total_records=len(input_data),
+            elapsed_time=f"{(datetime.now() - start_time).seconds // 3600}:{(datetime.now() - start_time).seconds // 60 % 60}:{(datetime.now() - start_time).seconds % 60}",
+            task_id=file_id,
+            error=False
+        ).model_dump_json()))
+        
+        # 5. Run analysis with file verification
+        iv5out.run()
+        print('InterVA5 analysis completed, verifying output...')
+
+        # 6. Verify and read output file with retries
+        output_file = f"{output_folder}{file_id}.csv"
+        max_retries = 3
+        retry_delay = 1  # seconds
+        
+        for attempt in range(max_retries):
+            try:
+                # Verify file exists and has content
+                if not os.path.exists(output_file):
+                    raise FileNotFoundError(f"Output file not found at {output_file}")
+                
+                if os.path.getsize(output_file) == 0:
+                    raise ValueError("Output file is empty")
+                
+                # Read with explicit error handling
+                df = pd.read_csv(output_file, engine='python')
+                if df.empty:
+                    raise ValueError("DataFrame is empty after reading CSV")
+                
+                rcd = df.to_dict(orient='records')
+                break
+                
+            except Exception as e:
+                if attempt == max_retries - 1:
+                    raise RuntimeError(f"Failed to read valid output after {max_retries} attempts: {str(e)}")
+                print(f"Attempt {attempt + 1} failed, retrying... Error: {str(e)}")
+                time.sleep(retry_delay)
+                continue
+
+        # 7. Process results
+        if not rcd:
+            raise ValueError("No valid records found in CCVA results")
+
         for record in rcd:
             record["task_id"] = file_id
-        # Insert the records into the database
-      
-        
-       # get the ccva form data (individual ones, eg, locations, gender, age_group) from the database and merge with the results
+
+        # 8. Merge with VA data
         results_to_insert = asyncio.run(getVADataAndMergeWithResults(db, null_convert_data(rcd)))
-        if results_to_insert is None:
-            print("No records found")
-            ensure_task(update_callback({"progress": 0, "message": "No records found", "status": 'error',"elapsed_time": f"{(datetime.now() - start_time).seconds // 3600}:{(datetime.now() - start_time).seconds // 60 % 60}:{(datetime.now() - start_time).seconds % 60}", "task_id": file_id, "error": True}))
-            return
-        print("InterVA5 analysis completed.",len(results_to_insert))
-        db.collection(db_collections.CCVA_RESULTS).insert_many(results_to_insert, overwrite=True, overwrite_mode="update")
-        print("CCVA results inserted into the database.")
+        if not results_to_insert:
+            raise ValueError("No results after merging with VA data")
 
+        # 9. Store results
+        db.collection(db_collections.CCVA_RESULTS).insert_many(
+            results_to_insert, 
+            overwrite=True, 
+            overwrite_mode="update"
+        )
+        print(f"Successfully inserted {len(results_to_insert)} CCVA results")
 
-        total_records = len(records)
-        rangeDates={"start": odk_raw[date_col].max(), "end":odk_raw[date_col].min()}
-        ## get ccva error logs to be added to the ccva_results
-        error_logs = process_ccva_errorlogs(output_folder + file_id + "_", task_id=file_id)
-        print("Processing error logs...")
-
-        ccva_results= compile_ccva_results(iv5out,
-                                           data_processed_with_results=len(results_to_insert),
-                                           error_logs=error_logs,
-                                           top=top,
-                                           undetermined=undetermined,
-                                           task_id=file_id,
-                                           start_time= start_time,
-                                           total_records=total_records,  
-                                           rangeDates =rangeDates, 
-                                           db=db)
-        print("CCVA run is completed.")
-        error_log_path = f"{output_folder}{file_id}_errorlogV5.txt"
-        log_path = f"{output_folder}{file_id}.csv"
-
+        # 10. Compile final results
+        total_records = len(rcd)
+        rangeDates = {
+            "start": odk_raw[date_col].max(), 
+            "end": odk_raw[date_col].min()
+        }
         
-        if os.path.exists(error_log_path):
-            os.remove(error_log_path)
-        if os.path.exists(log_path):
-            os.remove(log_path)
+        error_logs = process_ccva_errorlogs(f"{output_folder}{file_id}_", task_id=file_id)
+        
+        ccva_results = compile_ccva_results(
+            iv5out,
+            data_processed_with_results=len(results_to_insert),
+            error_logs=error_logs,
+            top=top,
+            undetermined=undetermined,
+            task_id=file_id,
+            start_time=start_time,
+            total_records=total_records,  
+            rangeDates=rangeDates, 
+            db=db
+        )
+
+        # 11. Clean up temporary files
+        for file_pattern in [f"{file_id}_errorlogV5.txt", f"{file_id}.csv"]:
+            file_path = os.path.join(output_folder, file_pattern)
+            if os.path.exists(file_path):
+                try:
+                    os.remove(file_path)
+                except Exception as e:
+                    print(f"Warning: Could not remove {file_path}: {str(e)}")
+
         return ccva_results
 
-    # except Exception as e:
-    #     print(f"Error during CCVA analysis: {e}")
-
-    #     ensure_task(update_callback({"progress": 0, "message": f"Error during CCVA analysis: {e}", "status": 'error',"elapsed_time": f"{(datetime.now() - start_time).seconds // 3600}:{(datetime.now() - start_time).seconds // 60 % 60}:{(datetime.now() - start_time).seconds % 60}", "task_id": file_id, "error": True}))
-    #     # logger.error(f"Error during CCVA analysis: {e}")
-    #     raise e
-        
     except Exception as e:
+        error_msg = f"CCVA analysis failed: {str(e)}"
+        print(error_msg)
+        
         error_data = {
             "progress": 0,
-            "message": f"Error during CCVA analysis: {e}",
+            "message": error_msg,
             "status": "error",
             "elapsed_time": f"{(datetime.now() - start_time).seconds // 3600}:{(datetime.now() - start_time).seconds // 60 % 60}:{(datetime.now() - start_time).seconds % 60}",
             "error": True
         }
-        ensure_task(error_data, file_id)
-        raise e
-        
-
+        ensure_task(update_callback, error_data)
+        raise RuntimeError(error_msg) from e
 # Function to compile the results from InterVA5
 def compile_ccva_results(iv5out, top=10, undetermined=True,start_time:timedelta=None,
                          task_id:str=None,
