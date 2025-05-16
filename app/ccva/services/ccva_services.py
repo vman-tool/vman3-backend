@@ -116,7 +116,9 @@ def runCCVA(odk_raw:pd.DataFrame, id_col: str = None,date_col:str =None,start_ti
             input_data = transform((instrument, algorithm), odk_raw, lower=True)
         print('pass here')
         # Define the output folder
-        output_folder = "./ccva_files/"
+        output_folder = "../ccva_files/"
+        os.makedirs(output_folder, exist_ok=True)
+        print(f'Output directory ready: {output_folder}')
         # output_folder = f"../ccva_files/{file_id}/"
         print('pass here 2')
         # Create an InterVA5 instance with the async callback
@@ -142,10 +144,14 @@ def runCCVA(odk_raw:pd.DataFrame, id_col: str = None,date_col:str =None,start_ti
         rcd = records.to_dict(orient='records')
         # pd.DataFrame(rcd).to_csv(f"{output_folder}{file_id}_ccva_results-test.csv")
         # get from csv(official)
+        print('rcd total')
+        print(len(rcd))
         try:
             csv_path = f"{output_folder}{file_id}.csv"
             if os.path.exists(csv_path):
                 rcd = pd.read_csv(csv_path).to_dict(orient='records')
+                print("CSV file read successfully.")
+                print(len(rcd))
             else:
              rcd = []
         except Exception as e:
@@ -155,6 +161,7 @@ def runCCVA(odk_raw:pd.DataFrame, id_col: str = None,date_col:str =None,start_ti
         # print(rcd)
         if rcd == [] or rcd is None:
             ensure_task(update_callback({"progress": 0, "message": "No records found", "status": 'error',"elapsed_time": f"{(datetime.now() - start_time).seconds // 3600}:{(datetime.now() - start_time).seconds // 60 % 60}:{(datetime.now() - start_time).seconds % 60}", "task_id": file_id, "error": True}))
+            raise Exception("No records found")
             return
         # Iterate over each dictionary and add the 'task_id' field
         for record in rcd:
