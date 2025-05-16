@@ -124,7 +124,7 @@ async def get():
                 </style>
             </head>
             <body>
-                <h1 class="text-center">Welcome to the VMan API</h1>
+                <h1 class="text-center">Welcome to the VMan API v3</h1>
                 <p class="text-center">To view documentation click to <a href="/vman/api/v1/docs">here</a> and enjoy</p>
             </body>
         </html>
