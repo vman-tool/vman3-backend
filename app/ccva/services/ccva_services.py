@@ -19,6 +19,7 @@ from app.settings.services.odk_configs import fetch_odk_config
 from app.shared.configs.arangodb import null_convert_data, remove_null_values
 from app.shared.configs.constants import db_collections
 from app.shared.configs.models import ResponseMainModel
+from app.utilits import logger
 
 
 # The websocket_broadcast function for broadcasting progress updates
@@ -194,7 +195,10 @@ def runCCVA(odk_raw:pd.DataFrame, id_col: str = None,date_col:str =None,start_ti
 
     except Exception as e:
         print(f"Error during CCVA analysis: {e}")
+
         ensure_task(update_callback({"progress": 0, "message": f"Error during CCVA analysis: {e}", "status": 'error',"elapsed_time": f"{(datetime.now() - start_time).seconds // 3600}:{(datetime.now() - start_time).seconds // 60 % 60}:{(datetime.now() - start_time).seconds % 60}", "task_id": file_id, "error": True}))
+        logger.error(f"Error during CCVA analysis: {e}")
+        raise e
         
 
         
