@@ -4,7 +4,7 @@ import json
 import os
 import re
 from datetime import date, datetime, timedelta
-from typing import Any, Dict, Optional
+from typing import Dict, Optional
 
 import numpy as np
 import pandas as pd
@@ -117,12 +117,6 @@ def runCCVA(odk_raw:pd.DataFrame, id_col: str = None,date_col:str =None,start_ti
         print('pass here')
         # Define the output folder
         output_folder = "./ccva_files/"
-        try:
-            os.makedirs(output_folder, exist_ok=True)
-        except Exception as e:
-            print(f"Failed to create directory {output_folder}: {e}")
-            output_folder = "/tmp/ccva_files/"
-            os.makedirs(output_folder, exist_ok=True)
         # output_folder = f"../ccva_files/{file_id}/"
         print('pass here 2')
         # Create an InterVA5 instance with the async callback
@@ -148,7 +142,15 @@ def runCCVA(odk_raw:pd.DataFrame, id_col: str = None,date_col:str =None,start_ti
         rcd = records.to_dict(orient='records')
         # pd.DataFrame(rcd).to_csv(f"{output_folder}{file_id}_ccva_results-test.csv")
         # get from csv(official)
-        rcd = pd.read_csv(f"{output_folder}{file_id}.csv").to_dict(orient='records')
+        try:
+            csv_path = f"{output_folder}{file_id}.csv"
+            if os.path.exists(csv_path):
+                rcd = pd.read_csv(csv_path).to_dict(orient='records')
+            else:
+             rcd = []
+        except Exception as e:
+            print(f"Error reading CSV file: {e}")
+            rcd = []
         print(len(rcd))
         # print(rcd)
         if rcd == [] or rcd is None:
@@ -198,23 +200,11 @@ def runCCVA(odk_raw:pd.DataFrame, id_col: str = None,date_col:str =None,start_ti
             os.remove(log_path)
         return ccva_results
 
-    # except Exception as e:
-    #     print(f"Error during CCVA analysis: {e}")
-
-    #     ensure_task(update_callback({"progress": 0, "message": f"Error during CCVA analysis: {e}", "status": 'error',"elapsed_time": f"{(datetime.now() - start_time).seconds // 3600}:{(datetime.now() - start_time).seconds // 60 % 60}:{(datetime.now() - start_time).seconds % 60}", "task_id": file_id, "error": True}))
-    #     # logger.error(f"Error during CCVA analysis: {e}")
-    #     raise e
-        
     except Exception as e:
-        error_data = {
-            "progress": 0,
-            "message": f"Error during CCVA analysis: {e}",
-            "status": "error",
-            "elapsed_time": f"{(datetime.now() - start_time).seconds // 3600}:{(datetime.now() - start_time).seconds // 60 % 60}:{(datetime.now() - start_time).seconds % 60}",
-            "error": True
-        }
-        ensure_task(error_data, file_id)
-        raise e
+        print(f"Error during CCVA analysis: {e}")
+        ensure_task(update_callback({"progress": 0, "message": f"Error during CCVA analysis: {e}", "status": 'error',"elapsed_time": f"{(datetime.now() - start_time).seconds // 3600}:{(datetime.now() - start_time).seconds // 60 % 60}:{(datetime.now() - start_time).seconds % 60}", "task_id": file_id, "error": True}))
+        
+
         
 
 # Function to compile the results from InterVA5
@@ -541,43 +531,16 @@ FOR doc IN {collection.name}
     return updated_results
 
 
-# def ensure_task(task):
-#     try:
-#         # Check if an event loop is running
-#         loop = asyncio.get_running_loop()
-#     except RuntimeError:
-#         # If no running loop, create a new one and run the task
-#         loop = asyncio.new_event_loop()
-#         asyncio.set_event_loop(loop)
-#         loop.run_until_complete(task)
-#         loop.close()
-#     else:
-#         # If a running loop is available, create a task in the existing loop
-#         loop.create_task(websocket_broadcast(task))
-
-
-def ensure_task(update_data: Dict[str, Any], task_id: str) -> None:
-    """
-    Ensure a WebSocket update task is properly executed.
-    
-    Args:
-        update_data: The progress update data
-        task_id: The task ID for WebSocket channel
-    """
+def ensure_task(task):
     try:
+        # Check if an event loop is running
         loop = asyncio.get_running_loop()
     except RuntimeError:
-        # No running event loop - create new one
+        # If no running loop, create a new one and run the task
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
-        try:
-            loop.run_until_complete(websocket_broadcast(task_id, update_data))
-        finally:
-            loop.close()
+        loop.run_until_complete(task)
+        loop.close()
     else:
-        # Running event loop exists - schedule task
-        if not loop.is_running():
-            loop.run_until_complete(websocket_broadcast(task_id, update_data))
-        else:
-            # For already running loop, create task
-            asyncio.create_task(websocket_broadcast(task_id, update_data))
+        # If a running loop is available, create a task in the existing loop
+        loop.create_task(websocket_broadcast(task))

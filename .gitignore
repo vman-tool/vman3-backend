@@ -54,6 +54,7 @@ coverage.xml
 cover/
 /*.csv
 /ccva_files/*
+!/ccva_files/.gitkeep
 # Jupyter Notebook
 .ipynb_checkpoints
 
