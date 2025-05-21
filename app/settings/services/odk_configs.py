@@ -25,18 +25,18 @@ def validate_configs(config: SettingsConfigData):
         config.field_mapping.is_neonate is None):
         raise BadRequestException("One or more required fields are not set in the configuration")
     
-@log_to_db(context="fetch_odk_config", log_args=True)
+# @log_to_db(context="fetch_odk_config", log_args=True)
 async def fetch_odk_config(db: StandardDatabase, is_validate_configs: bool = False) -> SettingsConfigData:
     try:
         
         config_data = db.collection(db_collections.SYSTEM_CONFIGS).get('vman_config')  # Assumes 'vman_config' is the key
         if not config_data:
-            await db_logger.log(
-            message="ODK configuration not found in the database" ,
-            level=db_logger.LogLevel.ERROR,
-            context="fetch_odk_config",
-            data={} 
-    )
+    #         await db_logger.log(
+    #         message="ODK configuration not found in the database" ,
+    #         level=db_logger.LogLevel.ERROR,
+    #         context="fetch_odk_config",
+    #         data={} 
+    # )
             raise ValueError("ODK configuration not found in the database")
 
         # Ensure config_data is a dictionary
@@ -49,6 +49,7 @@ async def fetch_odk_config(db: StandardDatabase, is_validate_configs: bool = Fal
 
             return config
         else:
+<<<<<<< Updated upstream
             print("ODK configuration data is not in the expected format")
             await db_logger.log(
             message="ODK configuration data is not in the expected format" ,
@@ -56,6 +57,15 @@ async def fetch_odk_config(db: StandardDatabase, is_validate_configs: bool = Fal
             context="fetch_odk_config",
             data={} 
     )
+=======
+            pass
+    #         await db_logger.log(
+    #         message="ODK configuration data is not in the expected format" ,
+    #         level=db_logger.LogLevel.ERROR,
+    #         context="fetch_odk_config",
+    #         data={} 
+    # )
+>>>>>>> Stashed changes
             raise ValueError("ODK configuration data is not in the expected format")
     except Exception as e:
         print(e)
