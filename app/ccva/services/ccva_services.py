@@ -119,13 +119,14 @@ def runCCVA(odk_raw:pd.DataFrame, id_col: str = None,date_col:str =None,start_ti
 
         output_folder = os.path.dirname(os.path.abspath(__file__))
         # create subdirectory for the task
-        output_folder = os.path.join(output_folder, "ccva_files/")
+        output_folder = os.path.join(output_folder, "ccva_files")
+        output_folder=output_folder+'/'
         os.makedirs(output_folder, exist_ok=True)
         # check write permission
         if not os.access(output_folder, os.W_OK):
             print(f"Write permission denied for {output_folder}")
             raise PermissionError(f"Write permission denied for {output_folder}")
-
+        output_folder=output_folder+'/'
         # check read permission
         print(f'Output directory ready: {output_folder}')
         # output_folder = f"../ccva_files/{file_id}/"
@@ -144,7 +145,7 @@ def runCCVA(odk_raw:pd.DataFrame, id_col: str = None,date_col:str =None,start_ti
         task_id=file_id,
         error=False
     ).model_dump_json()))
-        output_folder=output_folder+'/'
+        
         
         # Run the InterVA5 analysis, with progress updates via the async callback
         iv5out.run()

@@ -981,6 +981,8 @@ class InterVA5:
         set_option("display.max_columns", None)
         indiv_prob = self.get_indiv_prob(top, include_propensities)
         filename = filename + ".csv"
+        print()
+        print(indiv_prob)
         indiv_prob.to_csv(filename, index=False)
 
 
