@@ -303,7 +303,10 @@ class InterVA5:
             now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             logger.info(f"Error & warning log built for InterVA5 {now}\n")
         if isinstance(self.va_input, str) and self.va_input[-4:] == ".csv":
+            print('try reading csv')
             self.va_input = read_csv(self.va_input)
+            print('csv read')
+            
         if "i183o" in self.va_input.columns:
             self.va_input.rename(columns={"i183o": "i183a"}, inplace=True)
             print(
