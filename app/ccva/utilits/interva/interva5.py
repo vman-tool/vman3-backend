@@ -325,7 +325,9 @@ class InterVA5:
                 "error: invalid data input format. Number of values incorrect")
         if va_input_names[S-1].lower() != "i459o":
             raise IOError("error: the last variable should be 'i459o'")
-        va_data_csv = get_data("interva", "data/randomva5.csv")
+        # va_data_csv = get_data("interva", "data/randomva5.csv")
+        ##
+        va_data_csv =get_data("app.ccva.utilits.interva", "data/probbaseV5.csv")
         randomVA5 = read_csv(BytesIO(va_data_csv))
         valabels = randomVA5.columns
         count_changelabel = 0
@@ -1012,7 +1014,8 @@ def get_probbase(version: str = "19") -> DataFrame:
         probbase = read_csv(BytesIO(probbase_bytes))
         # note: version 19 does not have first row included in v18
     else:
-        probbase_xls = get_data("interva", "data/probbase.xls")
+        probbase_xls =get_data("app.ccva.utilits.interva",  "data/probbase.xls")
+        # probbase_xls = get_data("interva", "data/probbase.xls")
         probbase = read_excel(probbase_xls)
         # note: drop first row so it matches the input
         probbase.drop([probbase.index[0]], inplace=True)
