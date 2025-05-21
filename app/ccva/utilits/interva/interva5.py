@@ -307,6 +307,7 @@ class InterVA5:
             if not path.exists(self.va_input):
                 raise FileNotFoundError(f"File not found: {self.va_input}")
             if path.getsize(self.va_input) == 0:
+                print("File is empty")
                 raise IOError(f"File is empty: {self.va_input}")
             self.va_input = read_csv(self.va_input, encoding="utf-8", engine="python")
             print("CSV successfully read.")
