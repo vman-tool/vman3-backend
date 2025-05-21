@@ -302,23 +302,14 @@ class InterVA5:
             logger.addHandler(file_handler)
             now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             logger.info(f"Error & warning log built for InterVA5 {now}\n")
-        if isinstance(self.va_input, str) and self.va_input.endswith(".csv"):
-            print(f"Attempting to load VA input file: {self.va_input}")
-            if not path.exists(self.va_input):
-                raise FileNotFoundError(f"File not found: {self.va_input}")
-            if path.getsize(self.va_input) == 0:
-                print("File is empty")
-                raise IOError(f"File is empty: {self.va_input}")
-            self.va_input = read_csv(self.va_input, encoding="utf-8", engine="python")
-            print("CSV successfully read.")
-
-            
+        if isinstance(self.va_input, str) and self.va_input[-4:] == ".csv":
+            self.va_input = read_csv(self.va_input)
         if "i183o" in self.va_input.columns:
             self.va_input.rename(columns={"i183o": "i183a"}, inplace=True)
             print(
                 "Due to the inconsistent names in the early version of "
                 "InterVA5, the indicator 'i183o' has been renamed as 'i183a'.")
-        print("VA input data loaded.")
+
         va_data = self.va_input.copy()
         va_input_names = va_data.columns
         id_inputs = va_data.iloc[:, 0]
@@ -334,7 +325,8 @@ class InterVA5:
                 "error: invalid data input format. Number of values incorrect")
         if va_input_names[S-1].lower() != "i459o":
             raise IOError("error: the last variable should be 'i459o'")
-        va_data_csv = get_data("interva", "data/randomva5.csv")
+        # va_data_csv = get_data("interva", "data/randomva5.csv")
+        va_data_csv =get_data("app.ccva.utilits.interva", "data/probbaseV5.csv")
         randomVA5 = read_csv(BytesIO(va_data_csv))
         valabels = randomVA5.columns
         count_changelabel = 0
@@ -990,8 +982,6 @@ class InterVA5:
         set_option("display.max_columns", None)
         indiv_prob = self.get_indiv_prob(top, include_propensities)
         filename = filename + ".csv"
-        print()
-        print(indiv_prob)
         indiv_prob.to_csv(filename, index=False)
 
 
@@ -1023,7 +1013,7 @@ def get_probbase(version: str = "19") -> DataFrame:
         probbase = read_csv(BytesIO(probbase_bytes))
         # note: version 19 does not have first row included in v18
     else:
-        probbase_xls = get_data("interva", "data/probbase.xls")
+        probbase_xls = get_data("app.ccva.utilits.interva", "data/probbase.xls")
         probbase = read_excel(probbase_xls)
         # note: drop first row so it matches the input
         probbase.drop([probbase.index[0]], inplace=True)
