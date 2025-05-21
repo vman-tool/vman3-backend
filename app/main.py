@@ -20,8 +20,8 @@ from app.pcva.services.va_records_services import save_discordant_message_servic
 from app.utilits.schedeular import shutdown_scheduler, start_scheduler
 
 
-logger.add("./logs/app.log", rotation="500 MB")
-scheduler = AsyncIOScheduler()
+# logger.add("./logs/app.log", rotation="500 MB")
+# scheduler = AsyncIOScheduler()
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Application startup logic
@@ -32,9 +32,9 @@ async def lifespan(app: FastAPI):
     # scheduler.add_job(schedulers. scheduled_failed_chucks_retry, IntervalTrigger(minutes=60*3))
     # scheduler.add_job(data_download. fetch_odk_data_with_async, CronTrigger(hour=18, minute=0))
     # scheduler.start()
-    # await db_logger.ensure_collection()
-    await get_db_logger()
-    await start_scheduler()
+    await db_logger.ensure_collection()
+    
+    # await start_scheduler()
     await default_account_creation()
     
     try:
@@ -43,11 +43,11 @@ async def lifespan(app: FastAPI):
         # Application shutdown logic
         logger.info("Application shutdown")
             # Shutdown the scheduler
-    shutdown_scheduler()
+    # shutdown_scheduler()
     
     # Flush any remaining logs
     # await db_logger.flush_buffer()
-    scheduler.shutdown()
+    # scheduler.shutdown()
         
 
 def create_application():

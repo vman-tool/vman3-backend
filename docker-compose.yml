@@ -12,7 +12,6 @@ services:
     depends_on:
       - arangodb
       - redis
-
   backend:
     build: .
     command:
@@ -37,8 +36,6 @@ services:
       - REDIS_URL=redis://redis:6379
     env_file:
       - .env
-
-
   arangodb:
     image: arangodb/arangodb:3.12.2
     env_file:
