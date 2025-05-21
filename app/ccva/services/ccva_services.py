@@ -116,13 +116,18 @@ def runCCVA(odk_raw:pd.DataFrame, id_col: str = None,date_col:str =None,start_ti
             input_data = transform((instrument, algorithm), odk_raw, lower=True)
         print('pass here')
         # Define the output folder
-        output_folder = ""
+
+        output_folder = os.path.dirname(os.path.abspath(__file__))
+        # create subdirectory for the task
+        output_folder = os.path.join(output_folder, "ccva_files")
         os.makedirs(output_folder, exist_ok=True)
         print(f'Output directory ready: {output_folder}')
         # output_folder = f"../ccva_files/{file_id}/"
         print('pass here 2')
         # Create an InterVA5 instance with the async callback
-        iv5out = InterVA5(input_data,task_id=file_id, hiv=hiv, malaria=malaria, write=True, directory=output_folder, filename=file_id,start_time=start_time, update_callback=update_callback, return_checked_data=True)
+        iv5out = InterVA5(input_data,task_id=file_id, hiv=hiv, malaria=malaria, write=True,
+                          directory=output_folder,
+                          filename=file_id,start_time=start_time, update_callback=update_callback, return_checked_data=True)
 
         asyncio.run(update_callback(InterVA5Progress(
         progress=7,
@@ -148,6 +153,7 @@ def runCCVA(odk_raw:pd.DataFrame, id_col: str = None,date_col:str =None,start_ti
         # get from csv(official)
         print('rcd total')
         print(len(rcd))
+        print(f"{output_folder}{file_id}.csv")
         try:
             csv_path = f"{output_folder}{file_id}.csv"
             if os.path.exists(csv_path):
@@ -155,7 +161,9 @@ def runCCVA(odk_raw:pd.DataFrame, id_col: str = None,date_col:str =None,start_ti
                 print("CSV file read successfully.")
                 print(len(rcd))
             else:
-             rcd = []
+                if len(rcd) <= 0:
+                    rcd = []
+             
         except Exception as e:
             print(f"Error reading CSV file: {e}")
             rcd = []
@@ -170,7 +178,7 @@ def runCCVA(odk_raw:pd.DataFrame, id_col: str = None,date_col:str =None,start_ti
             record["task_id"] = file_id
         # Insert the records into the database
       
-        
+        # print(rcd)
        # get the ccva form data (individual ones, eg, locations, gender, age_group) from the database and merge with the results
         results_to_insert = asyncio.run(getVADataAndMergeWithResults(db, null_convert_data(rcd)))
         if results_to_insert is None:
