@@ -302,10 +302,15 @@ class InterVA5:
             logger.addHandler(file_handler)
             now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             logger.info(f"Error & warning log built for InterVA5 {now}\n")
-        if isinstance(self.va_input, str) and self.va_input[-4:] == ".csv":
-            print('try reading csv')
-            self.va_input = read_csv(self.va_input)
-            print('csv read')
+        if isinstance(self.va_input, str) and self.va_input.endswith(".csv"):
+            print(f"Attempting to load VA input file: {self.va_input}")
+            if not path.exists(self.va_input):
+                raise FileNotFoundError(f"File not found: {self.va_input}")
+            if path.getsize(self.va_input) == 0:
+                raise IOError(f"File is empty: {self.va_input}")
+            self.va_input = read_csv(self.va_input, encoding="utf-8", engine="python")
+            print("CSV successfully read.")
+
             
         if "i183o" in self.va_input.columns:
             self.va_input.rename(columns={"i183o": "i183a"}, inplace=True)
