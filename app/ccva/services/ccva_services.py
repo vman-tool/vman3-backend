@@ -138,6 +138,7 @@ def runCCVA(odk_raw:pd.DataFrame, id_col: str = None,date_col:str =None,start_ti
         task_id=file_id,
         error=False
     ).model_dump_json()))
+        output_folder=output_folder+'/'
         
         # Run the InterVA5 analysis, with progress updates via the async callback
         iv5out.run()
