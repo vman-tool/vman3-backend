@@ -107,7 +107,7 @@ def runCCVA(odk_raw:pd.DataFrame, id_col: str = None,date_col:str =None,start_ti
             top=10, undetermined: bool = True, malaria: str = "h", hiv: str = "h",
             file_id: str = "unnamed_file", update_callback=None, db: StandardDatabase=None):
     
-    try:
+    # try:
         print('pass here 0', file_id,instrument,id_col)
         # Transform the input data
         if id_col:
@@ -225,10 +225,10 @@ def runCCVA(odk_raw:pd.DataFrame, id_col: str = None,date_col:str =None,start_ti
             os.remove(log_path)
         return ccva_results
 
-    except Exception as e:
-        print(f"Error during CCVA analysis: {e}")
-        ensure_task(update_callback({"progress": 0, "message": f"Error during CCVA analysis: {e}", "status": 'error',"elapsed_time": f"{(datetime.now() - start_time).seconds // 3600}:{(datetime.now() - start_time).seconds // 60 % 60}:{(datetime.now() - start_time).seconds % 60}", "task_id": file_id, "error": True}))
-        raise e
+    # except Exception as e:
+    #     print(f"Error during CCVA analysis: {e}")
+    #     ensure_task(update_callback({"progress": 0, "message": f"Error during CCVA analysis: {e}", "status": 'error',"elapsed_time": f"{(datetime.now() - start_time).seconds // 3600}:{(datetime.now() - start_time).seconds // 60 % 60}:{(datetime.now() - start_time).seconds % 60}", "task_id": file_id, "error": True}))
+    #     raise e
 
         
 
