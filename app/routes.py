@@ -34,7 +34,6 @@ def create_main_router():
     main_router.include_router(records_routes.data_router)
     main_router.include_router(statistics_routes.statistics_router)
     main_router.include_router(settings_routes.settings_router)
-    main_router.include_router(settings_routes.settings_router)
     main_router.include_router(ccva_routes.ccva_router)
     main_router.include_router(data_quality_routes.data_quality_router)
     return main_router
