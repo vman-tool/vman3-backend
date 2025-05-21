@@ -49,13 +49,13 @@ async def fetch_odk_config(db: StandardDatabase, is_validate_configs: bool = Fal
 
             return config
         else:
-            print("ODK configuration data is not in the expected format")
-            await db_logger.log(
-            message="ODK configuration data is not in the expected format" ,
-            level=db_logger.LogLevel.ERROR,
-            context="fetch_odk_config",
-            data={} 
-    )
+            pass
+    #         await db_logger.log(
+    #         message="ODK configuration data is not in the expected format" ,
+    #         level=db_logger.LogLevel.ERROR,
+    #         context="fetch_odk_config",
+    #         data={} 
+    # )
             raise ValueError("ODK configuration data is not in the expected format")
     except Exception as e:
         print(e)
