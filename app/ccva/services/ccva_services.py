@@ -149,13 +149,16 @@ def runCCVA(odk_raw:pd.DataFrame, id_col: str = None,date_col:str =None,start_ti
         print('rcd total')
         print(len(rcd))
         try:
+            # Check if the CSV (responce of ccva results from file)  if file exists 
             csv_path = f"{output_folder}{file_id}.csv"
             if os.path.exists(csv_path):
                 rcd = pd.read_csv(csv_path).to_dict(orient='records')
                 print("CSV file read successfully.")
                 print(len(rcd))
             else:
-             rcd = []
+                print("Use rcd from Dataframe return"   )
+                pass
+            
         except Exception as e:
             print(f"Error reading CSV file: {e}")
             rcd = []
