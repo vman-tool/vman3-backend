@@ -326,6 +326,7 @@ class InterVA5:
         if va_input_names[S-1].lower() != "i459o":
             raise IOError("error: the last variable should be 'i459o'")
         # va_data_csv = get_data("interva", "data/randomva5.csv")
+        ##
         va_data_csv =get_data("app.ccva.utilits.interva", "data/probbaseV5.csv")
         randomVA5 = read_csv(BytesIO(va_data_csv))
         valabels = randomVA5.columns
