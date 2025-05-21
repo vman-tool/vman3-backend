@@ -53,6 +53,7 @@ settings_router = APIRouter(
 @settings_router.get("/system_configs", status_code=status.HTTP_200_OK, response_model=ResponseMainModel)
 async def get_configs_settings(
     db: StandardDatabase = Depends(get_arangodb_session)):
+    print("Fetching system configs")
 
     response = await fetch_configs_settings( db=db)
     return response

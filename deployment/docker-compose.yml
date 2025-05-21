@@ -18,6 +18,7 @@ services:
     ports:
       - '8080:8080'
     volumes:
+      - ./ccva_files:/app/ccva_files
       - ./app:/app
       - .settings.json:/vman3/settings.json
     environment:

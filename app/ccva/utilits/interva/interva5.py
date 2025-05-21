@@ -25,13 +25,13 @@ from math import isclose
 from os import chdir, getcwd, mkdir, path
 from pkgutil import get_data
 
-from interva.data.causetext import CAUSETEXTV5
-from interva.utils import _get_dem_groups
+from app.ccva.utilits.interva.data.causetext import CAUSETEXTV5
+from app.ccva.utilits.interva.utils import _get_dem_groups
 from numpy import (argsort, array, concatenate, copy, delete, nan, nanmax,
                    nansum, ndarray, where)
 from pandas import (DataFrame, Index, Series, isna, read_csv, read_excel,
                     set_option, to_numeric)
-from vacheck.datacheck5 import datacheck5
+from app.ccva.utilits.vacheck.datacheck5 import datacheck5
 
 
 class InterVA5:
@@ -302,19 +302,30 @@ class InterVA5:
             logger.addHandler(file_handler)
             now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             logger.info(f"Error & warning log built for InterVA5 {now}\n")
-        if isinstance(self.va_input, str) and self.va_input[-4:] == ".csv":
-            self.va_input = read_csv(self.va_input)
+        if isinstance(self.va_input, str) and self.va_input.endswith(".csv"):
+            print(f"Attempting to load VA input file: {self.va_input}")
+            if not path.exists(self.va_input):
+                raise FileNotFoundError(f"File not found: {self.va_input}")
+            if path.getsize(self.va_input) == 0:
+                print("File is empty")
+                raise IOError(f"File is empty: {self.va_input}")
+            self.va_input = read_csv(self.va_input, encoding="utf-8", engine="python")
+            print("CSV successfully read.")
+
+            
         if "i183o" in self.va_input.columns:
             self.va_input.rename(columns={"i183o": "i183a"}, inplace=True)
             print(
                 "Due to the inconsistent names in the early version of "
                 "InterVA5, the indicator 'i183o' has been renamed as 'i183a'.")
-
+        print("VA input data loaded.")
         va_data = self.va_input.copy()
         va_input_names = va_data.columns
         id_inputs = va_data.iloc[:, 0]
         va_data = va_data.to_numpy()
         if va_data.shape[0] < 1:
+            elapsed_time =f"{(datetime.datetime.now() - self.start_time).seconds // 3600}:{(datetime.datetime.now() - self.start_time).seconds // 60 % 60}:{(datetime.datetime.now() - self.start_time).seconds % 60}"
+            asyncio.run(self.update_callback({"progress": 90,"message": "Running InterVA5 analysis...","elapsed_time": elapsed_time,"total_records":self.va_input.shape[0], "error": False}))
             raise IOError("error: no data input")
         N = va_data.shape[0]
         S = va_data.shape[1]
@@ -979,6 +990,8 @@ class InterVA5:
         set_option("display.max_columns", None)
         indiv_prob = self.get_indiv_prob(top, include_propensities)
         filename = filename + ".csv"
+        print()
+        print(indiv_prob)
         indiv_prob.to_csv(filename, index=False)
 
 

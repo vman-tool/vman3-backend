@@ -9,8 +9,8 @@ from typing import Dict, Optional
 import numpy as np
 import pandas as pd
 from arango.database import StandardDatabase
-from interva.utils import csmf
-from pycrossva.transform import transform
+from app.ccva.utilits.interva.utils import csmf
+from app.ccva.utilits.pycrossva.transform import transform
 
 from app.ccva.models.ccva_models import InterVA5Progress
 from app.ccva.utilits.interva.interva5 import InterVA5
@@ -37,7 +37,9 @@ async def get_record_to_run_ccva(current_user:dict,db: StandardDatabase,data_sou
         return records
     except Exception as e:
         print(e)
-        pass
+        # logger.error(f"Error fetching ODK data: {e}")
+        # print(e)
+        raise Exception(status_code=500, detail=str(e))
         
 
         
@@ -105,7 +107,7 @@ def runCCVA(odk_raw:pd.DataFrame, id_col: str = None,date_col:str =None,start_ti
             top=10, undetermined: bool = True, malaria: str = "h", hiv: str = "h",
             file_id: str = "unnamed_file", update_callback=None, db: StandardDatabase=None):
     
-    try:
+    # try:
         print('pass here 0', file_id,instrument,id_col)
         # Transform the input data
         if id_col:
@@ -114,11 +116,25 @@ def runCCVA(odk_raw:pd.DataFrame, id_col: str = None,date_col:str =None,start_ti
             input_data = transform((instrument, algorithm), odk_raw, lower=True)
         print('pass here')
         # Define the output folder
-        output_folder = "./ccva_files/"
+
+        output_folder = os.path.dirname(os.path.abspath(__file__))
+        # create subdirectory for the task
+        output_folder = os.path.join(output_folder, "ccva_files")
+        output_folder=output_folder+'/'
+        os.makedirs(output_folder, exist_ok=True)
+        # check write permission
+        if not os.access(output_folder, os.W_OK):
+            print(f"Write permission denied for {output_folder}")
+            raise PermissionError(f"Write permission denied for {output_folder}")
+        
+        # check read permission
+        print(f'Output directory ready: {output_folder}')
         # output_folder = f"../ccva_files/{file_id}/"
         print('pass here 2')
         # Create an InterVA5 instance with the async callback
-        iv5out = InterVA5(input_data,task_id=file_id, hiv=hiv, malaria=malaria, write=True, directory=output_folder, filename=file_id,start_time=start_time, update_callback=update_callback, return_checked_data=True)
+        iv5out = InterVA5(input_data,task_id=file_id, hiv=hiv, malaria=malaria, write=True,
+                          directory=output_folder,
+                          filename=file_id,start_time=start_time, update_callback=update_callback, return_checked_data=True)
 
         asyncio.run(update_callback(InterVA5Progress(
         progress=7,
@@ -130,28 +146,47 @@ def runCCVA(odk_raw:pd.DataFrame, id_col: str = None,date_col:str =None,start_ti
         error=False
     ).model_dump_json()))
         
+        print('before run')
         # Run the InterVA5 analysis, with progress updates via the async callback
         iv5out.run()
+        print('after run')
         records =  iv5out.get_indiv_prob(
             top=10,
             include_propensities=False
         )
+        print('after get_indiv_prob')
        ## TODOS: find the corect way to load data from records (fuction)
         rcd = records.to_dict(orient='records')
         # pd.DataFrame(rcd).to_csv(f"{output_folder}{file_id}_ccva_results-test.csv")
         # get from csv(official)
-        rcd = pd.read_csv(f"{output_folder}{file_id}.csv").to_dict(orient='records')
+        print('rcd total')
+        print(len(rcd))
+        print(f"{output_folder}{file_id}.csv")
+        try:
+            csv_path = f"{output_folder}{file_id}.csv"
+            if os.path.exists(csv_path):
+                rcd = pd.read_csv(csv_path).to_dict(orient='records')
+                print("CSV file read successfully.")
+                print(len(rcd))
+            else:
+                if len(rcd) <= 0:
+                    rcd = []
+             
+        except Exception as e:
+            print(f"Error reading CSV file: {e}")
+            rcd = []
         print(len(rcd))
         # print(rcd)
         if rcd == [] or rcd is None:
             ensure_task(update_callback({"progress": 0, "message": "No records found", "status": 'error',"elapsed_time": f"{(datetime.now() - start_time).seconds // 3600}:{(datetime.now() - start_time).seconds // 60 % 60}:{(datetime.now() - start_time).seconds % 60}", "task_id": file_id, "error": True}))
+            raise Exception("No records found")
             return
         # Iterate over each dictionary and add the 'task_id' field
         for record in rcd:
             record["task_id"] = file_id
         # Insert the records into the database
       
-        
+        # print(rcd)
        # get the ccva form data (individual ones, eg, locations, gender, age_group) from the database and merge with the results
         results_to_insert = asyncio.run(getVADataAndMergeWithResults(db, null_convert_data(rcd)))
         if results_to_insert is None:
@@ -190,10 +225,10 @@ def runCCVA(odk_raw:pd.DataFrame, id_col: str = None,date_col:str =None,start_ti
             os.remove(log_path)
         return ccva_results
 
-    except Exception as e:
-        print(f"Error during CCVA analysis: {e}")
-        ensure_task(update_callback({"progress": 0, "message": f"Error during CCVA analysis: {e}", "status": 'error',"elapsed_time": f"{(datetime.now() - start_time).seconds // 3600}:{(datetime.now() - start_time).seconds // 60 % 60}:{(datetime.now() - start_time).seconds % 60}", "task_id": file_id, "error": True}))
-        
+    # except Exception as e:
+    #     print(f"Error during CCVA analysis: {e}")
+    #     ensure_task(update_callback({"progress": 0, "message": f"Error during CCVA analysis: {e}", "status": 'error',"elapsed_time": f"{(datetime.now() - start_time).seconds // 3600}:{(datetime.now() - start_time).seconds // 60 % 60}:{(datetime.now() - start_time).seconds % 60}", "task_id": file_id, "error": True}))
+    #     raise e
 
         
 
