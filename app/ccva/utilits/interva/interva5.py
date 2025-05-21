@@ -318,7 +318,7 @@ class InterVA5:
             print(
                 "Due to the inconsistent names in the early version of "
                 "InterVA5, the indicator 'i183o' has been renamed as 'i183a'.")
-
+        print("VA input data loaded.")
         va_data = self.va_input.copy()
         va_input_names = va_data.columns
         id_inputs = va_data.iloc[:, 0]
