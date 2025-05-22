@@ -136,10 +136,12 @@ def runCCVA(odk_raw:pd.DataFrame, id_col: str = None,date_col:str =None,start_ti
         
         # Run the InterVA5 analysis, with progress updates via the async callback
         iv5out.run()
+        print('after run')
         records =  iv5out.get_indiv_prob(
             top=10,
             include_propensities=False
         )
+        print('after get_indiv_prob')
        ## TODOS: find the corect way to load data from records (fuction)
         rcd = records.to_dict(orient='records')
         # pd.DataFrame(rcd).to_csv(f"{output_folder}{file_id}_ccva_results-test.csv")
