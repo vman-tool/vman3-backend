@@ -116,7 +116,7 @@ def runCCVA(odk_raw:pd.DataFrame, id_col: str = None,date_col:str =None,start_ti
             input_data = transform((instrument, algorithm), odk_raw, lower=True)
         print('pass here')
         # Define the output folder
-        output_folder = ""
+        output_folder = "ccva_files/"
         os.makedirs(output_folder, exist_ok=True)
         print(f'Output directory ready: {output_folder}')
         # output_folder = f"../ccva_files/{file_id}/"
