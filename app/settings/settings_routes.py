@@ -58,6 +58,11 @@ async def get_configs_settings(
     response = await fetch_configs_settings( db=db)
     return response
 
+
+@settings_router.get("/version", status_code=status.HTTP_200_OK)
+async def get_version():
+    return '3.1.0'
+
 @settings_router.post("/system_configs", status_code=status.HTTP_200_OK, response_model=ResponseMainModel)
 async def save_configs_settings(
     configData: SettingsConfigData,
