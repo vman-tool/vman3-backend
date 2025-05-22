@@ -6,9 +6,10 @@ vacheck.datacheck5
 Tool for running data checks used by InterVA5.
 """
 
+# 
 from .exceptions import VAInputException, VAIDException
 from pandas import read_csv, Series, DataFrame
-from pkgutil import get_data
+# from pkgutil import get_data
 from io import BytesIO
 from numpy import nan, ndarray, where, isnan
 import numpy
@@ -163,8 +164,9 @@ def get_example_input() -> DataFrame:
     :return: 200 records of sample input.
     :rtype: pandas.DataFrame
     """
+    from app.ccva.utilits.interva.interva5 import get_data
 
-    example_input_bytes = get_data(__name__, "data/example_input.csv")
+    example_input_bytes = get_data("vacheck", "example_input.csv")
     example_input = read_csv(BytesIO(example_input_bytes))
     return example_input
 
@@ -186,8 +188,8 @@ def get_probbase(drop_prior: bool = True,
     :return: symptom-cause-information matrix for InterVA5
     :rtype: numpy.array
     """
-
-    probbase_bytes = get_data(__name__, "data/probbaseV5.csv")
+    from app.ccva.utilits.interva.interva5 import get_data
+    probbase_bytes = get_data("vacheck","probbaseV5.csv")
     probbase = read_csv(BytesIO(probbase_bytes))
     # note: drop first row so it matches the input
     if drop_prior:
