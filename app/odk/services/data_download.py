@@ -1,3 +1,4 @@
+import datetime
 import json
 import time
 from json import loads
@@ -14,11 +15,42 @@ from app.odk.utils.data_transform import (assign_questions_options,
                                           odk_questions_formatter)
 from app.odk.utils.odk_client import ODKClientAsync
 from app.pcva.responses.va_response_classes import VAQuestionResponseClass
-from app.settings.services.odk_configs import fetch_odk_config
+from app.settings.services.odk_configs import fetch_odk_config, add_configs_settings
+from app.settings.models.settings import SettingsConfigData, SyncStatus
 from app.shared.configs.arangodb import (ArangoDBClient, get_arangodb_client,
                                          remove_null_values, sanitize_document)
 from app.shared.configs.constants import db_collections
 from app.shared.configs.models import ResponseMainModel
+
+
+async def update_sync_status_internal(db: StandardDatabase, last_sync_data_count: int, total_synced_data: int):
+    """Internal function to update sync status in the database"""
+    try:
+        # Ensure the system_configs collection exists
+        if not db.has_collection(db_collections.SYSTEM_CONFIGS):
+            db.create_collection(db_collections.SYSTEM_CONFIGS)
+            logger.info(f"Created {db_collections.SYSTEM_CONFIGS} collection")
+        
+        current_date = datetime.now().isoformat()
+        
+        sync_status = SyncStatus(
+            last_sync_date=current_date,
+            last_sync_data_count=last_sync_data_count,
+            total_synced_data=total_synced_data
+        )
+        
+        config_data = SettingsConfigData(
+            type="sync_status",
+            sync_status=sync_status
+        )
+        
+        result = await add_configs_settings(config_data, db)
+        logger.info(f"Sync status updated automatically: {current_date}, records: {last_sync_data_count}, total: {total_synced_data}")
+        return result
+        
+    except Exception as e:
+        logger.error(f"Error updating sync status automatically: {e}")
+        return None
 
 
 async def fetch_odk_data_initial(
@@ -197,17 +229,21 @@ async def fetch_odk_data_with_async(
                         await insert_data_to_arangodb(item)
                         records_saved += 1
 
-                        progress = (records_saved / total_data_count) * 100
+                        # Cap progress at 100% to prevent overflow
+                        progress = min((records_saved / total_data_count) * 100, 100.0)
                         if int(progress) != last_progress:
                             last_progress = int(progress)
                             elapsed_time = time.time() - start_time  # Update elapsed_time based on current time
+                            
+                            logger.info(f"Progress: {progress:.1f}% ({records_saved}/{total_data_count} records)")
                             
                             if websocket__manager:
                                 # await websocket__manager.broadcast(f"Progress: {progress:.0f}%")
                                 progress_data = {
                                     "total_records": total_data_count,
                                     "progress": progress,
-                                    "elapsed_time": elapsed_time
+                                    "elapsed_time": elapsed_time,
+                                    "records_processed": records_saved
                                 }
                                 await websocket__manager.broadcast("123",json.dumps(progress_data))
                             print(f"\rDownloading: [{'=' * int(progress // 2)}{' ' * (50 - int(progress // 2))}] {progress:.0f}% - Elapsed time: {elapsed_time:.2f}s", end='', flush=True)
@@ -249,6 +285,13 @@ async def fetch_odk_data_with_async(
             end_time = time.time()
             total_elapsed_time = end_time - start_time
             logger.info(f"Total elapsed time: {total_elapsed_time:.2f}s")
+
+            # Get current total data count from database after sync
+            current_records_info = await get_margin_dates_and_records_count(db)
+            current_total_data = current_records_info.get('total_records', 0) if current_records_info else 0
+            
+            # Update sync status automatically after sync completion
+            await update_sync_status_internal(db, records_saved, current_total_data)
 
             if records_saved == total_data_count:
                 logger.info(f"\nData inserted successfully: {records_saved} records - Total elapsed time: {total_elapsed_time:.2f}s")
@@ -293,6 +336,9 @@ async def fetch_form_questions(db: StandardDatabase):
 
             questions = [VAQuestionResponseClass(**question).model_dump() for question in questions]
             questions = { question['name']: question for question in questions} if len(questions) else []
+            
+            # Questions fetching doesn't update sync status - only actual data sync operations do
+            
             return ResponseMainModel(data=questions, message="Questions fetched successfully", total=count)
     except Exception as e:
         print(e)

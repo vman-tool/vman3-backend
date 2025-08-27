@@ -52,6 +52,7 @@ class FieldLabels(BaseModel):
     field_id: str
     label: Union[str, None] = None
     options: Union[Dict, None] = None
+
 # Define the models for cron and backup settings
 class CronSettings(BaseModel):
     days: List[str] = []
@@ -61,6 +62,12 @@ class BackupSettings(BaseModel):
     frequency: str = "daily"  # 'daily', 'weekly', 'monthly'
     time: str = "00:00"
     location: str = "local"  # 'local', 'cloud'
+
+# New model for tracking sync status
+class SyncStatus(BaseModel):
+    last_sync_date: Optional[str] = None  # ISO string format
+    last_sync_data_count: Optional[int] = 0  # Number of records received in last sync
+    total_synced_data: Optional[int] = 0  # Total cumulative data synced
 
 # class SettingsConfigData(BaseModel):
 #     type: Union[str, None] = 'odk_api_configs'  # Optional field with a default value
@@ -78,6 +85,8 @@ class SettingsConfigData(BaseModel):
     field_labels: Union[List[FieldLabels], None] = None
     cron_settings: Union[CronSettings, None] = None  # New field for cron settings
     backup_settings: Union[BackupSettings, None] = None  # New field for backup settings
+    sync_status: Union[SyncStatus, None] = None  # New field for sync status tracking
+
 class ImagesConfigData(BaseModel):
     logo: Union[str, None] = None
     favicon: Union[str, None] = None
