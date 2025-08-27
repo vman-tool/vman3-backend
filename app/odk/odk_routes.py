@@ -11,6 +11,9 @@ from app.shared.configs.arangodb import get_arangodb_session
 from app.shared.configs.models import ResponseMainModel
 from app.utilits.db_logger import db_logger, log_to_db
 from app.utilits.logger import app_logger
+from app.settings.services.odk_configs import add_configs_settings
+from app.settings.models.settings import SettingsConfigData, SyncStatus
+from app.shared.configs.constants import db_collections
 odk_router = APIRouter(
     prefix="/odk",
     tags=["ODK"],
@@ -130,6 +133,100 @@ async def get_form_questions(
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# Manual sync status update endpoint removed - sync status is now updated automatically by backend
+
+
+@log_to_db(context="get_sync_status", log_args=True)
+@odk_router.get("/sync_status", status_code=status.HTTP_200_OK)
+async def get_sync_status(
+    db: StandardDatabase = Depends(get_arangodb_session)
+) -> ResponseMainModel:
+    """Get the current sync status from settings configuration"""
+    try:
+        # Check if the collection exists first
+        if not db.has_collection(db_collections.SYSTEM_CONFIGS):
+            # Get current total data count even if no sync status exists
+            from app.odk.services.data_download import get_margin_dates_and_records_count
+            current_records_info = await get_margin_dates_and_records_count(db)
+            current_total_data = current_records_info.get('total_records', 0) if current_records_info else 0
+            
+            # Collection doesn't exist, return default sync status with current data count
+            default_sync_status = {
+                "last_sync_date": None,
+                "last_sync_data_count": 0,
+                "total_synced_data": current_total_data,
+                "available_data_count": current_total_data,
+                "earliest_date": current_records_info.get('earliest_date') if current_records_info else None,
+                "latest_date": current_records_info.get('latest_date') if current_records_info else None
+            }
+            return ResponseMainModel(
+                data=default_sync_status,
+                message="System configs collection not found, returning default sync status with current data count"
+            )
+        
+        # Get the current sync status from system_configs collection
+        config_data = db.collection(db_collections.SYSTEM_CONFIGS).get('vman_config')
+        
+        # Get current total data count from database
+        from app.odk.services.data_download import get_margin_dates_and_records_count
+        current_records_info = await get_margin_dates_and_records_count(db)
+        current_total_data = current_records_info.get('total_records', 0) if current_records_info else 0
+        
+        if config_data and 'sync_status' in config_data:
+            sync_status = config_data['sync_status']
+            # Update total_synced_data with current database count
+            sync_status['total_synced_data'] = current_total_data
+            
+            # Also include form submission status data
+            sync_status['available_data_count'] = current_total_data
+            if current_records_info:
+                sync_status['earliest_date'] = current_records_info.get('earliest_date')
+                sync_status['latest_date'] = current_records_info.get('latest_date')
+            
+            return ResponseMainModel(
+                data=sync_status,
+                message="Sync status retrieved successfully"
+            )
+        else:
+            # Return default sync status with current database count
+            default_sync_status = {
+                "last_sync_date": None,
+                "last_sync_data_count": 0,
+                "total_synced_data": current_total_data,
+                "available_data_count": current_total_data,
+                "earliest_date": current_records_info.get('earliest_date') if current_records_info else None,
+                "latest_date": current_records_info.get('latest_date') if current_records_info else None
+            }
+            return ResponseMainModel(
+                data=default_sync_status,
+                message="No sync status found, returning default with current data count"
+            )
+        
+    except Exception as e:
+        print(f"Error getting sync status: {e}")
+        # Return default sync status instead of raising an error
+        try:
+            from app.odk.services.data_download import get_margin_dates_and_records_count
+            current_records_info = await get_margin_dates_and_records_count(db)
+            current_total_data = current_records_info.get('total_records', 0) if current_records_info else 0
+        except:
+            current_total_data = 0
+            current_records_info = None
+            
+        default_sync_status = {
+            "last_sync_date": None,
+            "last_sync_data_count": 0,
+            "total_synced_data": current_total_data,
+            "available_data_count": current_total_data,
+            "earliest_date": current_records_info.get('earliest_date') if current_records_info else None,
+            "latest_date": current_records_info.get('latest_date') if current_records_info else None
+        }
+        return ResponseMainModel(
+            data=default_sync_status,
+            message=f"Error retrieving sync status: {str(e)}, returning default with current data count"
+        )
 
 
 

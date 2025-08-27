@@ -18,7 +18,7 @@ from fastapi import (
 )
 
 from app.ccva.services.ccva_upload import insert_all_csv_data
-from app.settings.models.settings import ImagesConfigData, SettingsConfigData
+from app.settings.models.settings import ImagesConfigData, SettingsConfigData, SyncStatus
 from app.settings.services.cron import BackupSettings, CronSettings, fetch_backup_settings, fetch_cron_settings, save_backup_settings, save_cron_settings
 from app.settings.services.odk_configs import (
     add_configs_settings,
@@ -27,6 +27,7 @@ from app.settings.services.odk_configs import (
     get_system_images,
     save_system_images,
 )
+from datetime import datetime
 from app.shared.configs.arangodb import get_arangodb_session
 from app.shared.configs.constants import AccessPrivileges, db_collections
 from app.shared.configs.models import ResponseMainModel
@@ -37,6 +38,46 @@ from app.utilits.helpers import delete_file, save_file
 from app.utilits.schedeular import schedule_odk_fetch_job
 
 # from sqlalchemy.orm import Session
+
+async def get_current_total_data_count(db: StandardDatabase):
+    """Get current total data count from VA records collection"""
+    try:
+        query = f"RETURN LENGTH(FOR doc IN {db_collections.VA_TABLE} RETURN 1)"
+        result = db.aql.execute(query=query, cache=True).next()
+        return result if result is not None else 0
+    except Exception as e:
+        print(f"Error getting total data count: {e}")
+        return 0
+
+async def update_csv_sync_status(db: StandardDatabase, uploaded_records_count: int):
+    """Update sync status after CSV upload"""
+    try:
+        # Ensure the system_configs collection exists
+        if not db.has_collection(db_collections.SYSTEM_CONFIGS):
+            db.create_collection(db_collections.SYSTEM_CONFIGS)
+            print(f"Created {db_collections.SYSTEM_CONFIGS} collection")
+        
+        current_date = datetime.now().isoformat()
+        current_total_data = await get_current_total_data_count(db)
+        
+        sync_status = SyncStatus(
+            last_sync_date=current_date,
+            last_sync_data_count=uploaded_records_count,
+            total_synced_data=current_total_data
+        )
+        
+        config_data = SettingsConfigData(
+            type="sync_status",
+            sync_status=sync_status
+        )
+        
+        result = await add_configs_settings(config_data, db)
+        print(f"CSV sync status updated: {current_date}, uploaded: {uploaded_records_count}, total: {current_total_data}")
+        return result
+        
+    except Exception as e:
+        print(f"Error updating CSV sync status: {e}")
+        return None
 
 
 settings_router = APIRouter(
@@ -53,10 +94,17 @@ settings_router = APIRouter(
 @settings_router.get("/system_configs", status_code=status.HTTP_200_OK, response_model=ResponseMainModel)
 async def get_configs_settings(
     db: StandardDatabase = Depends(get_arangodb_session)):
-    print("Fetching system configs")
-
-    response = await fetch_configs_settings( db=db)
-    return response
+    # Note: Removed print statement to prevent log spam
+    try:
+        response = await fetch_configs_settings(db=db)
+        return response
+    except Exception as e:
+        print(f"Error fetching system configs: {e}")
+        # Return a default response instead of failing completely
+        return ResponseMainModel(
+            data={},
+            message="Failed to fetch system configs, returning defaults"
+        )
 
 
 @settings_router.get("/version", status_code=status.HTTP_200_OK)
@@ -242,7 +290,10 @@ async def upload_csv(
         await insert_all_csv_data(recordsDF)
         print('after insert_all_csv_data')
 
-        return ResponseMainModel(data={"task_id": task_id, "total_records": 0,}, message="CCVA is running with uploaded CSV data...")
+        # Update sync status after successful CSV upload
+        await update_csv_sync_status(db, len(recordsDF))
+
+        return ResponseMainModel(data={"task_id": task_id, "total_records": len(recordsDF),}, message="CSV data uploaded successfully and sync status updated")
 
     except Exception as e:
         # Raising the error so FastAPI can handle it
