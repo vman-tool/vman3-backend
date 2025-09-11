@@ -82,41 +82,41 @@ async def fetch_odk_data_with_async_endpoint(
     start_date: str = None,
     end_date: str = None,
     skip: int = 0,
-    top: int = 3000,
+    top: int = 1,
     force_update: bool = Query(default=False),
     db: StandardDatabase = Depends(get_arangodb_session)
 ):
     app_logger.info(f"Fetching ODK data with async: {datetime.now().isoformat()}")
     app_logger.info(f"Start date: {start_date}, End date: {end_date}, Skip: {skip}, Top: {top}")
-    # app_logger.info(f"Force update: {force_update}")
-    # app_logger.info(f"Database: {db}")
+    
     try:
-        # Wrap the async function call inside an async function to use create_task
-        async def start_fetch(total_data_count,start_date,top,skip, ):
-            await data_download.fetch_odk_data_with_async(
-                db=db,
-                start_date=start_date,
-                end_date=end_date,
-                skip=skip,
-                top=top,
-                # start_time=start_time,
-                total_data_count=total_data_count
-            )
-        response = await data_download.fetch_odk_data_initial(
-                db=db,
-                start_date=start_date,
-                end_date=end_date,
-                skip=skip,
-                top=top,
-                force_update=force_update
-            )
+        # First, do initial validation and get data count
+        initial_response = await data_download.fetch_odk_data_initial(
+            db=db,
+            start_date=start_date,
+            end_date=end_date,
+            skip=skip,
+            top=top,
+            force_update=force_update
+        )
 
- 
-        # Add this wrapped task to background tasks
-        if response['download_status'] is True:
-            background_tasks.add_task(start_fetch, response['total_data_count'], response['start_date'], top, skip)
+        # If download is needed, start the background fetch task
+        if initial_response.get('download_status') is True:
+            # Create a proper background task function
+            async def background_fetch_task():
+                await data_download.fetch_odk_data_with_async(
+                    db=db,
+                    start_date=initial_response.get('start_date'),
+                    end_date=end_date,
+                    skip=skip,
+                    top=top,
+                    total_data_count=initial_response.get('total_data_count', 0)
+                )
             
-        return {"status": "Data fetch initiated", **response }
+            # Add the background task
+            background_tasks.add_task(background_fetch_task)
+            
+        return {"status": "Data fetch initiated", **initial_response}
 
     except Exception as e:
         print(e)
