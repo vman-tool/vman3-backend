@@ -371,6 +371,43 @@ async def upload_csv(
 
 # Add these endpoints to your existing settings_router
 
+@settings_router.get("/sync-settings", status_code=status.HTTP_200_OK, response_model=ResponseMainModel)
+async def get_sync_settings(
+    current_user = Depends(get_current_user),
+    db: StandardDatabase = Depends(get_arangodb_session)):
+    """Get both cron and backup settings in one API call"""
+    try:
+        # Query to get the vman_config document with both cron and backup settings
+        aql_query = f"""
+        FOR settings in {db_collections.SYSTEM_CONFIGS}
+        FILTER settings._key == 'vman_config'
+        RETURN {{
+            cron_settings: settings.cron_settings,
+            backup_settings: settings.backup_settings
+        }}
+        """
+        cursor = db.aql.execute(aql_query, bind_vars={}, cache=True)
+        settings_data = [doc for doc in cursor]
+        
+        # If no settings found, return default settings
+        if not settings_data or not settings_data[0]:
+            settings_data = [{
+                "cron_settings": {"days": [], "time": "00:00"},
+                "backup_settings": {
+                    "frequency": "daily",
+                    "time": "00:00",
+                    "location": "local"
+                }
+            }]
+        
+        return ResponseMainModel(
+            data=settings_data[0],
+            message="Sync settings fetched successfully"
+        )
+    except Exception as e:
+        print(e)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+
 @settings_router.get("/cron", status_code=status.HTTP_200_OK, response_model=ResponseMainModel)
 async def get_cron_settings(
     current_user = Depends(get_current_user),
