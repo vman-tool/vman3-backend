@@ -1,5 +1,6 @@
 from contextlib import asynccontextmanager
 import json
+import asyncio
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from arango.database import StandardDatabase
@@ -22,32 +23,82 @@ from app.utilits.schedeular import shutdown_scheduler, start_scheduler
 
 logger.add("./logs/app.log", rotation="500 MB")
 scheduler = AsyncIOScheduler()
+
+# Track initialization status
+app_status = {
+    "server_ready": False,
+    "db_logger_ready": False,
+    "scheduler_ready": False,
+    "default_account_ready": False,
+    "initialization_complete": False
+}
+
+async def initialize_db_logger():
+    """Initialize database logger in background"""
+    try:
+        await get_db_logger()
+        app_status["db_logger_ready"] = True
+        logger.info("✅ Database logger initialized")
+    except Exception as e:
+        logger.error(f"❌ Failed to initialize database logger: {e}")
+
+async def initialize_scheduler():
+    """Initialize scheduler in background"""
+    try:
+        await start_scheduler()
+        app_status["scheduler_ready"] = True
+        logger.info("✅ Scheduler initialized")
+    except Exception as e:
+        logger.error(f"❌ Failed to initialize scheduler: {e}")
+
+async def initialize_default_account():
+    """Initialize default account in background"""
+    try:
+        await default_account_creation()
+        app_status["default_account_ready"] = True
+        logger.info("✅ Default account initialized")
+    except Exception as e:
+        logger.error(f"❌ Failed to initialize default account: {e}")
+
+async def run_background_initialization():
+    """Run all initialization tasks concurrently"""
+    # Small delay to ensure server is fully ready
+    await asyncio.sleep(0.5)
+    
+    logger.info("🚀 Starting background initialization tasks...")
+    
+    # Run all initialization tasks concurrently
+    await asyncio.gather(
+        initialize_db_logger(),
+        initialize_scheduler(),
+        initialize_default_account(),
+        return_exceptions=True  # Don't fail if one task fails
+    )
+    
+    app_status["initialization_complete"] = True
+    logger.info("✅ Background initialization completed")
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Application startup logic
-    logger.info("Application startup")
-    logger.info("Visit http://localhost:8080/vman/api/v1/docs for the API documentation (Swagger UI)")
-    logger.info("Visit http://localhost:8080/vman/api/v1 for the main API")
-
-    # scheduler.add_job(schedulers. scheduled_failed_chucks_retry, IntervalTrigger(minutes=60*3))
-    # scheduler.add_job(data_download. fetch_odk_data_with_async, CronTrigger(hour=18, minute=0))
-    # scheduler.start()
-    # await db_logger.ensure_collection()
-    await get_db_logger()
-    await start_scheduler()
-    await default_account_creation()
+    logger.info("🚀 Application startup")
+    logger.info("📚 Visit http://localhost:8080/vman/api/v1/docs for the API documentation (Swagger UI)")
+    logger.info("🌐 Visit http://localhost:8080/vman/api/v1 for the main API")
+    
+    # Mark server as ready immediately
+    app_status["server_ready"] = True
+    
+    # Start background initialization tasks without blocking
+    asyncio.create_task(run_background_initialization())
     
     try:
         yield
     finally:
         # Application shutdown logic
-        logger.info("Application shutdown")
-            # Shutdown the scheduler
-    shutdown_scheduler()
-    
-    # Flush any remaining logs
-    # await db_logger.flush_buffer()
-    scheduler.shutdown()
+        logger.info("🛑 Application shutdown")
+        shutdown_scheduler()
+        scheduler.shutdown()
+        logger.info("✅ Shutdown completed")
         
 
 def create_application():
@@ -99,6 +150,16 @@ app.add_middleware(
 # app.add_middleware(GlobalErrorMiddleware)
 
     
+@app.get("/health")
+@app.get("/vman/api/v1/health")
+async def health_check():
+    """Health check endpoint to monitor initialization status"""
+    return {
+        "status": "healthy" if app_status["server_ready"] else "starting",
+        "initialization_status": app_status,
+        "message": "VMan API v3 is running" if app_status["server_ready"] else "VMan API v3 is starting up"
+    }
+
 @app.get("/vman/api/v1", response_class=HTMLResponse)
 @app.get("/vman", response_class=HTMLResponse)
 @app.get("/", response_class=HTMLResponse)
@@ -107,25 +168,100 @@ async def get():
     """
     Welcome to the vman3 API
     """
-    return HTMLResponse("""
+    # Show initialization status in the welcome page
+    status_emoji = "✅" if app_status["initialization_complete"] else "⏳"
+    status_text = "All systems ready" if app_status["initialization_complete"] else "Initializing..."
+    
+    return HTMLResponse(f"""
         <!DOCTYPE html>
         <html>
             <head>
                 <meta charset="utf-8">
                 <meta http-equiv="X-UA-Compatible" content="IE=edge">
-                <title></title>
-                <meta name="description" content="">
+                <title>VMan API v3</title>
+                <meta name="description" content="VMan API v3 - Verbal Autopsy Management System">
                 <meta name="viewport" content="width=device-width, initial-scale=1">
-                <link rel="stylesheet" href="">
                 <style>
-                    .text-center {
+                    body {{
+                        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+                        margin: 0;
+                        padding: 40px 20px;
+                        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                        color: white;
+                        min-height: 100vh;
+                    }}
+                    .container {{
+                        max-width: 800px;
+                        margin: 0 auto;
                         text-align: center;
-                    }        
+                    }}
+                    .status {{
+                        background: rgba(255, 255, 255, 0.1);
+                        padding: 20px;
+                        border-radius: 10px;
+                        margin: 20px 0;
+                        backdrop-filter: blur(10px);
+                    }}
+                    .status-item {{
+                        display: flex;
+                        justify-content: space-between;
+                        margin: 10px 0;
+                        padding: 10px;
+                        background: rgba(255, 255, 255, 0.05);
+                        border-radius: 5px;
+                    }}
+                    .status-emoji {{
+                        font-size: 1.2em;
+                    }}
+                    .links {{
+                        margin-top: 30px;
+                    }}
+                    .links a {{
+                        display: inline-block;
+                        margin: 10px;
+                        padding: 15px 30px;
+                        background: rgba(255, 255, 255, 0.2);
+                        color: white;
+                        text-decoration: none;
+                        border-radius: 25px;
+                        transition: all 0.3s ease;
+                    }}
+                    .links a:hover {{
+                        background: rgba(255, 255, 255, 0.3);
+                        transform: translateY(-2px);
+                    }}
                 </style>
             </head>
             <body>
-                <h1 class="text-center">Welcome to the VMan API v3</h1>
-                <p class="text-center">To view documentation click to <a href="/vman/api/v1/docs">here</a> and enjoy</p>
+                <div class="container">
+                    <h1>🚀 Welcome to VMan API v3</h1>
+                    <p>Verbal Autopsy Management System</p>
+                    
+                    <div class="status">
+                        <h3>{status_emoji} System Status: {status_text}</h3>
+                        <div class="status-item">
+                            <span>Server Ready</span>
+                            <span class="status-emoji">{'✅' if app_status['server_ready'] else '⏳'}</span>
+                        </div>
+                        <div class="status-item">
+                            <span>Database Logger</span>
+                            <span class="status-emoji">{'✅' if app_status['db_logger_ready'] else '⏳'}</span>
+                        </div>
+                        <div class="status-item">
+                            <span>Scheduler</span>
+                            <span class="status-emoji">{'✅' if app_status['scheduler_ready'] else '⏳'}</span>
+                        </div>
+                        <div class="status-item">
+                            <span>Default Account</span>
+                            <span class="status-emoji">{'✅' if app_status['default_account_ready'] else '⏳'}</span>
+                        </div>
+                    </div>
+                    
+                    <div class="links">
+                        <a href="/vman/api/v1/docs">📚 API Documentation</a>
+                        <a href="/health">🔍 Health Check</a>
+                    </div>
+                </div>
             </body>
         </html>
     """)
