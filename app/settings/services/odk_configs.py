@@ -147,6 +147,10 @@ async def add_configs_settings(configData: SettingsConfigData, db: StandardDatab
         elif configData.type == 'backup_settings' and configData.backup_settings:
             data['backup_settings'] = configData.backup_settings.model_dump()
             
+        # Add handling for sync status
+        elif configData.type == 'sync_status' and configData.sync_status:
+            data['sync_status'] = configData.sync_status.model_dump()
+            
         else:
             raise ValueError("Invalid type or missing configuration data")
 
