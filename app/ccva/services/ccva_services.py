@@ -9,8 +9,8 @@ from typing import Dict, Optional
 import numpy as np
 import pandas as pd
 from arango.database import StandardDatabase
-from interva.utils import csmf
-from pycrossva.transform import transform
+from app.ccva.utilits.interva.utils import csmf
+from app.ccva.utilits.pycrossva.transform import transform
 
 from app.ccva.models.ccva_models import InterVA5Progress
 from app.ccva.utilits.interva.interva5 import InterVA5
@@ -37,7 +37,9 @@ async def get_record_to_run_ccva(current_user:dict,db: StandardDatabase,data_sou
         return records
     except Exception as e:
         print(e)
-        pass
+        # logger.error(f"Error fetching ODK data: {e}")
+        # print(e)
+        raise Exception(status_code=500, detail=str(e))
         
 
         
@@ -114,7 +116,9 @@ def runCCVA(odk_raw:pd.DataFrame, id_col: str = None,date_col:str =None,start_ti
             input_data = transform((instrument, algorithm), odk_raw, lower=True)
         print('pass here')
         # Define the output folder
-        output_folder = "./ccva_files/"
+        output_folder = "ccva_files/"
+        os.makedirs(output_folder, exist_ok=True)
+        print(f'Output directory ready: {output_folder}')
         # output_folder = f"../ccva_files/{file_id}/"
         print('pass here 2')
         # Create an InterVA5 instance with the async callback
@@ -132,19 +136,37 @@ def runCCVA(odk_raw:pd.DataFrame, id_col: str = None,date_col:str =None,start_ti
         
         # Run the InterVA5 analysis, with progress updates via the async callback
         iv5out.run()
+        print('after run')
         records =  iv5out.get_indiv_prob(
             top=10,
             include_propensities=False
         )
+        print('after get_indiv_prob')
        ## TODOS: find the corect way to load data from records (fuction)
         rcd = records.to_dict(orient='records')
         # pd.DataFrame(rcd).to_csv(f"{output_folder}{file_id}_ccva_results-test.csv")
         # get from csv(official)
-        rcd = pd.read_csv(f"{output_folder}{file_id}.csv").to_dict(orient='records')
+        print('rcd total')
+        print(len(rcd))
+        try:
+            # Check if the CSV (responce of ccva results from file)  if file exists 
+            csv_path = f"{output_folder}{file_id}.csv"
+            if os.path.exists(csv_path):
+                rcd = pd.read_csv(csv_path).to_dict(orient='records')
+                print("CSV file read successfully.")
+                print(len(rcd))
+            else:
+                print("Use rcd from Dataframe return"   )
+                pass
+            
+        except Exception as e:
+            print(f"Error reading CSV file: {e}")
+            rcd = []
         print(len(rcd))
         # print(rcd)
         if rcd == [] or rcd is None:
             ensure_task(update_callback({"progress": 0, "message": "No records found", "status": 'error',"elapsed_time": f"{(datetime.now() - start_time).seconds // 3600}:{(datetime.now() - start_time).seconds // 60 % 60}:{(datetime.now() - start_time).seconds % 60}", "task_id": file_id, "error": True}))
+            raise Exception("No records found")
             return
         # Iterate over each dictionary and add the 'task_id' field
         for record in rcd:
@@ -193,7 +215,7 @@ def runCCVA(odk_raw:pd.DataFrame, id_col: str = None,date_col:str =None,start_ti
     except Exception as e:
         print(f"Error during CCVA analysis: {e}")
         ensure_task(update_callback({"progress": 0, "message": f"Error during CCVA analysis: {e}", "status": 'error',"elapsed_time": f"{(datetime.now() - start_time).seconds // 3600}:{(datetime.now() - start_time).seconds // 60 % 60}:{(datetime.now() - start_time).seconds % 60}", "task_id": file_id, "error": True}))
-        
+        raise e
 
         
 

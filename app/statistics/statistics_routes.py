@@ -10,6 +10,7 @@ from app.shared.configs.models import ResponseMainModel
 from app.statistics.services.charts import fetch_charts_statistics
 from app.statistics.services.submissions import fetch_submissions_statistics
 from app.users.decorators.user import get_current_user
+from app.utilits.db_logger import db_logger, log_to_db
 
 # from sqlalchemy.orm import Session
 
@@ -22,7 +23,7 @@ statistics_router = APIRouter(
 
 
 
-     
+@log_to_db(context="get_submissions_statistics", log_args=True)
 @statistics_router.get("/submissions", status_code=status.HTTP_200_OK, response_model=ResponseMainModel)
 async def get_submissions_statistics(
       current_user = Depends(get_current_user),
@@ -39,7 +40,7 @@ async def get_submissions_statistics(
     response = await fetch_submissions_statistics(  current_user=current_user,paging=allow_paging, page_number=page_number, limit=limit, start_date=start_date, end_date=end_date,locations=locations.split(",") if locations else None,date_type=date_type, db=db)
     return response
 
-
+@log_to_db(context="get_charts_statistics", log_args=True)
 @statistics_router.get("/charts", status_code=status.HTTP_200_OK, response_model=ResponseMainModel)
 async def get_charts_statistics(
     current_user = Depends(get_current_user),

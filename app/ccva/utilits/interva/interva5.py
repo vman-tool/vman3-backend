@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+from pathlib import Path
 from typing import TYPE_CHECKING, Callable, Optional, Union
 
 if TYPE_CHECKING:
@@ -23,15 +24,15 @@ from io import BytesIO
 from logging import INFO, FileHandler, getLogger
 from math import isclose
 from os import chdir, getcwd, mkdir, path
-from pkgutil import get_data
+# from pkgutil import get_data
 
-from interva.data.causetext import CAUSETEXTV5
-from interva.utils import _get_dem_groups
+from app.ccva.utilits.interva.data.causetext import CAUSETEXTV5
+from app.ccva.utilits.interva.utils import _get_dem_groups
 from numpy import (argsort, array, concatenate, copy, delete, nan, nanmax,
                    nansum, ndarray, where)
 from pandas import (DataFrame, Index, Series, isna, read_csv, read_excel,
                     set_option, to_numeric)
-from vacheck.datacheck5 import datacheck5
+from app.ccva.utilits.vacheck.datacheck5 import datacheck5
 
 
 class InterVA5:
@@ -323,7 +324,7 @@ class InterVA5:
                 "error: invalid data input format. Number of values incorrect")
         if va_input_names[S-1].lower() != "i459o":
             raise IOError("error: the last variable should be 'i459o'")
-        va_data_csv = get_data("interva", "data/randomva5.csv")
+        va_data_csv = get_data("interva", "randomva5.csv")
         randomVA5 = read_csv(BytesIO(va_data_csv))
         valabels = randomVA5.columns
         count_changelabel = 0
@@ -990,7 +991,7 @@ def get_example_input() -> DataFrame:
     :rtype: pandas.DataFrame
     """
 
-    example_input_bytes = get_data(__name__, "data/randomva5.csv")
+    example_input_bytes = get_data("vacheck", "randomva5.csv")
     example_input = read_csv(BytesIO(example_input_bytes))
     return example_input
 
@@ -1006,11 +1007,11 @@ def get_probbase(version: str = "19") -> DataFrame:
     """
 
     if version == "19":
-        probbase_bytes = get_data(__name__, "data/probbaseV5_19.csv")
+        probbase_bytes = get_data('interva', "probbaseV5_19.csv")
         probbase = read_csv(BytesIO(probbase_bytes))
         # note: version 19 does not have first row included in v18
     else:
-        probbase_xls = get_data("interva", "data/probbase.xls")
+        probbase_xls = get_data("interva", "probbase.xls")
         probbase = read_excel(probbase_xls)
         # note: drop first row so it matches the input
         probbase.drop([probbase.index[0]], inplace=True)
@@ -1022,3 +1023,18 @@ def get_probbase(version: str = "19") -> DataFrame:
 async def websocket_broadcast(progress_data):
     from app.main import websocket__manager
     await websocket__manager.broadcast(json.dumps(progress_data))
+    
+def get_data(package: str, filename: str) -> bytes:
+    current_dir = Path(__file__).resolve().parent
+    print(f"Original current_dir: {current_dir}")
+
+    if package and current_dir.name != package:
+        # Replace the last part of the path with `package`
+        current_dir = current_dir.parent / package
+        print(f"Adjusted current_dir to match package: {current_dir}")
+
+    pathname = current_dir / "data" / filename
+    print(f"Final path to file: {pathname}")
+
+    with open(pathname, "rb") as file:
+        return file.read()

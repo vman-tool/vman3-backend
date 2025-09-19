@@ -1,0 +1,245 @@
+﻿New Column Name,New Column Documentation,Source Column ID,Source Column Documentation,Relationship,Condition,Prerequisite
+ADULT,Was (s)he aged 15-49 years at death?,#NAME?,[Enter adult's age in years:],between,15 to 49,
+ADULT,Was (s)he aged 15-49 years at death?,#NAME?,Calculated field: int(${ageInDays} div 365.25),between,15 to 49,
+CHILD,Was (s)he aged 5 to 14 years at death?,#NAME?,[Enter child's age in years:],between,5 to 14,
+CHILD,Was (s)he aged 5 to 14 years at death?,#NAME?,Calculated field: int(${ageInDays} div 365.25),between,5 to 14,
+DIED_D1,Did the baby die within 24 hours of birth?,#NAME?,"Calculated field: if(${ageInDays} = 'NaN' or string-length(${ageInDays}) = 0, ${age_neonate_days}, ${ageInDays})",le,1,NEONATE
+DIED_D23,Did the baby die more than 24 hours after birth but within 48 hours from birth?,#NAME?,"Calculated field: if(${ageInDays} = 'NaN' or string-length(${ageInDays}) = 0, ${age_neonate_days}, ${ageInDays})",between,1 to 2,NEONATE
+DIED_D36,Did baby die more than 48 hours from birth but within the first week of life?,#NAME?,"Calculated field: if(${ageInDays} = 'NaN' or string-length(${ageInDays}) = 0, ${age_neonate_days}, ${ageInDays})",between,3 to 7,NEONATE
+DIED_W1,"Did baby die after first week, but within first 28 days?",#NAME?,"Calculated field: if(${ageInDays} = 'NaN' or string-length(${ageInDays}) = 0, ${age_neonate_days}, ${ageInDays})",between,8 to 28,NEONATE
+ELDER,Was (s)he aged 65 years or over at death?,#NAME?,[Enter adult's age in years:],ge,65,
+ELDER,Was (s)he aged 65 years or over at death?,#NAME?,Calculated field: int(${ageInDays} div 365.25),ge,65,
+INFANT,Was (s)he aged 1 to 11 months at death?,#NAME?,[Enter child's age in months:],between,1 to 11,
+INFANT,Was (s)he aged 1 to 11 months at death?,#NAME?,Calculated field: int(${ageInYearsRemain} div 30.4),between,1 to 11,
+MAGEGP1,Was this a woman aged 12 to 19 years at death?,#NAME?,[Enter adult's age in years:],between,12 to 19,FEMALE
+MAGEGP1,Was this a woman aged 12 to 19 years at death?,#NAME?,Calculated field: int(${ageInDays} div 365.25),between,12 to 19,FEMALE
+MAGEGP2,Was this a woman aged 20-34 years at death?,#NAME?,[Enter adult's age in years:],between,20 to 34,FEMALE
+MAGEGP2,Was this a woman aged 20-34 years at death?,#NAME?,Calculated field: int(${ageInDays} div 365.25),between,20 to 34,FEMALE
+MAGEGP3,Was this a woman aged 35-49 years at death?,#NAME?,[Enter adult's age in years:],between,35 to 49,FEMALE
+MAGEGP3,Was this a woman aged 35-49 years at death?,#NAME?,Calculated field: int(${ageInDays} div 365.25),between,35 to 49,FEMALE
+MIDAGE,Was (s)he aged 50 to 64 years at death?,#NAME?,[Enter adult's age in years:],between,50 to 64,
+MIDAGE,Was (s)he aged 50 to 64 years at death?,#NAME?,Calculated field: int(${ageInDays} div 365.25),between,50 to 64,
+NEONATE,Was (s)he aged 28 days or less at death?,#NAME?,"Calculated field: if(${ageInDays} = 'NaN' or string-length(${ageInDays}) = 0, ${age_neonate_days}, ${ageInDays})",le,28,
+UNDER5,Was (s)he aged 1 to 4 years at death?,#NAME?,[Enter child's age in months:],between,12 to 48,
+UNDER5,Was (s)he aged 1 to 4 years at death?,#NAME?,[Enter child's age in years:],between,1 to 4,
+UNDER5,Was (s)he aged 1 to 4 years at death?,#NAME?,Calculated field: int(${ageInDays} div 365.25),between,1 to 4,
+DRY_SEAS,Did (s)he die during the dry season?,0,(Id10004) [During which season did (s)he die?],eq,dry,
+WET_SEAS,Did (s)he die during the wet season?,0,(Id10004) [During which season did (s)he die?],eq,wet,
+FEMALE,Was the deceased female?,0,(Id10019) What was the sex of the deceased?,eq,female,
+MALE,Was the deceased male?,0,(Id10019) What was the sex of the deceased?,eq,male,
+MARRIED,Was she married at the time of death?,0,(Id10059) What was her/his marital status?,eq,married,
+INJURY,Did (s)he suffer from any injury or accident that led to her/his death?,0,(Id10077) Did (s)he suffer from any injury or accident that led to her/his death?,eq,yes,
+TRAFFIC,Was it a road traffic accident?,0,(Id10079) Was it a road traffic accident?,eq,yes,
+O_TRANS,Was (s)he Injured in a non?road transport accident?,0,(Id10082) Was (s)he injured in a non-road transport accident?,eq,yes,
+FALL,Was (s)he Injured in a fall?,0,(Id10083) Was (s)he injured in a fall?,eq,yes,INJURY
+POISON,Was there any poisoning?,0,(Id10084) Was there any poisoning?,eq,yes,INJURY
+DROWN,Did (s)he die of drowning?,0,(Id10085) Did (s)he die of drowning?,eq,yes,INJURY
+VENOM,Did (s)he suffer from any plant/animal/insect bite or sting that led to her/his death?,0,(Id10086) Was (s)he injured by a bite or sting by venomous animal?,eq,yes,
+VENOM,Did (s)he suffer from any plant/animal/insect bite or sting that led to her/his death?,0,(Id10087) Was (s)he injured by an animal or insect (non-venomous)?,eq,yes,
+FIRE,Did (s)he suffer from burns?,0,(Id10089) Was (s)he injured by burns/fire?,eq,yes,INJURY
+ASSAULT,Was (s)he subject to violence/assault?,0,"(Id10090) Was (s)he subject to violence (suicide, homicide, abuse)?",eq,yes,
+ASSAULT,Was (s)he subject to violence/assault?,0,(Id10091) Was (s)he injured by a firearm?,eq,yes,
+ASSAULT,Was (s)he subject to violence/assault?,0,"(Id10092) Was (s)he stabbed, cut or pierced?",eq,yes,
+ASSAULT,Was (s)he subject to violence/assault?,0,(Id10093) Was (s)he strangled?,eq,yes,
+FORCE,Was (s)he injured by a force of nature,0,(Id10095) Was (s)he injured by a force of nature?,eq,yes,INJURY
+SUICIDE,Do you think (s)he committed suicide?,0,(Id10099) Was the injury self-inflicted?,eq,yes,INJURY
+INFLICT,Was the injury intentionally inflicted by someone else?,0,(Id10100) Was the injury intentionally inflicted by someone else?,eq,yes,
+CRIED,"Did the baby cry after birth, even if only a little bit?",0,"(Id10105) Did the baby cry immediately after birth, even if only a little bit?",eq,yes,
+BABY_BR,"Did the baby breathe after birth, even a little?",0,"(Id10111) Did the baby breathe immediately after birth, even a little?",eq,yes,
+BORN_NOBR,Was the baby given assistance to breathe at birth?,0,(Id10113) Was the baby given assistance to breathe at birth?,eq,yes,
+NO_LIFE,"If the baby did not cry or breathe, was it born dead?",0,"(Id10114) If the baby didn't show any sign of life, was it born dead?",eq,yes,
+MUSHY,"Was the baby born macerated, that is, showed signs of decay?",0,"(Id10116) Was the baby’s body soft, pulpy and discoloured and the skin peeling away?",eq,yes,
+ACUTE,Was (s)he ill for less than 3 weeks before death?,0,(Id10120) Calculated number of Days with illness,lt,21,
+CHRONIC,Was (s)he ill for 3 weeks or more before death?,0,(Id10120) Calculated number of Days with illness,ge,21,
+SUDDEN,Did (s)he die suddenly?,0,(Id10123) Did (s)he die suddenly?,eq,yes,
+TUBER,Was there any diagnosis of Tuberculosis,0,(Id10125) Was there any diagnosis by a health professional of tuberculosis?,eq,yes,
+HIV_AIDS,Was there any diagnosis of HIV/AIDS,0,(Id10126) Was an HIV test ever positive?,eq,yes,
+HIV_AIDS,Was there any diagnosis of HIV/AIDS,0,(Id10127) Was there any diagnosis by a health professional of AIDS?,eq,yes,
+MALARIA,Did (s)he have a recent positive test for malaria?,0,(Id10128) Did (s)he have a recent positive test by a health professional for malaria?,eq,yes,
+MALARNEG,Did (s)he have a recent negative test for malaria?,0,(Id10129) Did (s)he have a recent negative test by a health professional for malaria?,eq,yes,
+MEASLES,Was there any diagnosis of Measles,0,(Id10131) Was there any diagnosis by a health professional of measles?,eq,yes,
+HYPERT,Was there any diagnosis of High Blood pressure,0,(Id10132) Was there any diagnosis by a health professional of high blood pressure?,eq,yes,
+HEART_DIS,Was there any diagnosis of Heart disease,0,(Id10133) Was there any diagnosis by a health professional of heart disease?,eq,yes,
+DIABETES,Was there any diagnosis of Diabetes,0,(Id10134) Was there any diagnosis by a health professional of diabetes?,eq,yes,
+ASTHMA,Was there any diagnosis of Asthma,0,(Id10135) Was there any diagnosis by a health professional of asthma?,eq,yes,
+EPILEPSY,Was there any diagnosis of Epilepsy,0,(Id10136) Was there any diagnosis by a health professional of epilepsy?,eq,yes,
+CANCER,Was there any diagnosis of Cancer,0,(Id10137) Was there any diagnosis by a health professional of cancer?,eq,yes,
+COPD,Was there any diagnosis of Chronic Obstructive Pumonary Disease (COPD),0,(Id10138) Was there any diagnosis by a health professional of Chronic Obstructive Pulmonary Disease (COPD)?,eq,yes,
+DEMENT,Was there any diagnosis of Dementia,0,(Id10139) Was there any diagnosis by a health professional of dementia?,eq,yes,
+DEPRESS,Was there any diagnosis of Depression,0,(Id10140) Was there any diagnosis by a health professional of depression?,eq,yes,
+STROKE, Was there any diagnosis of Stroke,0,(Id10141) Was there any diagnosis by a health professional of stroke?,eq,yes,
+SICKLE,Was there any diagnosis of Sickle cell disease,0,(Id10142) Was there any diagnosis by a health professional of sickle cell disease?,eq,yes,
+KIDNEY_DIS,Was there any diagnosis of Kidney disease,0,(Id10143) Was there any diagnosis by a health professional of kidney disease?,eq,yes,
+LIVER_DIS,Was there any diagnosis of Liver disease,0,(Id10144) Was there any diagnosis by a health professional of liver disease?,eq,yes,
+FEVER,Did (s)he have a fever?,0,(Id10147) Did (s)he have a fever?,eq,yes,
+AC_FEVER,Did (s)he have fever for less than 2 weeks before death?,0,(Id10148) How many days did the fever last?,lt,14,FEVER
+CH_FEVER,Did (s)he have fever for 2 weeks or more before death?,0,(Id10148) How many days did the fever last?,ge,14,FEVER
+COUGH,Did (s)he have a cough?,0,(Id10153) Did (s)he have a cough?,eq,yes,
+AC_COUGH,Did (s)he have a cough for less than 3 weeks before death?,0,(Id10154) For how many days did (s)he have a cough?,lt,21,COUGH
+CH_COUGH,Did (s)he have a cough for 3 weeks or more before death?,0,(Id10154) For how many days did (s)he have a cough?,ge,21,COUGH
+PR_COUGH,Was the cough productive with sputum?,0,"(Id10155) Was the cough productive, with sputum?",eq,yes,
+BL_COUGH,Did (s)he cough up blood?,0,(Id10157) Did (s)he cough up blood?,eq,yes,
+WHOOP,Did (s)he make a whooping sound when coughing?,0,(Id10158) Did (s)he make a whooping sound when coughing?,eq,yes,
+BREATH,Did (s)he have any breathing problem?,0,(Id10159) Did (s)he have any difficulty breathing?,eq,yes,
+RAPID_BR,Did (s)he have fast breathing?,0,"(Id10166) During the illness that led to death, did (s)he have fast breathing?",eq,yes,
+AC_RPBR,Did (s)he have fast breathing for less than 2 weeks?,0,(Id10167) How long did the fast breathing last?,lt,14,RAPID_BR
+CH_RPBR,Did (s)he have fast breathing for 2 weeks or more?,0,(Id10167) How long did the fast breathing last?,ge,14,RAPID_BR
+BR_LESS,Did (s)he have breathlessness?,0,(Id10168) Did (s)he have breathlessness?,eq,yes,
+AC_BRL,Did (s)he have breathlessness for less than 2 weeks?,0,(Id10169) How long did (s)he have breathlessness?,lt,14,BR_LESS
+CH_BRL,Did (s)he have breathlessness for 2 weeks or more?,0,(Id10169) How long did (s)he have breathlessness?,ge,14,BR_LESS
+EXERT_BR,Was (s)he unable to carry out daily routines due to breathlessness?,0,(Id10170) Was (s)he unable to carry out daily routines due to breathlessness?,eq,yes,BR_LESS
+LYING_BR,Was (s)he breathless while lying flat?,0,(Id10171) Was (s)he breathless while lying flat?,eq,yes,BR_LESS
+CHEST_IN,Did you see the lower chest wall/ribs being pulled in as the child breathed?,0,(Id10172) Did you see the lower chest wall/ribs being pulled in as the child breathed in?,eq,yes,
+WHEEZE,Did (s)he have noisy breathing (grunting or wheezing)?,0,(Id10173) During the illness that led to death did his/her breathing sound like any of the following:,contains,wheezing,
+WHEEZE,Did (s)he have noisy breathing (grunting or wheezing)?,0,(Id10173) During the illness that led to death did his/her breathing sound like any of the following:,contains,stridor,
+WHEEZE,Did (s)he have noisy breathing (grunting or wheezing)?,0,(Id10173) During the illness that led to death did his/her breathing sound like any of the following:,contains,grunting,
+CH_PAIN,Did (s)he have severe chest pain?,0,(Id10174) Did (s)he have chest pain?,eq,yes,
+DIARR,Did (s)he have diarrhea?,0,(Id10181) Did (s)he have more frequent loose or liquid stools than usual?,eq,yes,
+AC_DIARR,Did (s)he have diarrhea for less than 2 weeks?,0,(Id10182) For how many days did (s)he have frequent loose or liquid stools?,lt,14,DIARR
+CH_DIARR,Did (s)he have diarrhea for 4 weeks or more?,0,(Id10182) For how many days did (s)he have frequent loose or liquid stools?,gt,28,DIARR
+PE_DIARR,Did (s)he have diarrhea for 2 to 4 weeks?,0,(Id10182) For how many days did (s)he have frequent loose or liquid stools?,between,14 to 28,DIARR
+BL_DIARR,At any time during the final illness was there blood in the stools?,0,(Id10186) At any time during the final illness was there blood in the stools?,eq,yes,DIARR
+VOMITING,Did (s)he vomit?,0,(Id10188) Did (s)he vomit?,eq,yes,
+BL_VOMIT,"Did (s)he vomit ""coffee grounds"" or bright red/blood?",0,(Id10191) Was there blood in the vomit?,eq,yes,VOMITING
+BL_VOMIT,"Did (s)he vomit ""coffee grounds"" or bright red/blood?",0,(Id10192) Was the vomit black?,eq,yes,VOMITING
+ABD_PAIN,Did (s)he have severe abdominal pain?,0,(Id10195) Was the belly (abdominal) pain severe?,eq,yes,
+AC_ABDP,Did the abdominal pain last for less than 2 weeks?,0,(Id10197) Calculated number of Days with belly pain,lt,14,ABD_PAIN
+CH_ABDP,Did the abdominal pain last for 2 weeks or more?,0,(Id10197) Calculated number of Days with belly pain,ge,14,ABD_PAIN
+SWE_ABD,Did (s)he have a more than usually protruding abdomen?,0,(Id10200) Did (s)he have a more than usually protruding belly (abdomen)?,eq,yes,
+AC_SWAB,Did (s)he have a more than usually protruding abdomen for less than 2 weeks?,0,(Id10201) Calculated number of Days with protruding belly (abdomen),lt,14,SWE_ABD
+CH_SWAB,Did (s)he have a more than usually protruding abdomen for 2 weeks or more?,0,(Id10201) Calculated number of Days with protruding belly (abdomen),ge,14,
+ABD_MASS,Did (s)he have any lump inside the abdomen?,0,(Id10204) Did (s)he have any mass in the belly (abdomen)?,eq,yes,
+AC_ABDM,Did (s)he have a lump inside the abdomen for less than 2 weeks?,0,(Id10205) Calculated number of Days with a mass in the belly (abdomen),lt,14,ABD_MASS
+CH_ABDM,Did (s)he have a lump inside the abdomen for 2 weeks or more?,0,(Id10205) Calculated number of Days with a mass in the belly (abdomen),ge,14,ABD_MASS
+HEADACHE,Did (s)he have a severe headache?,0,(Id10207) Did (s)he have a severe headache?,eq,yes,
+STIFF_NECK,Did (s)he have a stiff or painful neck?,0,(Id10208) Did (s)he have a stiff neck during illness that led to death?,eq,yes,
+AC_STNK,Did (s)he have a stiff or painful neck for less than 1 week?,0,(Id10209) For how many days before death did (s)he have stiff neck?,lt,7,STIFF_NECK
+CH_STNK,Did (s)he have a stiff or painful neck for 1 week or more?,0,(Id10209) For how many days before death did (s)he have stiff neck?,ge,7,STIFF_NECK
+STIFF_NECK,Did (s)he have a stiff or painful neck?,0,(Id10210) Did (s)he have a painful neck during the illness that led to death?,eq,yes,
+AC_STNK,Did (s)he have a stiff or painful neck for less than 1 week?,0,(Id10211) For how many days before death did (s)he have a painful neck?,lt,7,STIFF_NECK
+CH_STNK,Did (s)he have a stiff or painful neck for 1 week or more?,0,(Id10211) For how many days before death did (s)he have a painful neck?,ge,7,STIFF_NECK
+MEN_CON,Did (s)he have mental confusion?,0,(Id10212) Did (s)he have mental confusion?,eq,yes,
+MENCON3,Did (s)he have mental confusion for 3 months or more?,0,(Id10213) For how many months did (s)he have mental confusion?,ge,3,MEN_CON
+CO_ONS,Did the unconsciousness start suddenly (at least within a single day)?,0,"(Id10217) Did the unconsciousness start suddenly, quickly (at least within a single day)?",eq,yes,COMA
+UNC_CON,Did (s)he become unconscious immediately after the convulsion?,0,(Id10222) Did (s)he become unconscious immediately after the convulsion?,eq,yes,CONVUL
+URINE,Did (s)he have any urine problems?,0,(Id10223) Did (s)he have any urine problems?,eq,yes,
+URI_RET,Did (s)he pass no urine at all?,0,(Id10224) Did (s)he stop urinating?,eq,yes,URINE
+URI_HAEM,During the final illness did (s)he ever pass blood in the urine?,0,(Id10226) During the final illness did (s)he ever pass blood in the urine?,eq,yes,URINE
+SKIN,Did (s)he have any skin problems?,0,(Id10227) Did (s)he have sores or ulcers anywhere on the body?,eq,yes,
+SK_FEET,"Did (s)he have any , ulcers, abscess or sores on the feet that were not also on other parts of the body?",0,(Id10230) Did (s)he have an ulcer (pit) on the foot?,eq,yes,
+SKIN_LES,"Did (s)he have any ulcers, abscess or sores anywhere except on the feet?",0,(Id10230) Did (s)he have an ulcer (pit) on the foot?,eq,no,SKIN
+RASH,"During the illness that led to death, did (s)he have any skin rash?",0,"(Id10233) During the illness that led to death, did (s)he have any skin rash?",eq,yes,
+SKIN,Did (s)he have any skin problems?,0,"(Id10233) During the illness that led to death, did (s)he have any skin rash?",eq,yes,
+AC_RASH,Did (s)he have the skin rash for less than 1 week?,0,(Id10234) For how many days did (s)he have the skin rash?,lt,7,RASH
+CH_RASH,Did (s)he have the skin rash for 1 week or more?,0,(Id10234) For how many days did (s)he have the skin rash?,ge,7,RASH
+MEASRASH,Did (s)he have measles rash?,0,(Id10236) Did (s)he have measles rash (use local term)?,eq,yes,RASH
+HERPES,Did (s)he ever have shingles or herpes zoster?,0,(Id10237) Did (s)he ever have shingles or herpes zoster?,eq,yes,
+BL_ORIF,"Did (s)he bleed from the nose, mouth or anus?",0,"(Id10242) Did (s)he bleed from the nose, mouth or anus?",eq,yes,
+WT_LOSS,Did (s)he have noticeable weight loss?,0,(Id10243) Did (s)he have noticeable weight loss?,eq,yes,
+WASTING,Was (s)he severely thin or wasted?,0,(Id10244) Was (s)he severely thin or wasted?,eq,yes,
+OR_CAND,Did (s)he have mouth sores or white patches in the mouth or on the tongue?,0,"(Id10245) During the illness that led to death, did s/he have a whitish rash inside the mouth or on the tongue?",eq,yes,
+RIGIDITY,Did (s)he have stiffness of the whole body or was unable to open the mouth?,0,(Id10246) Did (s)he have stiffness of the whole body or was unable to open the mouth?,eq,yes,
+SWE_OTH,Did (s)he have swelling (puffiness) of the face?,0,(Id10247) Did (s)he have puffiness of the face?,eq,yes,
+SWE_LEGS,Did (s)he have both feet swollen?,0,(Id10251) Did (s)he have both feet swollen?,eq,yes,
+SWELL,Did (s)he have any lumps?,0,(Id10253) Did (s)he have any lumps?,eq,yes,
+SWE_ORAL,Did (s)he have any lumps or lesions in the mouth?,0,(Id10254) Did (s)he have any lumps or lesions in the mouth?,eq,yes,SWELL
+SWE_NECK,Did (s)he have any lumps on the neck?,0,(Id10255) Did (s)he have any lumps on the neck?,eq,yes,SWELL
+SWE_ARMP,Did (s)he have any lumps on the armpit?,0,(Id10256) Did (s)he have any lumps on the armpit?,eq,yes,SWELL
+SWE_GEN,Did (s)he have any lumps on the groin?,0,(Id10257) Did (s)he have any lumps on the groin?,eq,yes,SWELL
+PARAL_ONE,Did (s)he have paralysis of one side of the body?,0,(Id10259) Did (s)he have paralysis of only one side of the body?,eq,yes,
+YELLOW,Did (s)he have yellow discoloration of the eyes?,0,(Id10265) Did (s)he have yellow discoloration of the eyes?,eq,yes,
+HAIR,Did her/his hair colour change to reddish or yellowish?,0,(Id10267) Did her/his hair change in color to a reddish or yellowish color?,eq,yes,
+ANAEMIA,"Did (s)he look pale (thinning/lack of blood) or have pale palms, eyes or nail beds?",0,"(Id10268) Did (s)he look pale (thinning/lack of blood) or have pale palms, eyes or nail beds?",eq,yes,
+EYE_SUNK,Did (s)he have sunken eyes?,0,(Id10269) Did (s)he have sunken eyes?,eq,yes,
+FED_D1,Was the baby able to suckle or bottle?feed within first 24 hours after birth?,0,(Id10271) Was the baby able to suckle or bottle-feed within the first 24 hours after birth?,eq,yes,
+ST_SUCK,Did the baby stop suckling of bottle feeding 3 days after birth?,0,(Id10274) How many days after birth did the baby stop suckling?,ge,3,
+CONV_D1,Did the baby have convulsions starting within the first day of life?,0,(Id10275) Did the baby have convulsions starting within the first 24 hours of life?,eq,yes,
+CONV_D2,Did the baby have convulsions starting on the second day or later after birth?,0,(Id10276) Did the baby have convulsions starting more than 24 hours after birth?,eq,yes,
+ARCH_B,"Did the baby's body become stiff, with the back arched backwards?",0,"(Id10277) Did the baby's body become stiff, with the back arched backwards?",eq,yes,
+FONT_HI,Did the child have a bulging or raised fontanelle?,0,"(Id10278) During the illness that led to death, did the baby have a bulging or raised fontanelle? ",eq,yes,
+FONT_LO,Did the child have a sunken fontanelle?,0,"(Id10279) During the illness that led to death, did the baby have a sunken fontanelle? ",eq,yes,
+UNW_D1,Did the baby become unresponsive or unconscious soon after birth (within less than 24 hours)?,0,"(Id10282) Did the baby become unresponsive or unconscious soon after birth, within less than 24 hours?",eq,yes,
+UNW_D2,Did the baby become unresponsive or unconscious more than 1 day after birth?,0,(Id10283) Did the baby become unresponsive or unconscious more than 24 hours after birth?,eq,yes,
+COLD,Did the baby become cold to the touch before it died?,0,"(Id10284) During the illness that led to death, did the baby become cold to touch?",eq,yes,
+UMBINF,Did the baby have redness or discharge from the umbilical cord stump?,0,(Id10287) Did the baby have redness or pus drainage from the umbilical cord stump?,eq,yes,
+B_YELLOW,Did the baby have yellow palms or soles?,0,"(Id10289) During the illness that led to death, did the baby have yellow skin, palms (hand) or soles (foot)?",eq,yes,
+SWE_BREAST,Did she have an ulcer or swelling in the breast?,0,(Id10294) Did she have any swelling or lump in the breast?,eq,yes,
+VB_MEN,Did her vaginal bleeding stopped naturally during menopause?,0,(Id10299) Did her menstrual period stop naturally because of menopause or removal of uterus?,eq,yes,
+VB_AFTER,Did she had vaginal bleeding after menopause?,0,(Id10300) Did she have vaginal bleeding after cessation of menstruation?,eq,yes,
+NOT_PREG,"Was she neither pregnant, nor delivered, within 6 weeks of her death?",0,(Id10305) Was she pregnant at the time of death?,eq,no,
+PREGNANT,Was she pregnant at the time of death?,0,(Id10305) Was she pregnant at the time of death?,eq,yes,
+DEL_6WKS,Did she die within 6 weeks of giving birth?,0,"(Id10306) Did she die within 6 weeks of delivery, abortion or miscarriage?",eq,yes,
+NOT_PREG,"Was she neither pregnant, nor delivered, within 6 weeks of her death?",0,"(Id10306) Did she die within 6 weeks of delivery, abortion or miscarriage?",eq,no,
+PEND_6W,Did she die 6 weeks within a pregnancy that lasted less than 6 months?,0,(Id10309) For how many months was she pregnant?,lt,6,DEL_6WKS
+NOT_PREG,"Was she neither pregnant, nor delivered, within 6 weeks of her death?",0,"(Id10310) Please confirm, when she died, she was NEITHER pregnant NOR had delivered, had an abortion, or miscarried within 12 months of when she died--is that right?",eq,yes,
+DIED_LAB,"Did she die during labour, but undelivered?",0,(Id10312) Did she die during labour or delivery?,eq,yes,
+DEATH_24,Did she die within 24 hours after delivery,0,(Id10314) Did she die within 24 hours after delivery?,eq,yes,
+MULTIP,Did she die during or after a multiple pregnancy?,0,(Id10317) Did she die during or after a multiple pregnancy?,eq,yes,
+FIRST_P,Was this the woman's first pregnancy?,0,"(Id10319) How many births, including stillbirths, did she/the mother have before this baby?",eq,0,
+MORE4,"Did she have four or more births, including stillbirths, before this pregnancy?",0,"(Id10319) How many births, including stillbirths, did she/the mother have before this baby?",ge,4,
+CS_PREV,Did she have any previous Caesarean section?,0,(Id10320) Had she had any previous Caesarean section?,eq,yes,
+BPR_PREG,"During pregnancy, did she suffer from high blood pressure?",0,"(Id10321) During pregnancy, did she suffer from high blood pressure?",eq,yes,
+DISCH_SM,Did she have foul smelling vaginal discharge during pregnancy or after delivery?,0,(Id10322) Did she have foul smelling vaginal discharge during pregnancy or after delivery?,eq,yes,
+FIT_PREG,"During the last 3 months of pregnancy, did she suffer from convulsions?",0,"(Id10323) During the last 3 months of pregnancy, did she suffer from convulsions?",eq,yes,
+VIS_BL,During the last 3 months of pregnancy did she suffer from blurred vision?,0,(Id10324) During the last 3 months of pregnancy did she suffer from blurred vision?,eq,yes,
+BLEED,Was there excessive vaginal bleeding during pregnancy or after delivery?,0,(Id10325) Did bleeding occur while she was pregnant?,eq,yes,
+S_BLEED,Was there vaginal bleeding during the last 3 months of pregnancy but before labour started?,0,(Id10327) Was there vaginal bleeding during the last 3 months of pregnancy but before labour started?,eq,yes,
+D_BLEED,Was there excessive vaginal bleeding during labour?,0,(Id10328) Did she have excessive bleeding during labour or delivery?,eq,yes,
+P_BLEED,Was there excessive vaginal bleeding after delivering the baby?,0,(Id10329) Did she have excessive bleeding after delivery or abortion?,eq,yes,
+PLACENT_R,Was the placenta not completely delivered?,0,(Id10330) Was the placenta completely delivered?,eq,no,
+BABY_POS,Did she deliver or try to deliver an abnormally positioned baby?,0,(Id10331) Did she deliver or try to deliver an abnormally positioned baby?,eq,yes,
+LAB_24,Was she in labour for unusually long (more than 24 hours)?,0,(Id10332) For how many hours was she in labour?,ge,24,
+TERM_ATT,Did she attempt to terminate the pregnancy?,0,(Id10333) Did she attempt to terminate the pregnancy?,eq,yes,
+ABORT,Did she recently have a pregnancy that ended in an abortion (spontaneous or induced)?,0,(Id10334) Did she recently have a pregnancy that ended in an abortion (spontaneous or induced)?,eq,yes,
+DEL_ELSE,"Did she give birth elsewhere, e.g. on the way to a facility?",0,(Id10337) Where did she give birth?,eq,other,
+DEL_ELSE,"Did she give birth elsewhere, e.g. on the way to a facility?",0,(Id10337) Where did she give birth?,eq,on_route_to_hospital_or_facility,
+DEL_FAC,Did she give birth in a health facility?,0,(Id10337) Where did she give birth?,eq,other_health_facility,
+DEL_FAC,Did she give birth in a health facility?,0,(Id10337) Where did she give birth?,eq,hospital,
+DEL_HOME,Did she give birth at home?,0,(Id10337) Where did she give birth?,eq,home,
+HYSTER,Did she have an operation to remove her uterus shortly before death?,0,(Id10340) Did she have an operation to remove her uterus shortly before death?,eq,yes,
+DEL_NORM,Did she have a normal vaginal delivery?,0,"(Id10342) Was the delivery normal vaginal, without forceps or vacuum?",eq,yes,
+DEL_ASS,"Did she have an assisted delivery, with forceps/vacuum?",0,"(Id10343) Was the delivery vaginal, with forceps or vacuum?",eq,yes,
+DEL_CS,Did she deliver by Caesarean section?,0,(Id10344) Was the delivery a Caesarean section?,eq,yes,
+TWIN,Was the child part of a multiple birth?,0,(Id10354) Was the child part of a multiple  birth?,eq,yes,
+BORN_SMALL,"Was the baby smaller than normal, weighing under 2.5 kg?",0,"(Id10363) At birth, was the baby smaller than usual, (weighing under 2.5 kg)?",eq,yes,
+BORN_BIG,"Was the baby larger than normal, weighing over 4.5 kg?",0,"(Id10365) At birth, was the baby larger than usual, (weighing over 4.5 kg)?",eq,yes,
+BORN_3437,Had the pregnancy lasted between 34 and 37 weeks when the baby was born?,0,(Id10367) How many months long was the pregnancy before the child was born?,eq,8,
+BORN_38,Had the pregnancy lasted more than 37 weeks when the baby was born?,0,(Id10367) How many months long was the pregnancy before the child was born?,ge,9,
+BORN_EARLY,Had the pregnancy lasted less than 34 weeks when the baby was born?,0,(Id10367) How many months long was the pregnancy before the child was born?,lt,8,
+COMDEL,Was the child born in a complicated delivery?,0,(Id10369) Were there any complications during labour or delivery? ,eq,yes,
+BORN_MALF,Did the baby/the child have any malformation?,0,"(Id10370) Was any part of the baby physically abnormal at time of delivery? (for example: body part too large or too small, additional growth on body)?",eq,yes,
+MLF_BK,Did the baby/the child have a swelling/defect on the back?,0,(Id10371) Did the baby/ child have a swelling or defect on the back at time of birth?,eq,yes,
+MLF_LH,Did the baby/the child have a very large head?,0,(Id10372) Did the baby/ child have a very large head at time of birth?,eq,yes,
+MLF_SH,Did the baby/the child have a very small head?,0,(Id10373) Did the baby/ child have a very small head at time of birth?,eq,yes,
+MOVE_LB,Did the baby stop moving in the womb before labour started?,0,(Id10377) Did the baby stop moving in the womb before labour started?,eq,yes,
+WATERS,Was the baby born 24 hours or more after the water broke?,0,(Id10383) Was the baby born 24 hours or more after the water broke?,eq,yes,
+B_NORM,Was baby born in a normal vaginal delivery?,0,"(Id10387) Was the delivery normal vaginal, without forceps or vacuum?",eq,yes,
+B_ASSIST,Was baby born with forceps/vacuum?,0,"(Id10388) Was the delivery vaginal, with forceps or vacuum?",eq,yes,
+B_CAES,Was baby delivered by Caesarean section?,0,(Id10389) Was the delivery a Caesarean section?,eq,yes,
+MTTV,Did the mother receive tetanus toxoid (TT) vaccine?,0,(Id10393) Did you/the mother receive tetanus toxoid (TT) vaccine?,eq,yes,
+B_MBPR,"During pregnancy, did the baby's mother suffer from high blood pressure?",0,"(Id10396) During the last 3 months of pregnancy, labour or delivery, did you/the baby's mother suffer from high blood pressure?",eq,yes,
+B_MSMDS,Did the baby's mother have foul smelling vaginal discharge during pregnancy or after delivery?,0,(Id10398) Did you/the baby's mother have foul smelling vaginal discharge during pregnancy or after delivery?,eq,yes,
+B_MCON,"During the last 3 months of pregnancy, did the baby's mother suffer from convulsions?",0,"(Id10399) During the last 3 months of pregnancy, labour or delivery, did you/the baby's mother suffer from convulsions?",eq,yes,
+B_MBVI,During the last 3 months of pregnancy did the baby's mother suffer from blurred vision?,0,(Id10400) During the last 3 months of pregnancy did you/the baby's mother suffer from blurred vision?,eq,yes,
+B_MVBL,Did the baby's mother have vaginal bleeding during the last 3 months of pregnancy but before labour started?,0,(Id10402) Did you/the baby's mother have vaginal bleeding during the last 3 months of pregnancy but before labour started?,eq,yes,
+AB_POSIT,"Did the baby's bottom, feet, arm or hand come into the vagina before its head?",0,"(Id10403) Did the baby's bottom, feet, arm or hand come out of the vagina before its head?",eq,yes,
+CORD,Was the umbilical cord wrapped several times (more than once) around the neck of the child at birth?,0,(Id10404) Was the umbilical cord wrapped more than once around the neck of the child at birth?,eq,yes,
+CYANOSIS,Was the baby blue in colour at birth?,0,(Id10406) Was the baby blue in colour at birth?,eq,yes,
+DEVEL,Was the baby/the child not growing normally?,0,"(Id10408) Before the illness that led to death, was the baby/the child growing normally?",eq,yes,
+ALCOHOL,Did (s)he drink alcohol?,0,(Id10411) Did (s)he drink alcohol?,eq,yes,
+SMOKING,"Did (s)he smoke tobacco (cigarette, cigar, pipe, etc.)?",0,"(Id10413) Did (s)he smoke tobacco (cigarette, cigar, pipe, etc.)?",eq,yes,
+SURGERY,Did (s)he have (or need) an operation for the illness?,0,(Id10418) Did (s)he receive any treatment for the illness that led to death?,eq,yes,TREAT
+TREAT,Did (s)he receive any treatment for the illness that led to death?,0,(Id10418) Did (s)he receive any treatment for the illness that led to death?,eq,yes,
+T_ORT,Did (s)he receive oral rehydration salts?,0,(Id10419) Did (s)he receive oral rehydration salts?,eq,yes,TREAT
+T_IV,Did (s)he receive (or need) intravenous fluids (drip) treatment?,0,(Id10420) Did (s)he receive (or need) intravenous fluids (drip) treatment?,eq,yes,TREAT
+BLOOD_TR,Did (s)he receive (or need) a blood transfusion?,0,(Id10421) Did (s)he receive (or need) a blood transfusion?,eq,yes,
+T_NGT,Did (s)he receive (or need) treatment/food through a tube passed through the nose?,0,(Id10422) Did (s)he receive (or need) treatment/food through a tube passed through the nose?,eq,yes,TREAT
+ANTIB_I,Did (s)he receive (or need) injectable antibiotics?,0,(Id10423) Did (s)he receive (or need) injectable antibiotics?,eq,yes,
+SURGERY,Did (s)he have (or need) an operation for the illness?,0,(Id10425) Did (s)he have (or need) an operation for the illness?,eq,yes,TREAT
+SUR_1M,Did (s)he have the operation within 1 month before death?,0,(Id10426) Did (s)he have the operation within 1 month before death?,eq,yes,
+FEVER,Did (s)he have a fever?,0,(Id10477) [Select any of the following words that were mentioned as present in the narrative.],contains,fever,
+YELLOW,Did (s)he have yellow discoloration of the eyes?,0,(Id10477) [Select any of the following words that were mentioned as present in the narrative.],contains,jaundice,
+DIARR,Did (s)he have diarrhea?,0,(Id10478) [Select any of the following words that were mentioned as present in the narrative.],contains,diarrhea,
+FEVER,Did (s)he have a fever?,0,(Id10478) [Select any of the following words that were mentioned as present in the narrative.],contains,fever,
+RASH,"During the illness that led to death, did (s)he have any skin rash?",0,(Id10478) [Select any of the following words that were mentioned as present in the narrative.],contains,rash,
+YELLOW,Did (s)he have yellow discoloration of the eyes?,0,(Id10477) [Select any of the following words that were mentioned as present in the narrative.],contains,jaundice,
