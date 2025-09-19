@@ -54,12 +54,13 @@ coverage.xml
 cover/
 /*.csv
 /ccva_files/*
+!/ccva_files/.gitkeep
 # Jupyter Notebook
 .ipynb_checkpoints
 
 # IPython
 profile_default​⬤
-
+logs/
 # mypy
 */*.log
 *.log

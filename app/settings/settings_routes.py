@@ -18,7 +18,8 @@ from fastapi import (
 )
 
 from app.ccva.services.ccva_upload import insert_all_csv_data
-from app.settings.models.settings import ImagesConfigData, SettingsConfigData
+from app.settings.models.settings import ImagesConfigData, SettingsConfigData, SyncStatus
+from app.settings.services.cron import BackupSettings, CronSettings, fetch_backup_settings, fetch_cron_settings, save_backup_settings, save_cron_settings
 from app.settings.services.odk_configs import (
     add_configs_settings,
     fetch_configs_settings,
@@ -26,14 +27,57 @@ from app.settings.services.odk_configs import (
     get_system_images,
     save_system_images,
 )
+from datetime import datetime
 from app.shared.configs.arangodb import get_arangodb_session
-from app.shared.configs.constants import AccessPrivileges
+from app.shared.configs.constants import AccessPrivileges, db_collections
 from app.shared.configs.models import ResponseMainModel
 from app.shared.services.va_records import get_field_value_from_va_records
 from app.users.decorators.user import check_privileges, get_current_user
+from app.utilits.db_logger import db_logger, log_to_db
 from app.utilits.helpers import delete_file, save_file
+from app.utilits.schedeular import schedule_odk_fetch_job
 
 # from sqlalchemy.orm import Session
+
+async def get_current_total_data_count(db: StandardDatabase):
+    """Get current total data count from VA records collection"""
+    try:
+        query = f"RETURN LENGTH(FOR doc IN {db_collections.VA_TABLE} RETURN 1)"
+        result = db.aql.execute(query=query, cache=True).next()
+        return result if result is not None else 0
+    except Exception as e:
+        print(f"Error getting total data count: {e}")
+        return 0
+
+async def update_csv_sync_status(db: StandardDatabase, uploaded_records_count: int):
+    """Update sync status after CSV upload"""
+    try:
+        # Ensure the system_configs collection exists
+        if not db.has_collection(db_collections.SYSTEM_CONFIGS):
+            db.create_collection(db_collections.SYSTEM_CONFIGS)
+            print(f"Created {db_collections.SYSTEM_CONFIGS} collection")
+        
+        current_date = datetime.now().isoformat()
+        current_total_data = await get_current_total_data_count(db)
+        
+        sync_status = SyncStatus(
+            last_sync_date=current_date,
+            last_sync_data_count=uploaded_records_count,
+            total_synced_data=current_total_data
+        )
+        
+        config_data = SettingsConfigData(
+            type="sync_status",
+            sync_status=sync_status
+        )
+        
+        result = await add_configs_settings(config_data, db)
+        print(f"CSV sync status updated: {current_date}, uploaded: {uploaded_records_count}, total: {current_total_data}")
+        return result
+        
+    except Exception as e:
+        print(f"Error updating CSV sync status: {e}")
+        return None
 
 
 settings_router = APIRouter(
@@ -50,9 +94,22 @@ settings_router = APIRouter(
 @settings_router.get("/system_configs", status_code=status.HTTP_200_OK, response_model=ResponseMainModel)
 async def get_configs_settings(
     db: StandardDatabase = Depends(get_arangodb_session)):
+    # Note: Removed print statement to prevent log spam
+    try:
+        response = await fetch_configs_settings(db=db)
+        return response
+    except Exception as e:
+        print(f"Error fetching system configs: {e}")
+        # Return a default response instead of failing completely
+        return ResponseMainModel(
+            data={},
+            message="Failed to fetch system configs, returning defaults"
+        )
 
-    response = await fetch_configs_settings( db=db)
-    return response
+
+@settings_router.get("/version", status_code=status.HTTP_200_OK)
+async def get_version():
+    return '3.1.0'
 
 @settings_router.post("/system_configs", status_code=status.HTTP_200_OK, response_model=ResponseMainModel)
 async def save_configs_settings(
@@ -233,9 +290,234 @@ async def upload_csv(
         await insert_all_csv_data(recordsDF)
         print('after insert_all_csv_data')
 
-        return ResponseMainModel(data={"task_id": task_id, "total_records": 0,}, message="CCVA is running with uploaded CSV data...")
+        # Update sync status after successful CSV upload
+        await update_csv_sync_status(db, len(recordsDF))
+
+        return ResponseMainModel(data={"task_id": task_id, "total_records": len(recordsDF),}, message="CSV data uploaded successfully and sync status updated")
 
     except Exception as e:
         # Raising the error so FastAPI can handle it
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
    
+
+
+# Add these imports and endpoints to your existing settings_router file
+
+
+# Add these endpoints to your existing settings_router
+
+# @settings_router.get("/cron", status_code=status.HTTP_200_OK, response_model=ResponseMainModel)
+# async def get_cron_settings(
+#     current_user = Depends(get_current_user),
+#     db: StandardDatabase = Depends(get_arangodb_session)):
+#     """Get API cron settings"""
+#     try:
+#         response = await fetch_cron_settings(db=db)
+#         return ResponseMainModel(
+#             data=response,
+#             message="Cron settings fetched successfully"
+#         )
+#     except Exception as e:
+#         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+
+# @settings_router.post("/cron", status_code=status.HTTP_200_OK, response_model=ResponseMainModel)
+# async def save_api_cron_settings(
+#     settings: CronSettings,
+#     current_user = Depends(get_current_user),
+#     required_privs: List[str] = Depends(check_privileges([AccessPrivileges.SETTINGS_CREATE_SYSTEM_CONFIGS])),
+#     db: StandardDatabase = Depends(get_arangodb_session)):
+#     """Save API cron settings"""
+#     try:
+#         response = await save_cron_settings(settings, db=db)
+#         return ResponseMainModel(
+#             data=response,
+#             message="Cron settings saved successfully"
+#         )
+#     except Exception as e:
+#         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+
+# @settings_router.get("/backup", status_code=status.HTTP_200_OK, response_model=ResponseMainModel)
+# async def get_backup_settings(
+#     current_user = Depends(get_current_user),
+#     db: StandardDatabase = Depends(get_arangodb_session)):
+#     """Get backup settings"""
+#     try:
+#         response = await fetch_backup_settings(db=db)
+#         return ResponseMainModel(
+#             data=response,
+#             message="Backup settings fetched successfully"
+#         )
+#     except Exception as e:
+#         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+
+# @settings_router.post("/backup", status_code=status.HTTP_200_OK, response_model=ResponseMainModel)
+# async def save_data_backup_settings(
+#     settings: BackupSettings,
+#     current_user = Depends(get_current_user),
+#     required_privs: List[str] = Depends(check_privileges([AccessPrivileges.SETTINGS_CREATE_SYSTEM_CONFIGS])),
+#     db: StandardDatabase = Depends(get_arangodb_session)):
+#     """Save backup settings"""
+#     try:
+#         response = await save_backup_settings(settings, db=db)
+#         return ResponseMainModel(
+#             data=response,
+#             message="Backup settings saved successfully"
+#         )
+#     except Exception as e:
+#         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+
+# Add these imports
+
+
+# Add these endpoints to your existing settings_router
+
+@settings_router.get("/sync-settings", status_code=status.HTTP_200_OK, response_model=ResponseMainModel)
+async def get_sync_settings(
+    current_user = Depends(get_current_user),
+    db: StandardDatabase = Depends(get_arangodb_session)):
+    """Get both cron and backup settings in one API call"""
+    try:
+        # Query to get the vman_config document with both cron and backup settings
+        aql_query = f"""
+        FOR settings in {db_collections.SYSTEM_CONFIGS}
+        FILTER settings._key == 'vman_config'
+        RETURN {{
+            cron_settings: settings.cron_settings,
+            backup_settings: settings.backup_settings
+        }}
+        """
+        cursor = db.aql.execute(aql_query, bind_vars={}, cache=True)
+        settings_data = [doc for doc in cursor]
+        
+        # If no settings found, return default settings
+        if not settings_data or not settings_data[0]:
+            settings_data = [{
+                "cron_settings": {"days": [], "time": "00:00"},
+                "backup_settings": {
+                    "frequency": "daily",
+                    "time": "00:00",
+                    "location": "local"
+                }
+            }]
+        
+        return ResponseMainModel(
+            data=settings_data[0],
+            message="Sync settings fetched successfully"
+        )
+    except Exception as e:
+        print(e)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+
+@settings_router.get("/cron", status_code=status.HTTP_200_OK, response_model=ResponseMainModel)
+async def get_cron_settings(
+    current_user = Depends(get_current_user),
+    db: StandardDatabase = Depends(get_arangodb_session)):
+    """Get API cron settings"""
+    try:
+        # Query to get the vman_config document
+        aql_query = f"""
+        FOR settings in {db_collections.SYSTEM_CONFIGS}
+        FILTER settings._key == 'vman_config'
+        RETURN settings.cron_settings
+        """
+        cursor = db.aql.execute(aql_query, bind_vars={}, cache=True)
+        cron_settings = [doc for doc in cursor]
+        
+        # If no cron settings found, return default settings
+        if not cron_settings or not cron_settings[0]:
+            cron_settings = [{"days": [], "time": "00:00"}]
+        
+        return ResponseMainModel(
+            data=cron_settings[0],
+            message="Cron settings fetched successfully"
+        )
+    except Exception as e:
+        print(e)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+    
+@log_to_db(context="save_api_cron_settings", log_args=True)
+@settings_router.post("/cron", status_code=status.HTTP_200_OK, response_model=ResponseMainModel)
+async def save_api_cron_settings(
+     background_tasks: BackgroundTasks,
+    settings: CronSettings,
+    current_user = Depends(get_current_user),
+    required_privs: List[str] = Depends(check_privileges([AccessPrivileges.SETTINGS_CREATE_SYSTEM_CONFIGS])),
+    db: StandardDatabase = Depends(get_arangodb_session)):
+    """Save API cron settings"""
+    try:
+        # Create a SettingsConfigData object with cron_settings
+        config_data = SettingsConfigData(
+            type='cron_settings',
+            cron_settings=settings
+        )
+        
+        # Save the settings
+        response = await add_configs_settings(config_data, db=db)
+        background_tasks.add_task(schedule_odk_fetch_job, db)
+        print("Scheduled ODK fetch job executed successfully")
+        
+        
+        return ResponseMainModel(
+            data=settings.model_dump(),
+            message="Cron settings saved successfully"
+        )
+    except Exception as e:
+        print(e)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+    
+@log_to_db(context="get_backup_settings", log_args=True)
+@settings_router.get("/backup", status_code=status.HTTP_200_OK, response_model=ResponseMainModel)
+async def get_backup_settings(
+    current_user = Depends(get_current_user),
+    db: StandardDatabase = Depends(get_arangodb_session)):
+    """Get backup settings"""
+    try:
+        # Query to get the vman_config document
+        aql_query = f"""
+        FOR settings in {db_collections.SYSTEM_CONFIGS}
+        FILTER settings._key == 'vman_config'
+        RETURN settings.backup_settings
+        """
+        cursor = db.aql.execute(aql_query, bind_vars={}, cache=True)
+        backup_settings = [doc for doc in cursor]
+        
+        # If no backup settings found, return default settings
+        if not backup_settings or not backup_settings[0]:
+            backup_settings = [{
+                "frequency": "daily",
+                "time": "00:00",
+                "location": "local"
+            }]
+        
+        return ResponseMainModel(
+            data=backup_settings[0],
+            message="Backup settings fetched successfully"
+        )
+    except Exception as e:
+        print(e)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+@log_to_db(context="save_data_backup_settings", log_args=True)
+@settings_router.post("/backup", status_code=status.HTTP_200_OK, response_model=ResponseMainModel)
+async def save_data_backup_settings(
+    settings: BackupSettings,
+    current_user = Depends(get_current_user),
+    required_privs: List[str] = Depends(check_privileges([AccessPrivileges.SETTINGS_CREATE_SYSTEM_CONFIGS])),
+    db: StandardDatabase = Depends(get_arangodb_session)):
+    """Save backup settings"""
+    try:
+        # Create a SettingsConfigData object with backup_settings
+        config_data = SettingsConfigData(
+            type='backup_settings',
+            backup_settings=settings
+        )
+        
+        # Save the settings
+        response = await add_configs_settings(config_data, db=db)
+        
+        return ResponseMainModel(
+            data=settings.model_dump(),
+            message="Backup settings saved successfully"
+        )
+    except Exception as e:
+        print(e)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))

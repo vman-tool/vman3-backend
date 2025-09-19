@@ -9,6 +9,8 @@ from app.shared.configs.constants import db_collections
 from app.shared.configs.models import ResponseMainModel
 from app.shared.middlewares.exceptions import BadRequestException
 from app.shared.utils.database_utilities import replace_object_values
+from app.utilits import db_logger
+from app.utilits.db_logger import log_to_db
 
 
 def validate_configs(config: SettingsConfigData):
@@ -23,22 +25,42 @@ def validate_configs(config: SettingsConfigData):
         config.field_mapping.is_neonate is None):
         raise BadRequestException("One or more required fields are not set in the configuration")
     
-
-async def fetch_odk_config(db: StandardDatabase, validate_configs: bool = False) -> SettingsConfigData:
-    config_data = db.collection(db_collections.SYSTEM_CONFIGS).get('vman_config')  # Assumes 'vman_config' is the key
-    if not config_data:
-        raise ValueError("ODK configuration not found in the database")
-    # Ensure config_data is a dictionary
-    if isinstance(config_data, dict):
-        config = SettingsConfigData(**config_data)
+@log_to_db(context="fetch_odk_config", log_args=True)
+async def fetch_odk_config(db: StandardDatabase, is_validate_configs: bool = False) -> SettingsConfigData:
+    try:
         
-        # Validate required fields in field_mapping
-        if validate_configs:
-            validate_configs(config)
+        config_data = db.collection(db_collections.SYSTEM_CONFIGS).get('vman_config')  # Assumes 'vman_config' is the key
+        if not config_data:
+            await db_logger.log(
+            message="ODK configuration not found in the database" ,
+            level=db_logger.LogLevel.ERROR,
+            context="fetch_odk_config",
+            data={} 
+    )
+            raise ValueError("ODK configuration not found in the database")
 
-        return config
-    else:
-        raise ValueError("ODK configuration data is not in the expected format")
+        # Ensure config_data is a dictionary
+        if isinstance(config_data, dict):
+            config = SettingsConfigData(**config_data)
+            
+            # Validate required fields in field_mapping
+            if is_validate_configs:
+                validate_configs(config)
+
+            return config
+        else:
+            print("ODK configuration data is not in the expected format")
+            await db_logger.log(
+            message="ODK configuration data is not in the expected format" ,
+            level=db_logger.LogLevel.ERROR,
+            context="fetch_odk_config",
+            data={} 
+    )
+            raise ValueError("ODK configuration data is not in the expected format")
+    except Exception as e:
+        print(e)
+        raise ValueError(e)
+
 
 
 async def fetch_configs_settings(db: StandardDatabase = None):
@@ -117,6 +139,17 @@ async def add_configs_settings(configData: SettingsConfigData, db: StandardDatab
                 field_label_data = configData.model_dump().get('field_labels', "")
             
             data['field_labels'] = field_label_data
+                # Add handling for cron settings
+        elif configData.type == 'cron_settings' and configData.cron_settings:
+            data['cron_settings'] = configData.cron_settings.model_dump()
+            
+        # Add handling for backup settings
+        elif configData.type == 'backup_settings' and configData.backup_settings:
+            data['backup_settings'] = configData.backup_settings.model_dump()
+            
+        # Add handling for sync status
+        elif configData.type == 'sync_status' and configData.sync_status:
+            data['sync_status'] = configData.sync_status.model_dump()
             
         else:
             raise ValueError("Invalid type or missing configuration data")
