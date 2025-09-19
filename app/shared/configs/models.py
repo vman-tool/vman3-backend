@@ -140,31 +140,41 @@ class VManBaseModel(BaseModel):
             - include field with object that key is in ['==', '!=', '<', '<=', '>', '>=', "$gt", "$lt", "$lte", "$eq", "$ne", "$gte"] for comparison fields
         :return: A list of records matching the filters.
         """
-        cls.init_collection(db)
-        collection = db.collection(cls.get_collection_name())
-        bind_vars = {}
-        aql_filters = []
+        try:
+            cls.init_collection(db)
+            collection = db.collection(cls.get_collection_name())
+            bind_vars = {}
+            aql_filters = []
 
-        query = f"""
-            RETURN LENGTH(FOR doc in {collection.name}
-        """
+            aql_filters, vars = add_query_filters(filters.copy() if filters else None, bind_vars) if filters is not None else (None, None)
+    
+            if vars:
+                bind_vars.update(vars)
+    
+            if not include_deleted:
+                if aql_filters is None:
+                    aql_filters = []
+                aql_filters.append("doc.is_deleted == false")
 
+            query = f"""
+                FOR doc in {collection.name}
+            """
+    
+            if aql_filters:
+                query += " FILTER " + " AND ".join(aql_filters)
+    
+            query += " COLLECT WITH COUNT INTO length RETURN length"
 
-        aql_filters, vars = add_query_filters(filters, bind_vars)
+            cursor = db.aql.execute(query, bind_vars=bind_vars)
 
-        bind_vars.update(vars)
-        
-        if not include_deleted:
-            aql_filters.append("doc.is_deleted == false")
-        
-        if aql_filters:
-            query += " FILTER " + " AND ".join(aql_filters)
-
-        query += " RETURN 1)"
-        
-        cursor = db.aql.execute(query, bind_vars=bind_vars)
-
-        return cursor.next()
+            try:
+                result = cursor.next()
+                return result if result is not None else 0
+            except StopIteration:
+                return 0
+        except Exception as e:
+            print(f"Error in count method: {e}")
+            return 0
 
     async def update(self, updated_by: str = None, db: StandardDatabase = None):
         """
@@ -277,7 +287,7 @@ class VManBaseModel(BaseModel):
         bind_vars = {}
         aql_filters = []
 
-        aql_filters, vars = add_query_filters(filters, bind_vars) if filters is not None else (None, None)
+        aql_filters, vars = add_query_filters(filters.copy() if filters else None, bind_vars) if filters is not None else (None, None)
 
         if vars:
             bind_vars.update(vars)
@@ -297,11 +307,10 @@ class VManBaseModel(BaseModel):
             })
         
         if limit is not None and not paging:
-            offset = limit
-            query += " LIMIT @offset"
+            query += " LIMIT @limit"
             bind_vars.update({
-                "offset": offset
-            }) 
+                "limit": limit
+            })
 
         
         query += " RETURN doc"

@@ -112,14 +112,18 @@ async def get_user_info(uuid, session = Depends(get_arangodb_session)):
 async def get_users(
         paging: Optional[str] = Query(None, alias="paging"),
         page_number: Optional[int] = Query(1, alias="page_number"),
-        limit: Optional[int] = Query(10, alias="limit"), 
-        current_user = Depends(get_current_user), 
+        limit: Optional[int] = Query(10, alias="limit"),
+        search: Optional[str] = Query(None, alias="search"),
+        current_user = Depends(get_current_user),
         session = Depends(get_arangodb_session)
     ):
+    # Convert string paging to boolean
+    paging_bool = paging.lower() == "true" if paging else None
     return await user.fetch_users(
-        paging=paging, 
-        page_number=page_number, 
-        limit=limit, 
+        paging=paging_bool,
+        page_number=page_number,
+        limit=limit,
+        search=search,
         db=session
     )
 
@@ -141,16 +145,18 @@ async def get_privileges(
 async def get_roles(
         paging: Optional[str] = Query(None, alias="paging"),
         page_number: Optional[int] = Query(1, alias="page_number"),
-        limit: Optional[int] = Query(10, alias="limit"), 
-        current_user = Depends(get_current_user), 
+        limit: Optional[int] = Query(10, alias="limit"),
+        current_user = Depends(get_current_user),
         required_privs: List[str] = Depends(check_privileges([AccessPrivileges.USERS_VIEW_ROLES, AccessPrivileges.USERS_VIEW_PRIVILEGES])),
         session = Depends(get_arangodb_session)
     ):
 
     try:
+        # Convert string paging to boolean
+        paging_bool = paging.lower() == "true" if paging else None
         return await user.fetch_roles(
-            paging=paging, 
-            page_number=page_number, 
+            paging=paging_bool,
+            page_number=page_number,
             limit=limit,
             filters = {},
             db=session
