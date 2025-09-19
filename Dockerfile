@@ -1,4 +1,4 @@
-FROM --platform=linux/amd64 python:3.8-slim-bookworm
+FROM --platform=linux/amd64 python:3.11-slim-bookworm
 
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
