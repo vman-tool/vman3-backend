@@ -4,6 +4,7 @@ from fastapi import APIRouter
 from fastapi.staticfiles import StaticFiles
 
 from app.ccva import ccva_routes
+from app.ccva import ccva_public_routes
 from app.data_quality import data_quality_routes
 from app.odk import odk_routes
 from app.pcva import pcva_routes
@@ -30,7 +31,9 @@ def create_main_router():
     main_router.include_router(users_routes.auth_router)
     main_router.include_router(pcva_routes.pcva_router)
     main_router.include_router(pcva_routes.pcva_socket_router)
+    main_router.include_router(ccva_public_routes.ccva_public_router)
     main_router.include_router(ccva_routes.ccva_router)
+  
     main_router.include_router(records_routes.data_router)
     main_router.include_router(statistics_routes.statistics_router)
     main_router.include_router(settings_routes.settings_router)

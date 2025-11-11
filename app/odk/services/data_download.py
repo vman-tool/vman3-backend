@@ -308,6 +308,8 @@ async def insert_data_to_arangodb(data: dict,data_source:str=None):
     except Exception as e:
         print(e)
         raise e
+    
+    
 async def insert_many_data_to_arangodb(data: List[dict], overwrite_mode: str = 'ignore'):
 
     try:
