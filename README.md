@@ -83,8 +83,13 @@ docker compose up arango-db -d
 
 Run the following command to start the FastAPI application:
 
+```bash
+uvicorn app.main:app --host 0.0.0.0 --port 8080 --reload
 ```
-bash uvicorn app.main:app --host 0.0.0.0 --port 8080 --reload
+
+**Note:** Make sure your virtual environment is activated. If `uvicorn` is not found, use:
+```bash
+python -m uvicorn app.main:app --host 0.0.0.0 --port 8080 --reload
 ```
 
 The application will be accessible at `http://localhost:8080/vman/api/v1`.
@@ -96,6 +101,6 @@ The application will be accessible at `http://localhost:8080/vman/api/v1`.
 
 After ensuring the above configurations, build and run the Docker containers:
 
-```
-bash docker-compose up --build
+```bash
+docker compose up --build
 ```
