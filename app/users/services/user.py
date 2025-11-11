@@ -312,15 +312,23 @@ async def fetch_user_detail(pk: str, db):
     )
     raise HTTPException(status_code=400, detail="User does not exist.")
 
-async def fetch_users(paging: bool= None, page_number: int = None, limit: int = None, db: StandardDatabase = None):
+async def fetch_users(paging: bool= None, page_number: int = None, limit: int = None, search: str = None, db: StandardDatabase = None):
+    filters = {}
+    if search:
+        filters['like_conditions'] = [
+            {'name': search},
+            {'email': search}
+        ]
+
     users = await User.get_many(
         limit=limit,
         page_number=page_number,
         paging=paging,
+        filters=filters,
         db=db
     )
 
-    total_users = await User.count(db=db)
+    total_users = await User.count(filters=filters, include_deleted=None, db=db)
     user_data = [
                 UserResponse(
                     uuid=user["uuid"],
@@ -335,14 +343,17 @@ async def fetch_users(paging: bool= None, page_number: int = None, limit: int = 
             ]
     
     if users:
+        pager = None
+        if paging:
+            pager = Pager(
+                page=page_number,
+                limit=limit
+            )
         return ResponseMainModel(
-                data=user_data, 
+                data=user_data,
                 message="Users fetched successfully",
                 total= total_users,
-                pager=Pager(
-                    page=page_number,
-                    limit=limit
-                )
+                pager=pager
             )
     raise HTTPException(status_code=400, detail="Users not found.")
 
@@ -384,7 +395,10 @@ async def fetch_roles(paging: bool = None, page_number: int = None, limit: int =
         for role in roles:
             formarted_roles.append(await RoleResponse.get_structured_role(role = role, db=db))
         roles_count = await Role.count(filters=filters, db=db)
-        return ResponseMainModel(data = formarted_roles, message = "Role fetched successfully!", total = roles_count ,pager = Pager(page = page_number, limit=limit))
+        pager = None
+        if paging:
+            pager = Pager(page = page_number, limit=limit)
+        return ResponseMainModel(data = formarted_roles, message = "Role fetched successfully!", total = roles_count ,pager = pager)
     except Exception as e:
         raise e
 

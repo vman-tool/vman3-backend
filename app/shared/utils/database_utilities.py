@@ -81,20 +81,20 @@ def replace_object_values(new_dict: Dict, old_dict: Dict, force: bool = False):
 def add_query_filters(filters: Dict = None, bind_vars: Dict = None, document_name: str = 'doc'):
     """
     Function to build ArangoDB AQL filters and bind variables.
-    
+
     :param filters: Input dictionary of fields and their values.
     :param bind_vars: Bind variable dictionary to be updated.
     :param document_name: AQL document name, default is 'doc'.
-    
+
     :return: aql_filters, bind_vars
 
     Example:
-        > Use `and_conditions` for fields that are actually the same with multiple filters to be able to use some thing like BETWEEN for dates and numbers especially 
+        > Use `and_conditions` for fields that are actually the same with multiple filters to be able to use some thing like BETWEEN for dates and numbers especially
         ```
         filters = {
             'and_conditions': [
                 {'date': {'>=': '2024-01-01'}},
-                {'date': {'<=': '2024-12-31'}} 
+                {'date': {'<=': '2024-12-31'}}
             ],
             'or_conditions': [
                 {'status': {'==': 'active'}},
@@ -108,7 +108,7 @@ def add_query_filters(filters: Dict = None, bind_vars: Dict = None, document_nam
             {
                 'tags': {
                     'and': ['important', 'urgent'],
-                    'or': ['project1', 'project2'] 
+                    'or': ['project1', 'project2']
                 }
             },
             {
@@ -117,7 +117,11 @@ def add_query_filters(filters: Dict = None, bind_vars: Dict = None, document_nam
                     'or': ['term1', 'term2']
                 }
             }
-        ]
+        ],
+            'like_conditions': [
+                {'name': 'John'},  -> Searches for names containing 'John' (case insensitive by default)
+                {'description': {'pattern': '%error%', 'case_insensitive': False}} -> Custom pattern with case sensitivity
+            ]
         }
         ```
     """
@@ -127,6 +131,7 @@ def add_query_filters(filters: Dict = None, bind_vars: Dict = None, document_nam
     or_conditions = filters.pop("or_conditions", []) if filters else []
     in_conditions = filters.pop("in_conditions", []) if filters else []
     includes_conditions = filters.pop("includes_conditions", []) if filters else []
+    like_conditions = filters.pop("like_conditions", []) if filters else []
 
     def add_comparison_filter(field: str, value: Any, op: str, condition_type: str, i: int):
         bind_var_key = f"{field}_{condition_type}_{i}"
@@ -137,7 +142,7 @@ def add_query_filters(filters: Dict = None, bind_vars: Dict = None, document_nam
     def generate_includes_filter(field, include_conditions):
         """Generate filter for include conditions with AND/OR logic"""
         sub_filters = []
-        
+
         if 'and' in include_conditions:
             and_values = include_conditions['and']
             and_sub_conditions = []
@@ -145,9 +150,9 @@ def add_query_filters(filters: Dict = None, bind_vars: Dict = None, document_nam
                 bind_var_key = f"{field}_and_includes_{i}"
                 and_sub_conditions.append(f"CONTAINS({document_name}.{field}, @{bind_var_key})")
                 bind_vars[bind_var_key] = value
-            
+
             sub_filters.append(f"({' AND '.join(and_sub_conditions)})")
-        
+
         if 'or' in include_conditions:
             or_values = include_conditions['or']
             or_sub_conditions = []
@@ -156,8 +161,24 @@ def add_query_filters(filters: Dict = None, bind_vars: Dict = None, document_nam
                 or_sub_conditions.append(f"CONTAINS({document_name}.{field}, @{bind_var_key})")
                 bind_vars[bind_var_key] = value
             sub_filters.append(f"({' OR '.join(or_sub_conditions)})")
-        
+
         return sub_filters
+
+    def generate_like_filter(field, like_value):
+        """Generate filter for LIKE conditions for partial string matching"""
+        if isinstance(like_value, dict):
+            pattern = like_value.get('pattern', f"%{like_value.get('value', '')}%")
+            case_insensitive = like_value.get('case_insensitive', True)  # Default to case insensitive
+            if case_insensitive:
+                bind_var_key = f"{field}_like_ci"
+                return f"LOWER({document_name}.{field}) LIKE LOWER(@{bind_var_key})", {bind_var_key: pattern}
+            else:
+                bind_var_key = f"{field}_like"
+                return f"{document_name}.{field} LIKE @{bind_var_key}", {bind_var_key: pattern}
+        else:
+            # Simple string, wrap with % for partial match (case insensitive by default)
+            bind_var_key = f"{field}_like_ci"
+            return f"LOWER({document_name}.{field}) LIKE LOWER(@{bind_var_key})", {bind_var_key: f"%{like_value}%"}
 
     def reassign_operation(op):
         operations = {
@@ -229,9 +250,19 @@ def add_query_filters(filters: Dict = None, bind_vars: Dict = None, document_nam
                         sub_conditions.append(f"CONTAINS({document_name}.{field}, @{bind_var_key})")
                         bind_vars[bind_var_key] = value
                     includes_clauses.append(f"({' OR '.join(sub_conditions)})")
-        
+
         if includes_clauses:
             aql_filters.append(" AND ".join(includes_clauses))
+
+    if like_conditions:
+        like_clauses = []
+        for condition in like_conditions:
+            for field, like_value in condition.items():
+                filter_str, bind_updates = generate_like_filter(field, like_value)
+                like_clauses.append(filter_str)
+                bind_vars.update(bind_updates)
+        if like_clauses:
+            aql_filters.append(" OR ".join(like_clauses))
 
     return aql_filters, bind_vars
 
