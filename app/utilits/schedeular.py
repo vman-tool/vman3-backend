@@ -12,6 +12,7 @@ from app.shared.configs.arangodb import get_arangodb_session
 from app.shared.configs.constants import db_collections
 from app.utilits.db_logger import log_to_db
 from app.utilits.logger import app_logger
+from app.ccva.services.ccva_public_services import cleanup_expired_ccva_public_results
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
@@ -126,6 +127,29 @@ async def schedule_odk_fetch_job(db=None):
     except Exception as e:
         logger.error(f"Error scheduling ODK fetch job: {str(e)}")
 
+@log_to_db(context="ccva_cleanup_job")
+async def ccva_cleanup_job(db=None):
+    """
+    Cleanup job for expired CCVA public results based on TTL.
+    Privacy-first backup: Frontend deletes immediately on completion,
+    but this ensures cleanup if user closes browser or deletion fails.
+    """
+    try:
+        # If db is not provided, get a new connection
+        if db is None:
+            db = await get_arangodb_session()
+        
+        logger.info(f"CCVA cleanup job started at {datetime.now().isoformat()}")
+        result = await cleanup_expired_ccva_public_results(db)
+        
+        if result:
+            logger.info(f"CCVA cleanup job completed: Deleted {result.get('deleted_count', 0)} expired record(s)")
+        else:
+            logger.warning("CCVA cleanup job completed but returned no result")
+            
+    except Exception as e:
+        logger.error(f"Error executing CCVA cleanup job: {str(e)}")
+
 async def start_scheduler():
     db = None
     async for session in get_arangodb_session():
@@ -146,6 +170,21 @@ async def start_scheduler():
     import asyncio
     loop = asyncio.get_event_loop()
     loop.create_task(schedule_odk_fetch_job(db))
+    
+    # Schedule CCVA cleanup job to run every 6 hours for privacy
+    # This will clean up expired TTL records from CCVA_PUBLIC_RESULTS
+    # Privacy-first: Frontend deletes immediately on completion, but this is a backup
+    # in case user closes browser or deletion fails
+    if not scheduler.get_job('ccva_cleanup_job'):
+        scheduler.add_job(
+            ccva_cleanup_job,
+            'interval',
+            hours=6,  # Run every 6 hours for faster cleanup
+            id='ccva_cleanup_job',
+            replace_existing=True,
+            kwargs={'db': db}
+        )
+        logger.info("Scheduled CCVA cleanup job to run every 6 hours (privacy-first backup)")
 
 async def shutdown_scheduler():
     """Shutdown the scheduler"""

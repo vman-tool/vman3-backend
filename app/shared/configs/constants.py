@@ -26,6 +26,7 @@ class db_collections():
     CCVA_GRAPH_RESULTS: str = 'ccva_graph_results'
     CCVA_ERRORS:str = 'ccva_errors'
     CCVA_ERRORS_CORRECTIONS:str = 'ccva_errors_corrections'
+    CCVA_PUBLIC_RESULTS: str = 'ccva_public_results'  # Single collection for all public CCVA data (temporary with TTL)
 
 class Special_Constants():
     UPLOAD_FOLDER: str = '/uploads'
@@ -102,7 +103,11 @@ collections_with_indexes = {
         
     ],
     db_collections.CCVA_ERRORS: [],
-    db_collections.CCVA_ERRORS_CORRECTIONS: []
+    db_collections.CCVA_ERRORS_CORRECTIONS: [],
+    db_collections.CCVA_PUBLIC_RESULTS: [
+        {"fields": ["task_id"], "unique": True, "type": "persistent", "name": "idx_task_id"},
+        {"fields": ["ttl"], "type": "persistent", "name": "idx_ttl"}
+    ]
 }
 
 class AccessPrivileges():

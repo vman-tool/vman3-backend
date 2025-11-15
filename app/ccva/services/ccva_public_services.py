@@ -194,8 +194,9 @@ def runCCVA(odk_raw:pd.DataFrame, id_col: str = None,date_col:str =None,start_ti
             ensure_task(update_callback({"progress": 0, "message": "No records found", "status": 'error',"elapsed_time": f"{(datetime.now() - start_time).seconds // 3600}:{(datetime.now() - start_time).seconds // 60 % 60}:{(datetime.now() - start_time).seconds % 60}", "task_id": file_id, "error": True}))
             return
         print("InterVA5 analysis completed.",len(results_to_insert))
-         # db.collection(db_collections.CCVA_RESULTS).insert_many(results_to_insert, overwrite=True, overwrite_mode="update")
-        print("CCVA results inserted into the database temporary.")
+        # NOTE: Public CCVA data is NOT saved to CCVA_RESULTS collection
+        # All public data is stored exclusively in CCVA_PUBLIC_RESULTS via compile_ccva_results()
+        print("CCVA results will be saved to CCVA_PUBLIC_RESULTS collection.")
 
 
         total_records = len(records)
@@ -206,6 +207,7 @@ def runCCVA(odk_raw:pd.DataFrame, id_col: str = None,date_col:str =None,start_ti
 
         ccva_results= compile_ccva_results(iv5out,
                                            data_processed_with_results=len(results_to_insert),
+                                           processed_data=results_to_insert,
                                            error_logs=error_logs,
                                            top=top,
                                            undetermined=undetermined,
@@ -239,11 +241,15 @@ def runCCVA(odk_raw:pd.DataFrame, id_col: str = None,date_col:str =None,start_ti
 def compile_ccva_results(iv5out, top=10, undetermined=True,start_time:timedelta=None,
                          task_id:str=None,
                          data_processed_with_results:int=0,
+                         processed_data: Optional[list]=None,
                          total_records:int=0, rangeDates: Dict={},
                          error_logs: Optional[any]=None,
                          db: StandardDatabase=None):
-    # create TTL for temporary data
-    ttl_date=  datetime.now().isoformat()
+    # create TTL for temporary data (24 hours from now as safety net)
+    # Privacy-first: Data should be deleted immediately by frontend when process completes.
+    # This TTL is only a backup in case frontend deletion fails or user closes browser.
+    # Cron job will clean up expired records regularly.
+    ttl_date = (datetime.now() + timedelta(hours=24)).isoformat()
     
     # Compile results for all groups
     all_results = {
@@ -355,41 +361,32 @@ def compile_ccva_results(iv5out, top=10, undetermined=True,start_time:timedelta=
     #     "values": merged_arr
     # }
 
-    # Combine all results into a single dictionary
+    # Combine all results into a single dictionary for public CCVA
     elapsed_time = datetime.now() - start_time
-    ccva_results = {
+    ccva_public_result = {
         "task_id": task_id,
         "created_at": datetime.now().isoformat(),
         "total_records": total_records,
-        "ttl":ttl_date,
+        "ttl": ttl_date,  # TTL date for automatic cleanup (24 hours - privacy backup)
         "data_processed_with_results": data_processed_with_results,
-        "elapsed_time":   f"{elapsed_time.seconds // 3600}:{(elapsed_time.seconds // 60) % 60}:{elapsed_time.seconds % 60}",
-
-        "range":rangeDates,
-           "graphs":{
-          "all": all_results,
+        "elapsed_time": f"{elapsed_time.seconds // 3600}:{(elapsed_time.seconds // 60) % 60}:{elapsed_time.seconds % 60}",
+        "range": rangeDates,
+        "graphs": {
+            "all": all_results,
             "male": male_results,
-        "female": female_results,
-        "adult": adult_results,
-        "child": child_results,
-        "neonate": neonate_results,
-    }
-        # "all": all_results,
-        # "male": male_results,
-        # "female": female_results,
-        # "adult": adult_results,
-        # "child": child_results,
-        # "neonate": neonate_results,
-        # "error_logs": error_logs,
-        # "merged": merged_results
+            "female": female_results,
+            "adult": adult_results,
+            "child": child_results,
+            "neonate": neonate_results,
+        },
+        "processed_data": processed_data if processed_data else [],
+        "error_logs": error_logs if error_logs else [],
+        "status": "completed"
     }
 
-    db.collection(db_collections.CCVA_GRAPH_RESULTS).insert(ccva_results)
-    # set the ttl in error data
-    for record in error_logs:
-        # record["task_id"] = file_id
-        record['ttl']=ttl_date
-    db.collection(db_collections.CCVA_ERRORS).insert(error_logs, overwrite=True, overwrite_mode="update")
+    # Save everything to single public collection ONLY (temporary with TTL)
+    # Public CCVA data is stored exclusively in CCVA_PUBLIC_RESULTS, nowhere else
+    db.collection(db_collections.CCVA_PUBLIC_RESULTS).insert(ccva_public_result, overwrite=True, overwrite_mode="update")
     # ensure_task( websocket_broadcast(task_id=task_id, progress_data= InterVA5Progress(
     #         progress=10,
     #         total_records= total_records,
@@ -408,20 +405,20 @@ def compile_ccva_results(iv5out, top=10, undetermined=True,start_time:timedelta=
         "elapsed_time":   f"{elapsed_time.seconds // 3600}:{(elapsed_time.seconds // 60) % 60}:{elapsed_time.seconds % 60}",
 
         "range":rangeDates,
-      
-    "graphs":{
+        "graphs":{
           "all": all_results,
             "male": male_results,
         "female": female_results,
         "adult": adult_results,
         "child": child_results,
         "neonate": neonate_results,
-    }
-        # "error_logs": error_logs,
+        },
+        "processed_data": processed_data if processed_data else [],
+        "error_logs": error_logs if error_logs else [],
         # "merged": merged_results
     }, "message": "Finish CCVA analysis...", "status": 'completed',"elapsed_time": f"{(datetime.now() - start_time).seconds // 3600}:{(datetime.now() - start_time).seconds // 60 % 60}:{(datetime.now() - start_time).seconds % 60}", "task_id": task_id, "error": False}))
 
-    return ccva_results
+    return ccva_public_result
 
 def process_ccva_errorlogs(output_folder: str,task_id:str=None):
     # Path to the error log file
@@ -488,8 +485,30 @@ def process_ccva_errorlogs(output_folder: str,task_id:str=None):
     return log_entries
 
 async def fetch_ccva_results_and_errors(db: StandardDatabase, task_id: str):
+    """
+    Fetch CCVA results from the public collection.
+    For public CCVA, everything is stored in CCVA_PUBLIC_RESULTS.
+    NOTE: This function only READS data. All new public CCVA data is written
+    exclusively to CCVA_PUBLIC_RESULTS collection only.
+    """
     try:
-        # AQL query to fetch individual results and error logs
+        # First try to fetch from the public collection (where all new data is stored)
+        public_collection = db.collection(db_collections.CCVA_PUBLIC_RESULTS)
+        public_result = public_collection.find({"task_id": task_id})
+        
+        if public_result and len(public_result) > 0:
+            result_doc = public_result[0]
+            return {
+                "results": result_doc.get("processed_data", []),
+                "error_logs": result_doc.get("error_logs", []),
+                "graphs": result_doc.get("graphs", {}),
+                "task_id": result_doc.get("task_id"),
+                "total_records": result_doc.get("total_records"),
+                "elapsed_time": result_doc.get("elapsed_time"),
+                "range": result_doc.get("range", {})
+            }
+        
+        # Fallback to old collections for reading legacy data only (read-only, no writes)
         query = f"""
         LET graph_results = (
             FOR g IN ccva_errors
@@ -510,7 +529,7 @@ async def fetch_ccva_results_and_errors(db: StandardDatabase, task_id: str):
         """
 
         # Execute the AQL query
-        cursor = db.aql.execute(query,cache=True)
+        cursor = db.aql.execute(query, cache=True)
 
         # Retrieve the result (first result since RETURN only outputs one document)
         result = cursor.next()
@@ -519,6 +538,71 @@ async def fetch_ccva_results_and_errors(db: StandardDatabase, task_id: str):
 
     except Exception as e:
         print(f"Error fetching CCVA results and error logs: {e}")
+        return None
+
+async def cleanup_expired_ccva_public_results(db: StandardDatabase = None):
+    """
+    Clean up expired CCVA public results based on TTL.
+    Privacy-first: This is a backup cleanup for cases where:
+    - Frontend deletion failed
+    - User closed browser before deletion completed
+    - Network issues prevented deletion
+    
+    Deletes all records from CCVA_PUBLIC_RESULTS where ttl date has passed (24 hours).
+    This function is designed to be called by a cron job every 6 hours.
+    """
+    try:
+        from app.shared.configs.arangodb import get_arangodb_session
+        from app.shared.configs.constants import db_collections
+        from app.utilits.logger import app_logger
+        
+        # Get database session if not provided
+        if db is None:
+            async for session in get_arangodb_session():
+                db = session
+                break
+        
+        if db is None:
+            app_logger.error("Failed to get database session for CCVA cleanup")
+            return
+        
+        # Get current datetime for comparison
+        current_time = datetime.now()
+        
+        # Query to find and delete expired records
+        # TTL is stored as ISO format string (e.g., "2024-01-15T10:30:00")
+        # We compare ISO strings directly since they sort chronologically
+        query = f"""
+        FOR doc IN {db_collections.CCVA_PUBLIC_RESULTS}
+            FILTER doc.ttl != null AND doc.ttl != "" AND doc.ttl < @current_time
+            REMOVE doc IN {db_collections.CCVA_PUBLIC_RESULTS}
+            RETURN OLD._key
+        """
+        
+        bind_vars = {
+            "current_time": current_time.isoformat()
+        }
+        
+        # Execute the query
+        cursor = db.aql.execute(query, bind_vars=bind_vars, cache=False)
+        deleted_keys = [key for key in cursor]
+        
+        deleted_count = len(deleted_keys)
+        
+        if deleted_count > 0:
+            app_logger.info(f"CCVA cleanup: Deleted {deleted_count} expired public CCVA result(s) at {current_time.isoformat()}")
+        else:
+            app_logger.debug(f"CCVA cleanup: No expired records found at {current_time.isoformat()}")
+        
+        return {
+            "deleted_count": deleted_count,
+            "deleted_keys": deleted_keys,
+            "cleanup_time": current_time.isoformat()
+        }
+        
+    except Exception as e:
+        app_logger.error(f"Error during CCVA public results cleanup: {str(e)}")
+        print(f"Error during CCVA public results cleanup: {e}")
         return None
     
 async def getVADataAndMergeWithResults(db: StandardDatabase, results: list):
