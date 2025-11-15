@@ -226,7 +226,7 @@ async def set_default_ccva(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="CCVA not found or could not be set as default")
     return {"message": "CCVA set as default successfully"}
 
-# Service to delete a CCVA entry
+# Service to delete a CCVA entry (requires authentication)
 @log_to_db(context="delete_ccva", log_args=True)       
 @ccva_public_router.delete("/{ccva_id}", status_code=status.HTTP_200_OK)
 async def delete_ccva(
@@ -239,6 +239,35 @@ async def delete_ccva(
     if not result:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="CCVA not found or could not be deleted")
     return {"message": "CCVA entry deleted successfully"}
+
+# Public service to delete CCVA entry by task_id (no authentication required)
+@log_to_db(context="delete_ccva_public", log_args=True)       
+@ccva_public_router.delete("/task/{task_id}", status_code=status.HTTP_200_OK)
+async def delete_ccva_by_task_id(
+    task_id: str,
+    db: StandardDatabase = Depends(get_arangodb_session)
+):
+    """
+    Delete CCVA results from server database by task_id.
+    This is a public endpoint that doesn't require authentication.
+    Used after data is confirmed saved in browser IndexedDB.
+    Deletes from the single CCVA_PUBLIC_RESULTS collection.
+    """
+    try:
+        from app.shared.configs.constants import db_collections
+        
+        # Delete from the single public collection
+        public_collection = db.collection(db_collections.CCVA_PUBLIC_RESULTS)
+        public_collection.delete_match({"task_id": task_id})
+        
+        return ResponseMainModel(
+            data=None,
+            message=f"CCVA entry with task_id {task_id} deleted successfully from server",
+            error=False
+        )
+    except Exception as e:
+        print(f"Error deleting CCVA entry: {e}")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to delete CCVA entry: {str(e)}")
 
 
 
