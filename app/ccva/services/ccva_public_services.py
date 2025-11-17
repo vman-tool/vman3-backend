@@ -14,39 +14,39 @@ from app.ccva.utilits.pycrossva.transform import transform
 from app.shared.middlewares.exceptions import BadRequestException
 from app.ccva.models.ccva_models import InterVA5Progress
 from app.ccva.utilits.interva.interva5 import InterVA5
-import vman3 as vman
+# import vman3 as vman
 from app.settings.services.odk_configs import fetch_odk_config
 from app.shared.configs.arangodb import null_convert_data, remove_null_values
 from app.shared.configs.constants import db_collections
 # from app.shared.configs.models import ResponseMainModel
 
-def transform_data(va_data:str|pd.DataFrame, id_col: str = 'instanceID')->pd.DataFrame:
-    """
-        Transform VA data to InterVA format based on detected WHO VA questionnaire version.
-    """
-    print(f"""Loading : {va_data}""")
-    data =  va_data if isinstance(va_data, pd.DataFrame) else pd.read_csv(va_data, low_memory=False)
-    version = vman.detectwhoqn(data)
-    print(f"Detected WHO VA questionnaire version: {version}")
-    if version == 'who2016':
-        input_format = '2016WHOv151'
-        output_format = 'InterVA5'
-    elif version == 'who2022':
-        input_format = '2022WHOv0101'
-        output_format = 'InterVA_2022'
-    else:
-        print("Unknown data format. Terminating function.")
-        return None
+# def transform_data(va_data:str|pd.DataFrame, id_col: str = 'instanceID')->pd.DataFrame:
+#     """
+#         Transform VA data to InterVA format based on detected WHO VA questionnaire version.
+#     """
+#     print(f"""Loading : {va_data}""")
+#     data =  va_data if isinstance(va_data, pd.DataFrame) else pd.read_csv(va_data, low_memory=False)
+#     version = vman.detectwhoqn(data)
+#     print(f"Detected WHO VA questionnaire version: {version}")
+#     if version == 'who2016':
+#         input_format = '2016WHOv151'
+#         output_format = 'InterVA5'
+#     elif version == 'who2022':
+#         input_format = '2022WHOv0101'
+#         output_format = 'InterVA_2022'
+#     else:
+#         print("Unknown data format. Terminating function.")
+#         return None
     
-    ccva_df = vman.pycrossva(
-        input_data=data,
-        input_format=input_format,
-        output_format=output_format,
-        raw_data_id=id_col,
-        lower=True,
-        verbose=3
-    )
-    return ccva_df
+#     ccva_df = vman.pycrossva(
+#         input_data=data,
+#         input_format=input_format,
+#         output_format=output_format,
+#         raw_data_id=id_col,
+#         lower=True,
+#         verbose=3
+#     )
+#     return ccva_df
     
 # The websocket_broadcast function for broadcasting progress updates
 async def websocket_broadcast(task_id: str, progress_data: dict):

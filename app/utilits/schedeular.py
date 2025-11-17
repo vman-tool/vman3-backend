@@ -13,6 +13,7 @@ from app.shared.configs.constants import db_collections
 from app.utilits.db_logger import log_to_db
 from app.utilits.logger import app_logger
 from app.ccva.services.ccva_public_services import cleanup_expired_ccva_public_results
+from app.ccva_public_module.config import CCVA_PUBLIC_CLEANUP_ENABLED
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
@@ -175,7 +176,8 @@ async def start_scheduler():
     # This will clean up expired TTL records from CCVA_PUBLIC_RESULTS
     # Privacy-first: Frontend deletes immediately on completion, but this is a backup
     # in case user closes browser or deletion fails
-    if not scheduler.get_job('ccva_cleanup_job'):
+    # Only schedule if CCVA Public module cleanup is enabled
+    if CCVA_PUBLIC_CLEANUP_ENABLED and not scheduler.get_job('ccva_cleanup_job'):
         scheduler.add_job(
             ccva_cleanup_job,
             'interval',
