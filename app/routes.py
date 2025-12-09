@@ -34,8 +34,8 @@ def create_main_router():
     main_router.include_router(pcva_routes.pcva_socket_router)
     
     # Conditionally include CCVA Public module (can be disabled for standalone deployment)
-    if CCVA_PUBLIC_ENABLED:
-        main_router.include_router(ccva_public_routes.ccva_public_router)
+    # if CCVA_PUBLIC_ENABLED:
+    main_router.include_router(ccva_public_routes.ccva_public_router)
     
     main_router.include_router(ccva_routes.ccva_router)
   
