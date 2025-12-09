@@ -186,7 +186,21 @@ def runCCVA(odk_raw:pd.DataFrame, id_col: str = None,date_col:str =None,start_ti
 
 
         total_records = len(records)
-        rangeDates={"start": odk_raw[date_col].max(), "end":odk_raw[date_col].min()}
+        print(date_col)
+        print(odk_raw[date_col])
+    
+        # Normalize date column to avoid str/float comparison errors when deriving ranges
+        if date_col and date_col in odk_raw.columns:
+            date_series = pd.to_datetime(odk_raw[date_col], errors="coerce")
+            valid_dates = date_series.dropna()
+            if not valid_dates.empty:
+                latest_date = valid_dates.max().to_pydatetime().isoformat()
+                earliest_date = valid_dates.min().to_pydatetime().isoformat()
+            else:
+                latest_date = earliest_date = None
+        else:
+            latest_date = earliest_date = None
+        rangeDates = {"start": latest_date, "end": earliest_date}
         ## get ccva error logs to be added to the ccva_results
         error_logs = process_ccva_errorlogs(output_folder + file_id + "_", task_id=file_id)
         print("Processing error logs...")
