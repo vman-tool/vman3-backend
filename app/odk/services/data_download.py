@@ -321,7 +321,8 @@ async def insert_many_data_to_arangodb(data: List[dict], overwrite_mode: str = '
 
 
         db:ArangoDBClient = await get_arangodb_client()
-        await db.insert_many(collection_name=db_collections.VA_TABLE, documents=data,overwrite_mode = overwrite_mode)
+        # Pass sanitize=False since we already sanitized above to avoid double processing
+        return await db.insert_many(collection_name=db_collections.VA_TABLE, documents=data, overwrite_mode=overwrite_mode, sanitize=False)
 
     except Exception as e:
         print(e)
