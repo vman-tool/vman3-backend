@@ -24,7 +24,7 @@ logger = logging.getLogger(__name__)
 ccva_public_scheduler = AsyncIOScheduler()
 
 
-@log_to_db(context="ccva_public_cleanup_job")
+#@log_to_db(context="ccva_public_cleanup_job")
 async def ccva_public_cleanup_job(db=None):
     """
     Cleanup job for expired CCVA public results based on TTL.

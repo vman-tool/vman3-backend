@@ -32,7 +32,7 @@ ccva_router = APIRouter(
 # In-memory store for task results
 task_results = {}
 
-@log_to_db(context="run_ccva_with_csv", log_args=True)
+#@log_to_db(context="run_ccva_with_csv", log_args=True)
 @ccva_router.post("/upload", status_code=status.HTTP_200_OK)
 async def run_ccva_with_csv(
     background_tasks: BackgroundTasks,
@@ -122,7 +122,7 @@ async def run_ccva_with_csv(
         # Raising the error so FastAPI can handle it
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
     
-@log_to_db(context="run_internal_ccva", log_args=True)
+#@log_to_db(context="run_internal_ccva", log_args=True)
 @ccva_router.post("", status_code=status.HTTP_200_OK,)
 async def run_internal_ccva(
     background_tasks: BackgroundTasks,
@@ -175,7 +175,7 @@ async def run_internal_ccva(
         print(e)
         # Raising the error so FastAPI can handle it
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
-@log_to_db(context="get_processed_ccva_graphs", log_args=True)    
+#@log_to_db(context="get_processed_ccva_graphs", log_args=True)    
 @ccva_router.get("", status_code=status.HTTP_200_OK)
 async def get_processed_ccva_graphs(
     background_tasks: BackgroundTasks,
@@ -236,7 +236,7 @@ async def get_processed_ccva_graphs(
         print(f"Error: {str(e)}")
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to fetch processed CCVA graphs.")
     
-@log_to_db(context="get_all_processed_ccva_graphs", log_args=True)        
+#@log_to_db(context="get_all_processed_ccva_graphs", log_args=True)        
 @ccva_router.get("/list", status_code=status.HTTP_200_OK,)
 async def get_all_processed_ccva_graphs(
     background_tasks: BackgroundTasks,
@@ -246,7 +246,7 @@ async def get_all_processed_ccva_graphs(
 ):
    return await fetch_all_processed_ccva_graphs(db=db)
 
-@log_to_db(context="set_default_ccva", log_args=True)       
+#@log_to_db(context="set_default_ccva", log_args=True)       
 @ccva_router.post("/{ccva_id}/set-default", status_code=status.HTTP_200_OK)
 async def set_default_ccva(
     ccva_id: str,
@@ -260,7 +260,7 @@ async def set_default_ccva(
     return {"message": "CCVA set as default successfully"}
 
 # Service to delete a CCVA entry
-@log_to_db(context="delete_ccva", log_args=True)       
+#@log_to_db(context="delete_ccva", log_args=True)       
 @ccva_router.delete("/{ccva_id}", status_code=status.HTTP_200_OK)
 async def delete_ccva(
     ccva_id: str,
@@ -277,7 +277,7 @@ async def delete_ccva(
 
 
 # Endpoint to download the results as JSON or CSV
-@log_to_db(context="download_ccva_results", log_args=True)  
+#@log_to_db(context="download_ccva_results", log_args=True)  
 @ccva_router.get("/download_ccva_results/{task_id}", status_code=status.HTTP_200_OK)
 async def download_ccva_results(
     task_id: str,

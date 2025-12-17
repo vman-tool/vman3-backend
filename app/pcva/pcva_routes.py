@@ -73,7 +73,7 @@ pcva_socket_router = APIRouter(
     responses={404: {"description": "Not found"}},
 )
 
-@log_to_db(context="get_va_records", log_args=True)     
+#@log_to_db(context="get_va_records", log_args=True)     
 @pcva_router.get("", status_code=status.HTTP_200_OK)
 async def get_va_records(
     paging: Optional[bool] = Query(None, alias="paging"),
@@ -96,7 +96,7 @@ async def get_va_records(
         
     except Exception as e:
         raise e
-@log_to_db(context="get_unassigned_va_records", log_args=True)     
+#@log_to_db(context="get_unassigned_va_records", log_args=True)     
 @pcva_router.get("/get-unassigned-va", status_code=status.HTTP_200_OK)
 async def get_unassigned_va_records(
     paging: Optional[bool] = Query(None, alias="paging"),
@@ -114,7 +114,7 @@ async def get_unassigned_va_records(
         raise e
 
 
-@log_to_db(context="get_va_for_unnassignment", log_args=True)    
+#@log_to_db(context="get_va_for_unnassignment", log_args=True)    
 @pcva_router.get("/get-uncoded-assigned-va", status_code=status.HTTP_200_OK)
 async def get_va_for_unnassignment(
     paging: Optional[bool] = Query(None, alias="paging"),
@@ -131,7 +131,7 @@ async def get_va_for_unnassignment(
     except Exception as e:
         raise e
 
-@log_to_db(context="get_icd10_categories", log_args=True)    
+#@log_to_db(context="get_icd10_categories", log_args=True)    
 @pcva_router.get(
         path="/icd10-categories", 
         status_code=status.HTTP_200_OK,
@@ -155,7 +155,7 @@ async def get_icd10_categories(
     except:
         raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed get icd10 categories")
 
-@log_to_db(context="create_icd10_categories", log_args=True)  
+#@log_to_db(context="create_icd10_categories", log_args=True)  
 @pcva_router.post("/create-icd10-categories", status_code=status.HTTP_201_CREATED)
 async def create_icd10_categories(
     categories: List[ICD10CategoryRequestClass],
@@ -167,7 +167,7 @@ async def create_icd10_categories(
     except:
         raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed create icd10 categories")
 
-@log_to_db(context="update_icd10_categories", log_args=True)  
+#@log_to_db(context="update_icd10_categories", log_args=True)  
 @pcva_router.post(
         path="/update-icd10-categories", 
         status_code=status.HTTP_200_OK,
@@ -183,7 +183,7 @@ async def update_icd10_categories(
         raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed update icd10 codes")
 
 
-@log_to_db(context="upload_file", log_args=True)  
+#@log_to_db(context="upload_file", log_args=True)  
 @pcva_router.post(
         path="/upload-icd10-data", 
         status_code=status.HTTP_200_OK,
@@ -218,7 +218,7 @@ async def upload_file(
 
 
 
-@log_to_db(context="get_icd10", log_args=True)  
+#@log_to_db(context="get_icd10", log_args=True)  
 @pcva_router.get(
         path="/get-icd10", 
         status_code=status.HTTP_200_OK,
@@ -244,7 +244,7 @@ async def get_icd10(
         raise e
 
 
-@log_to_db(context="create_icd10", log_args=True)  
+#@log_to_db(context="create_icd10", log_args=True)  
 @pcva_router.post(
         path="/create-icd10", 
         status_code=status.HTTP_201_CREATED,
@@ -260,7 +260,7 @@ async def create_icd10(
     except:
         raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed create icd10 codes")
 
-@log_to_db(context="update_icd10", log_args=True)  
+#@log_to_db(context="update_icd10", log_args=True)  
 @pcva_router.post(
         path="/update-icd10", 
         status_code=status.HTTP_200_OK,
@@ -276,7 +276,7 @@ async def update_icd10(
         raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed update icd10 codes")
 
 
-@log_to_db(context="get_assigned_va", log_args=True) 
+#@log_to_db(context="get_assigned_va", log_args=True) 
 @pcva_router.get("/coders", status_code=status.HTTP_200_OK)
 async def get_assigned_va(
     paging: Optional[bool] = Query(False, alias="paging"),
@@ -299,7 +299,7 @@ async def get_assigned_va(
 
 
 
-@log_to_db(context="va-assignments", log_args=True) 
+#@log_to_db(context="va-assignments", log_args=True) 
 @pcva_router.get("/va-assignments", status_code=status.HTTP_200_OK)
 async def get_assigned_va(
     paging: Optional[bool] = Query(None, alias="paging"),
@@ -322,7 +322,7 @@ async def get_assigned_va(
     except Exception as e:
         raise e
 
-@log_to_db(context="assign_va", log_args=True) 
+#@log_to_db(context="assign_va", log_args=True) 
 @pcva_router.post(
         "/assign-va", 
         status_code=status.HTTP_201_CREATED, 
@@ -339,7 +339,7 @@ async def assign_va(
 
 
 
-@log_to_db(context="unassign_va", log_args=True) 
+#@log_to_db(context="unassign_va", log_args=True) 
 @pcva_router.post(
         "/unassign-va", 
         status_code=status.HTTP_201_CREATED, 
@@ -354,7 +354,7 @@ async def unassign_va(
     except Exception as e:
         raise e
 
-@log_to_db(context="get_coded_va", log_args=True) 
+#@log_to_db(context="get_coded_va", log_args=True) 
 @pcva_router.get("/get-coded-va", status_code=status.HTTP_200_OK)
 async def get_coded_va(
     coder: Optional[str] = Query(None, alias="coder"),

@@ -15,7 +15,7 @@ from app.shared.configs.models import ResponseMainModel
 from app.utilits.db_logger import db_logger, log_to_db
 
 logger = logging.getLogger(__name__)
-@log_to_db(context="default_account_creation", log_args=True)
+#@log_to_db(context="default_account_creation", log_args=True)
 async def default_account_creation( ):
     try:
         db = None

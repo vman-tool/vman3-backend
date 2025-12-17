@@ -2,6 +2,7 @@ from types import SimpleNamespace
 
 from arango.database import StandardDatabase
 from fastapi import HTTPException, status
+from fastapi.concurrency import run_in_threadpool
 
 from app.odk.utils.odk_client import ODKClientAsync
 from app.settings.models.settings import ImagesConfigData, SettingsConfigData
@@ -25,11 +26,14 @@ def validate_configs(config: SettingsConfigData):
         config.field_mapping.is_neonate is None):
         raise BadRequestException("One or more required fields are not set in the configuration")
     
-@log_to_db(context="fetch_odk_config", log_args=True)
+#@log_to_db(context="fetch_odk_config", log_args=True)
 async def fetch_odk_config(db: StandardDatabase, is_validate_configs: bool = False) -> SettingsConfigData:
     try:
         
-        config_data = db.collection(db_collections.SYSTEM_CONFIGS).get('vman_config')  # Assumes 'vman_config' is the key
+        def get_config_data():
+            return db.collection(db_collections.SYSTEM_CONFIGS).get('vman_config')
+
+        config_data = await run_in_threadpool(get_config_data)
         if not config_data:
             await db_logger.log(
             message="ODK configuration not found in the database" ,
@@ -118,8 +122,11 @@ async def add_configs_settings(configData: SettingsConfigData, db: StandardDatab
             FOR settings in  {db_collections.SYSTEM_CONFIGS}
             RETURN settings.field_labels[0]
             """
-            cursor = db.aql.execute(aql_query, bind_vars={},cache=True)
-            existing_field_labels_settings = [doc for doc in cursor]
+            def execute_field_labels_query():
+                cursor = db.aql.execute(aql_query, bind_vars={}, cache=True)
+                return [doc for doc in cursor]
+
+            existing_field_labels_settings = await run_in_threadpool(execute_field_labels_query)
             field_label_data = []
             if len(existing_field_labels_settings) > 0 and existing_field_labels_settings[0] is not None:
                 existing_field_label_dict = {field['field_id']: field for field in existing_field_labels_settings}
@@ -185,8 +192,11 @@ async def save_system_settings(data, db: StandardDatabase = None):
             'key':  data['_key'],
             'document': data
         }
-        cursor = db.aql.execute(aql_query, bind_vars=bind_vars)
-        return [doc for doc in cursor]
+        def execute_save_settings():
+            cursor = db.aql.execute(aql_query, bind_vars=bind_vars)
+            return [doc for doc in cursor]
+            
+        return await run_in_threadpool(execute_save_settings)
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -222,8 +232,11 @@ async def get_system_images(db: StandardDatabase = None):
         FOR settings in  {db_collections.SYSTEM_CONFIGS}
         RETURN settings.system_images
     """
-    cursor = db.aql.execute(aql_query, bind_vars={})
-    data = [doc for doc in cursor]
+    def execute_get_images_query():
+        cursor = db.aql.execute(aql_query, bind_vars={})
+        return [doc for doc in cursor]
+
+    data = await run_in_threadpool(execute_get_images_query)
     return data
 
 async def save_system_images(data: ImagesConfigData, reset: bool = False, db: StandardDatabase = None):
