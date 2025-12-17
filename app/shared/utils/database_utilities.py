@@ -1,5 +1,6 @@
 from typing import Any, Dict, List
 from arango.database import StandardDatabase
+from fastapi.concurrency import run_in_threadpool
 
 async def record_exists(collection_name: str, uuid: str = None, id: str = None, custom_fields: Dict = {}, db: StandardDatabase = None) -> bool:
     """
@@ -53,8 +54,11 @@ async def record_exists(collection_name: str, uuid: str = None, id: str = None, 
         """
         bind_vars = {'uuid': uuid}
     
-    cursor = db.aql.execute(query, bind_vars=bind_vars)
-    exists = cursor.next()
+    def execute_exists_query():
+        cursor = db.aql.execute(query, bind_vars=bind_vars)
+        return cursor.next()
+
+    exists = await run_in_threadpool(execute_exists_query)
     return exists
 
 def replace_object_values(new_dict: Dict, old_dict: Dict, force: bool = False):

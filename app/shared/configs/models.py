@@ -4,6 +4,7 @@ from fastapi import HTTPException
 from typing import Any, Dict, List, Optional, TypeVar, Union
 
 from arango.database import StandardDatabase
+from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel, Field
 
 from app.shared.configs.constants import db_collections
@@ -75,9 +76,13 @@ class VManBaseModel(BaseModel):
 
         if existing_doc:
             doc["_key"] = existing_doc[0]["_key"]
-            new_doc = collection.update(doc, return_new=True)
+            def execute_update():
+                return collection.update(doc, return_new=True)
+            new_doc = await run_in_threadpool(execute_update)
         else:
-            new_doc = collection.insert(doc, return_new=True)
+            def execute_insert():
+                return collection.insert(doc, return_new=True)
+            new_doc = await run_in_threadpool(execute_insert)
         return new_doc['new'] if 'new' in new_doc else new_doc
 
     @classmethod
@@ -121,8 +126,12 @@ class VManBaseModel(BaseModel):
             limit = limit,
             include_deleted = include_deleted
         )
-        cursor = db.aql.execute(query, bind_vars=bind_vars)
-        records = list(cursor)
+
+        def execute_get_many():
+            cursor = db.aql.execute(query, bind_vars=bind_vars)
+            return list(cursor)
+        
+        records = await run_in_threadpool(execute_get_many)
         if not records:
             return []
         return records
@@ -165,13 +174,15 @@ class VManBaseModel(BaseModel):
     
             query += " COLLECT WITH COUNT INTO length RETURN length"
 
-            cursor = db.aql.execute(query, bind_vars=bind_vars)
+            def execute_count():
+                cursor = db.aql.execute(query, bind_vars=bind_vars)
+                try:
+                    result = cursor.next()
+                    return result if result is not None else 0
+                except StopIteration:
+                    return 0
 
-            try:
-                result = cursor.next()
-                return result if result is not None else 0
-            except StopIteration:
-                return 0
+            return await run_in_threadpool(execute_count)
         except Exception as e:
             print(f"Error in count method: {e}")
             return 0
@@ -195,15 +206,26 @@ class VManBaseModel(BaseModel):
                 RETURN doc
             """
             bind_vars = {'uuid': self.uuid}
-            cursor = db.aql.execute(query, bind_vars=bind_vars)
-            original_doc = cursor.next()
+            
+            def execute_get_original_uuid():
+                cursor = db.aql.execute(query, bind_vars=bind_vars)
+                return cursor.next()
+            
+            original_doc = await run_in_threadpool(execute_get_original_uuid)
         else:
             key = doc["_key"] if "_key" in doc else doc["id"]
-            original_doc = collection.get({'_key': key})
+            
+            def execute_get_original_key():
+                return collection.get({'_key': key})
+            
+            original_doc = await run_in_threadpool(execute_get_original_key)
         
         original_doc = replace_object_values(doc, original_doc)
         
-        return collection.update(original_doc, return_new=True)["new"]
+        def execute_update_doc():
+            return collection.update(original_doc, return_new=True)["new"]
+
+        return await run_in_threadpool(execute_update_doc)
 
     @classmethod
     async def delete(cls, doc_id: str = None, doc_uuid: str = None, deleted_by: str = None, hard_delete: bool = False, db: StandardDatabase = None):
@@ -218,22 +240,34 @@ class VManBaseModel(BaseModel):
         collection = db.collection(cls.get_collection_name())
 
         if doc_id:
-            doc = collection.get(doc_id)
+            def execute_get_delete_id():
+                return collection.get(doc_id)
+            doc = await run_in_threadpool(execute_get_delete_id)
         if doc_uuid:
             query = f"""
                 LET doc = FIRST(FOR doc IN {collection.name} FILTER doc.uuid == @uuid RETURN doc)
                 RETURN doc
             """
             bind_vars = {'uuid': doc_uuid}
-            cursor = db.aql.execute(query, bind_vars=bind_vars)
-            doc = cursor.next()
+            
+            def execute_get_delete_uuid():
+                cursor = db.aql.execute(query, bind_vars=bind_vars)
+                return cursor.next()
+                
+            doc = await run_in_threadpool(execute_get_delete_uuid)
         if hard_delete:
-            return collection.delete(doc, silent=True)
+            def execute_hard_delete():
+                return collection.delete(doc, silent=True)
+            return await run_in_threadpool(execute_hard_delete)
+
         doc["is_deleted"] = True
         doc["deleted_by"] = deleted_by
         doc["deleted_at"] = datetime.now().isoformat()
         
-        return collection.update(doc, silent=True)
+        def execute_soft_delete():
+            return collection.update(doc, silent=True) # Assuming update is sync
+
+        return await run_in_threadpool(execute_soft_delete)
 
     @classmethod
     async def restore(cls, doc_id: str = None, doc_uuid: str = None, restored_by: str= None, db: StandardDatabase = None):
@@ -248,15 +282,21 @@ class VManBaseModel(BaseModel):
         cls.init_collection(db)
         collection = db.collection(cls.get_collection_name())
         if doc_id:
-            doc = collection.get(doc_id)
+            def execute_get_restore_id():
+                return collection.get(doc_id)
+            doc = await run_in_threadpool(execute_get_restore_id)
         if doc_uuid:
             query = f"""
                 LET doc = FIRST(FOR doc IN {collection.name} FILTER doc.uuid == @uuid RETURN doc)
                 RETURN doc
             """
             bind_vars = {'uuid': doc_uuid}
-            cursor = db.aql.execute(query, bind_vars=bind_vars)
-            doc = cursor.next()
+            
+            def execute_get_restore_uuid():
+                cursor = db.aql.execute(query, bind_vars=bind_vars)
+                return cursor.next()
+                
+            doc = await run_in_threadpool(execute_get_restore_uuid)
         if not doc:
             raise HTTPException(status_code=404, detail=f"{cls.get_collection_name()} not found")
         doc['is_deleted'] = False
@@ -265,7 +305,10 @@ class VManBaseModel(BaseModel):
         doc["deleted_by"] = None
         doc["deleted_at"] = None
         
-        return collection.update(doc, return_new=True)["new"]
+        def execute_restore_update():
+            return collection.update(doc, return_new=True)["new"]
+
+        return await run_in_threadpool(execute_restore_update)
     
     @classmethod
     def build_query(cls, collection_name: str, filters: Dict[str, Any] = {}, paging: bool = None, page_number: Optional[int] = None, limit: Optional[int] = None, include_deleted: bool = None):
@@ -330,7 +373,11 @@ class VManBaseModel(BaseModel):
             Database return value
         """
         try:
-            cursor = db.aql.execute(query=query, bind_vars=bind_vars, count=count)
+
+            def execute_custom_query():
+                return db.aql.execute(query=query, bind_vars=bind_vars, count=count)
+
+            cursor = await run_in_threadpool(execute_custom_query)
             return cursor
         except Exception as e:
             raise e
