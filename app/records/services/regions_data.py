@@ -1,4 +1,5 @@
 from arango.database import StandardDatabase
+from fastapi.concurrency import run_in_threadpool
 
 from app.settings.services.odk_configs import fetch_odk_config
 from app.shared.configs.models import ResponseMainModel
@@ -21,8 +22,11 @@ async def get_unique_regions(db: StandardDatabase, current_user:dict):
           RETURN uniqueRegion
         """
 
-        cursor = db.aql.execute(query,cache=True)
-        unique_regions = [region for region in cursor]
+        def execute_query():
+            cursor = db.aql.execute(query, cache=True)
+            return [region for region in cursor]
+
+        unique_regions = await run_in_threadpool(execute_query)
 
         return ResponseMainModel(
             data=unique_regions,

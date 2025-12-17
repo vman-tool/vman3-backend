@@ -23,7 +23,7 @@ statistics_router = APIRouter(
 
 
 
-@log_to_db(context="get_submissions_statistics", log_args=True)
+#@log_to_db(context="get_submissions_statistics", log_args=True)
 @statistics_router.get("/submissions", status_code=status.HTTP_200_OK, response_model=ResponseMainModel)
 async def get_submissions_statistics(
       current_user = Depends(get_current_user),
@@ -40,7 +40,7 @@ async def get_submissions_statistics(
     response = await fetch_submissions_statistics(  current_user=current_user,paging=allow_paging, page_number=page_number, limit=limit, start_date=start_date, end_date=end_date,locations=locations.split(",") if locations else None,date_type=date_type, db=db)
     return response
 
-@log_to_db(context="get_charts_statistics", log_args=True)
+#@log_to_db(context="get_charts_statistics", log_args=True)
 @statistics_router.get("/charts", status_code=status.HTTP_200_OK, response_model=ResponseMainModel)
 async def get_charts_statistics(
     current_user = Depends(get_current_user),

@@ -22,7 +22,7 @@ odk_router = APIRouter(
 
 
 
-@log_to_db(context="fetch_and_store_data", log_args=True)
+#@log_to_db(context="fetch_and_store_data", log_args=True)
 @odk_router.post("/fetch-and-store", status_code=status.HTTP_201_CREATED)
 async def fetch_and_store_data(
     start_date: str = None,
@@ -39,7 +39,7 @@ async def fetch_and_store_data(
     )
     return res
 
-@log_to_db(context="get_form_submission_status", log_args=True)
+#@log_to_db(context="get_form_submission_status", log_args=True)
 @odk_router.post("/fetch_formsubmission_status", status_code=status.HTTP_200_OK)
 async def get_form_submission_status(
     background_tasks: BackgroundTasks,
@@ -75,7 +75,7 @@ async def get_form_submission_status(
         print(e)
         raise HTTPException(status_code=500, detail=str(e))
 
-@log_to_db(context="sync_odk_data_with_async", log_args=True)
+#@log_to_db(context="sync_odk_data_with_async", log_args=True)
 @odk_router.post("/sync_odk_data_with_async", status_code=status.HTTP_200_OK)
 async def fetch_odk_data_with_async_endpoint(
     background_tasks: BackgroundTasks,
@@ -123,7 +123,7 @@ async def fetch_odk_data_with_async_endpoint(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@log_to_db(context="get_form_questions", log_args=True)
+#@log_to_db(context="get_form_questions", log_args=True)
 @odk_router.post("/fetch_form_questions", status_code=status.HTTP_200_OK)
 async def get_form_questions(
     db: StandardDatabase = Depends(get_arangodb_session)
@@ -138,7 +138,7 @@ async def get_form_questions(
 # Manual sync status update endpoint removed - sync status is now updated automatically by backend
 
 
-@log_to_db(context="get_sync_status", log_args=True)
+#@log_to_db(context="get_sync_status", log_args=True)
 @odk_router.get("/sync_status", status_code=status.HTTP_200_OK)
 async def get_sync_status(
     db: StandardDatabase = Depends(get_arangodb_session)

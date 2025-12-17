@@ -2,6 +2,7 @@ from datetime import date
 from typing import List, Optional
 
 from arango.database import StandardDatabase
+from fastapi.concurrency import run_in_threadpool
 
 from app.settings.services.odk_configs import fetch_odk_config
 from app.shared.configs.constants import db_collections
@@ -143,10 +144,14 @@ async def fetch_charts_statistics( current_user: dict,paging: bool = True, page_
             }}
         """
         
+
         # print(combined_query)
         # Execute the combined query
-        cursor = db.aql.execute(combined_query, bind_vars=bind_vars,cache=True)
-        result = cursor.next()
+        def execute_query():
+            cursor = db.aql.execute(combined_query, bind_vars=bind_vars, cache=True)
+            return cursor.next()
+
+        result = await run_in_threadpool(execute_query)
 
         monthly_submissions_data = result['monthly_submissions']
         distribution_by_age_data = result['distribution_by_age'][0]
