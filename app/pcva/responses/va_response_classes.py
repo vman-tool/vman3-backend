@@ -2,6 +2,7 @@ from typing import Any, Dict, List, Optional, Union
 from fastapi import HTTPException
 from pydantic import BaseModel
 from arango.database import StandardDatabase
+from fastapi.concurrency import run_in_threadpool
 
 from app.shared.configs.models import BaseResponseModel, ResponseUser
 from app.shared.utils.response import populate_user_fields
@@ -28,8 +29,11 @@ class ICD10FieldClass(BaseModel):
                 }}
             """
             bind_vars = {'icd10_uuid': icd10_uuid}
-            cursor = db.aql.execute(query, bind_vars=bind_vars)
-            icd10_data = cursor.next()
+            def execute_query():
+                cursor = db.aql.execute(query, bind_vars=bind_vars)
+                return cursor.next()
+
+            icd10_data = await run_in_threadpool(execute_query)
             return cls(**icd10_data)
         except Exception as e:
             return None
@@ -53,8 +57,11 @@ class AssignedVAFieldClass(BaseModel):
                 'vaId': vaId,
                 'coder': coder
             }
-            cursor = db.aql.execute(query, bind_vars=bind_vars)
-            assignment_data = cursor.next()
+            def execute_assignment_query():
+                cursor = db.aql.execute(query, bind_vars=bind_vars)
+                return cursor.next()
+
+            assignment_data = await run_in_threadpool(execute_assignment_query)
         
         if len(assignment_data.items()) > 0:
             populated_code_data = await populate_user_fields(data = assignment_data, specific_fields = ['coder'], db = db)
@@ -78,8 +85,12 @@ class AssignVAResponseClass(BaseResponseModel):
                 RETURN assignment
             """
             bind_vars = {'assignment_uuid': assignment_uuid}
-            cursor = db.aql.execute(query, bind_vars=bind_vars)
-            assignment_data = cursor.next()
+            
+            def execute_get_assignment():
+                cursor = db.aql.execute(query, bind_vars=bind_vars)
+                return cursor.next()
+
+            assignment_data = await run_in_threadpool(execute_get_assignment)
         populated_code_data = await populate_user_fields(assignment_data, ['coder'], db)
 
         
@@ -96,8 +107,11 @@ class AssignVAResponseClass(BaseResponseModel):
                 RETURN va
             """
             bind_vars = {'vaId': vaId}
-            cursor = db.aql.execute(query, bind_vars=bind_vars)
-            va_data = cursor.next()
+            def execute_populate_va():
+                cursor = db.aql.execute(query, bind_vars=bind_vars)
+                return cursor.next()
+
+            va_data = await run_in_threadpool(execute_populate_va)
         
         if len(va_data.items()) > 0:
             return cls(**va_data)
@@ -114,8 +128,12 @@ class AssignVAResponseClass(BaseResponseModel):
                 RETURN assignment
             """
             bind_vars = {'vaId': vaId}
-            cursor = db.aql.execute(query, bind_vars=bind_vars)
-            assignment_data = cursor.next()
+            
+            def execute_assignment_by_va_query():
+                cursor = db.aql.execute(query, bind_vars=bind_vars)
+                return cursor.next()
+
+            assignment_data = await run_in_threadpool(execute_assignment_by_va_query)
         
         if len(assignment_data.items()) > 0:
             populated_code_data = await populate_user_fields(assignment_data, ['coder'], db = db)
@@ -142,8 +160,12 @@ class CodedVAResponseClass(BaseResponseModel):
                 RETURN coded_va
             """
             bind_vars = {'coded_va': coded_va}
-            cursor = db.aql.execute(query, bind_vars=bind_vars)
-            coded_va_data = cursor.next()
+            
+            def execute_coded_va_query():
+                cursor = db.aql.execute(query, bind_vars=bind_vars)
+                return cursor.next()
+
+            coded_va_data = await run_in_threadpool(execute_coded_va_query)
         
         populated_coded_va_data = await populate_user_fields(coded_va_data, db = db)
 
@@ -184,8 +206,12 @@ class PCVAResultsResponseClass(BaseModel):
                 RETURN coded_va
             """
             bind_vars = {'coded_va': pcva_result_uuid}
-            cursor = db.aql.execute(query, bind_vars=bind_vars)
-            coded_va_data = cursor.next()
+            
+            def execute_pcva_result_query():
+                cursor = db.aql.execute(query, bind_vars=bind_vars)
+                return cursor.next()
+
+            coded_va_data = await run_in_threadpool(execute_pcva_result_query)
 
         # Restructure VA document assigned and coded... (Commented as a reserve code)
 

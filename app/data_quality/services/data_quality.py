@@ -3,6 +3,7 @@ from typing import List, Optional
 
 from arango import ArangoError
 from arango.database import StandardDatabase
+from fastapi.concurrency import run_in_threadpool
 
 from app.shared.configs.constants import db_collections
 from app.shared.configs.models import ResponseMainModel
@@ -74,19 +75,21 @@ async def fetch_error_list(
 
         if error_type:
             bind_vars["error_type"] = error_type
-        cursor = db.aql.execute(query, bind_vars=bind_vars, cache=True)
-        data = [document for document in cursor]
+        
+        def execute_query():
+            cursor = db.aql.execute(query, bind_vars=bind_vars, cache=True)
+            return [document for document in cursor]
 
-        # Fetch total count of documents
-        # count_query = f"RETURN LENGTH({collection.name})"
-        # total_records_cursor = db.aql.execute(count_query, cache=True)
-        # total_records = total_records_cursor.next()
-        # print(data)
+        data = await run_in_threadpool(execute_query)
 
         # Fetch total count of documents
         count_query = f"RETURN LENGTH({collection.name})"
-        total_records_cursor = db.aql.execute(count_query,cache=True)
-        total_records = total_records_cursor.next()
+        
+        def execute_count_query():
+            total_records_cursor = db.aql.execute(count_query, cache=True)
+            return total_records_cursor.next()
+
+        total_records = await run_in_threadpool(execute_count_query)
 
         return ResponseMainModel(
             data=data[0] if data else {},
@@ -127,8 +130,13 @@ async def fetch_error_details(db: StandardDatabase, error_id: str) -> ResponseMa
 
         # print(query)
         
-        cursor = db.aql.execute(query, bind_vars={"error_id": error_id}, cache=True)
-        result = cursor.next()
+        # print(query)
+        
+        def execute_details_query():
+            cursor = db.aql.execute(query, bind_vars={"error_id": error_id}, cache=True)
+            return cursor.next()
+
+        result = await run_in_threadpool(execute_details_query)
 
         if not result:
             raise BadRequestException("Error not found", f"No error found with id {error_id}")
@@ -151,8 +159,11 @@ async def fetch_form_data(db: StandardDatabase, form_id: str) -> ResponseMainMod
         RETURN fs
         """
         
-        cursor = db.aql.execute(query, bind_vars={"form_id": form_id}, cache=True)
-        result = cursor.next()
+        def execute_form_data_query():
+            cursor = db.aql.execute(query, bind_vars={"form_id": form_id}, cache=True)
+            return cursor.next()
+
+        result = await run_in_threadpool(execute_form_data_query)
 
         if not result:
             raise BadRequestException("Form data not found", f"No form data found with id {form_id}")
@@ -176,8 +187,11 @@ async def update_form_data(db: StandardDatabase, form_id: str, updated_data: dic
         RETURN NEW
         """
         
-        cursor = db.aql.execute(query, bind_vars={"form_id": form_id, "updated_data": updated_data}, cache=True)
-        result = cursor.next()
+        def execute_update_form_query():
+            cursor = db.aql.execute(query, bind_vars={"form_id": form_id, "updated_data": updated_data}, cache=True)
+            return cursor.next()
+
+        result = await run_in_threadpool(execute_update_form_query)
 
         if not result:
             raise BadRequestException("Form data not found", f"No form data found with id {form_id}")
@@ -207,8 +221,11 @@ async def save_corrections_data(db: StandardDatabase, form_id:str, updated_data:
         RETURN NEW
         """
         
-        cursor = db.aql.execute(query, bind_vars={"updated_data": updated_data}, cache=True)
-        result = cursor.next()
+        def execute_save_corrections_query():
+            cursor = db.aql.execute(query, bind_vars={"updated_data": updated_data}, cache=True)
+            return cursor.next()
+
+        result = await run_in_threadpool(execute_save_corrections_query)
 
         if not result:
             raise BadRequestException("Failed to insert form data", "No data was inserted")

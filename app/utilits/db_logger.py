@@ -312,14 +312,11 @@ class DBLogger:
         
         aql += " RETURN log"
         
-        # Create a future to get the result
-        future = asyncio.Future()
+        # Capture the current loop
+        loop = asyncio.get_running_loop()
         
         def set_result(result):
-            asyncio.run_coroutine_threadsafe(
-                asyncio.get_event_loop().call_soon_threadsafe(future.set_result, result),
-                asyncio.get_event_loop()
-            )
+            loop.call_soon_threadsafe(future.set_result, result)
         
         # Execute query using background processor
         background_processor.enqueue("query", aql, bind_vars, callback=set_result)
@@ -367,11 +364,11 @@ class DBLogger:
         # Create a future to get the result
         future = asyncio.Future()
         
+        # Capture the current loop
+        loop = asyncio.get_running_loop()
+        
         def set_result(result):
-            asyncio.run_coroutine_threadsafe(
-                asyncio.get_event_loop().call_soon_threadsafe(future.set_result, result),
-                asyncio.get_event_loop()
-            )
+            loop.call_soon_threadsafe(future.set_result, result)
         
         # Execute query using background processor
         background_processor.enqueue("query", aql, {}, callback=set_result)

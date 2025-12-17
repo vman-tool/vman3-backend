@@ -1,6 +1,7 @@
 from typing import Optional, Union
 
 from arango.database import StandardDatabase
+from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel
 
 from app.shared.configs.constants import db_collections
@@ -60,8 +61,11 @@ class ICD10CategoryResponseClass(BaseResponseModel):
                 RETURN category
             """
             bind_vars = {'icd10_category_uuid': icd10_category_uuid}
-            cursor = db.aql.execute(query, bind_vars=bind_vars)
-            category_data = cursor.next()
+            def execute_category_query():
+                cursor = db.aql.execute(query, bind_vars=bind_vars)
+                return cursor.next()
+
+            category_data = await run_in_threadpool(execute_category_query)
         populated_category_data = await populate_user_fields(data = category_data, db = db)
         return cls(**populated_category_data)
 
@@ -102,9 +106,15 @@ class ICD10ResponseClass(BaseResponseModel):
                 RETURN code
             """
             bind_vars = {'icd10_code_uuid': icd10_code_uuid}
-            cursor = db.aql.execute(query, bind_vars=bind_vars)
-            code_data = cursor.next()
+            
+            def execute_code_query():
+                cursor = db.aql.execute(query, bind_vars=bind_vars)
+                return cursor.next()
+
+            code_data = await run_in_threadpool(execute_code_query)
         populated_code_data = await populate_user_fields(code_data, db=db)
         # print("With User Data: ", populated_code_data)
-        populated_code_data['category'] = ICD10CategoryFieldClass.get_icd10_category(populated_code_data['category'], db)
+        populated_code_data['category'] = await run_in_threadpool(
+            ICD10CategoryFieldClass.get_icd10_category, populated_code_data['category'], db
+        )
         return cls(**populated_code_data)

@@ -75,6 +75,7 @@
 from datetime import datetime
 
 from arango.database import StandardDatabase
+from fastapi.concurrency import run_in_threadpool
 
 from app.shared.configs.constants import db_collections
 
@@ -89,8 +90,11 @@ async def get_last_processed_timestamp(db: StandardDatabase):
     bind_vars = {'key': 'last_processed'}
     
     try:
-        cursor =  db.aql.execute(query, bind_vars=bind_vars,cache=True)
-        doc =  cursor.next()
+        def execute_query():
+            cursor = db.aql.execute(query, bind_vars=bind_vars, cache=True)
+            return cursor.next()
+
+        doc = await run_in_threadpool(execute_query)
         print(doc)
         if not doc:
             return None
@@ -105,10 +109,14 @@ async def get_last_processed_timestamp(db: StandardDatabase):
 async def update_last_processed_timestamp(db: StandardDatabase, timestamp):
     try:
         collection = db.collection(db_collections.DOWNLOAD_TRACKER)
-        collection.insert({
-            '_key': 'last_processed',
-            'timestamp': timestamp
-        }, overwrite=True)
+        
+        def execute_insert():
+            collection.insert({
+                '_key': 'last_processed',
+                'timestamp': timestamp
+            }, overwrite=True)
+
+        await run_in_threadpool(execute_insert)
     except Exception as e:
         print(f" update_last_processed_timestamp: Error executing AQL: {str(e)}")
     
@@ -118,11 +126,15 @@ async def update_last_processed_timestamp(db: StandardDatabase, timestamp):
 async def log_error(db: StandardDatabase, error):
     try:
         collection = db.collection(db_collections.DOWNLOAD_TRACKER)
-        collection.insert({
-            '_key': f"error-{datetime.utcnow().timestamp()}",
-            'error': error,
-            'timestamp': datetime.utcnow().isoformat()
-        })
+        
+        def execute_log_error():
+            collection.insert({
+                '_key': f"error-{datetime.utcnow().timestamp()}",
+                'error': error,
+                'timestamp': datetime.utcnow().isoformat()
+            })
+
+        await run_in_threadpool(execute_log_error)
     except Exception as e:
         print(f" log_error : Error executing AQL: {str(e)}")
 
@@ -130,16 +142,20 @@ async def log_error(db: StandardDatabase, error):
 async def log_chunk_start(db: StandardDatabase, chunk_id, total_data_count, start_date, end_date, skip, top, status='started'):
     try:
         collection = db.collection(db_collections.DOWNLOAD_PROCESS_TRACKER)
-        collection.insert({
-            '_key': chunk_id,
-            'total_data_count': total_data_count,
-            'start_date': start_date,
-            'end_date': end_date,
-            'skip': skip,
-            'top': top,
-            'status': status,
-            'timestamp': datetime.utcnow().isoformat()
-        }, overwrite=True)
+        
+        def execute_chunk_start():
+            collection.insert({
+                '_key': chunk_id,
+                'total_data_count': total_data_count,
+                'start_date': start_date,
+                'end_date': end_date,
+                'skip': skip,
+                'top': top,
+                'status': status,
+                'timestamp': datetime.utcnow().isoformat()
+            }, overwrite=True)
+
+        await run_in_threadpool(execute_chunk_start)
     except Exception as e:
         print(f"Error logging chunk start: {str(e)}")
         raise e
@@ -155,10 +171,13 @@ async def log_chunk_update(db: StandardDatabase, chunk_id, status='finished', er
             if error:
                 update_data['error'] = error
             
-            collection.update({
-                '_key': chunk_id,
-                **update_data
-            })
+            def execute_chunk_update():
+                collection.update({
+                    '_key': chunk_id,
+                    **update_data
+                })
+
+            await run_in_threadpool(execute_chunk_update)
         except Exception as e:
             print(f"Error logging chunk update: {str(e)}")
             raise e
@@ -168,7 +187,11 @@ async def log_chunk_remove(db: StandardDatabase, chunk_id):
     try:
         
         collection = db.collection(db_collections.DOWNLOAD_PROCESS_TRACKER)
-        collection.delete({'_key': chunk_id})
+        
+        def execute_chunk_remove():
+            collection.delete({'_key': chunk_id})
+
+        await run_in_threadpool(execute_chunk_remove)
     except Exception as e:
         print(f" log_chunk_remove: Error logging chunk update: {str(e)}")
         raise e
@@ -187,10 +210,13 @@ async def update_chunk_status(db: StandardDatabase, start_date, end_date, skip, 
         if error:
             update_data['error'] = error
         
-        collection.update({
-            '_key': chunk_id,
-            **update_data
-        }, overwrite=True)
+        def execute_update_status():
+            collection.update({
+                '_key': chunk_id,
+                **update_data
+            }, overwrite=True)
+
+        await run_in_threadpool(execute_update_status)
     except Exception as e:
         print(f" update_chunk_status: Error logging chunk update: {str(e)}")
         raise e
@@ -205,8 +231,12 @@ async def get_incomplete_chunks(db: StandardDatabase):
             FILTER doc.status IN ['started', 'error']
             RETURN doc
         '''
-        cursor = await db.aql.execute(query, bind_vars={'@collection': collection.name},cache=True)
-        return await cursor.to_list()
+        
+        def execute_incomplete_chunks_query():
+            cursor = db.aql.execute(query, bind_vars={'@collection': collection.name}, cache=True)
+            return [doc for doc in cursor]
+
+        return await run_in_threadpool(execute_incomplete_chunks_query)
     except Exception as e:
         print(f" get_incomplete_chunks: Error logging chunk update: {str(e)}")
         raise e
