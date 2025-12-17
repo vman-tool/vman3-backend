@@ -2,6 +2,7 @@ from datetime import date
 from typing import List, Optional
 
 from arango.database import StandardDatabase
+from fastapi.concurrency import run_in_threadpool
 
 from app.settings.services.odk_configs import fetch_odk_config
 from app.shared.configs.constants import db_collections
@@ -114,8 +115,11 @@ async def fetch_submissions_statistics( current_user: dict,paging: bool = True, 
         #         "size": limit
         #     })
 
-        cursor = db.aql.execute(query, bind_vars=bind_vars,cache=True)
-        data = [document for document in cursor]
+        def execute_query():
+            cursor = db.aql.execute(query, bind_vars=bind_vars, cache=True)
+            return [document for document in cursor]
+
+        data = await run_in_threadpool(execute_query)
 
         # # Fetch total count of documents
         # count_query = f"""

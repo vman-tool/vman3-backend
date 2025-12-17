@@ -30,7 +30,7 @@ ccva_public_router = APIRouter(
 # In-memory store for task results
 task_results = {}
 
-@log_to_db(context="run_ccva_with_csv", log_args=True)
+#@log_to_db(context="run_ccva_with_csv", log_args=True)
 @ccva_public_router.post("/upload", status_code=status.HTTP_200_OK)
 async def run_ccva_with_csv(
     background_tasks: BackgroundTasks,
@@ -113,7 +113,7 @@ async def run_ccva_with_csv(
     
 
     
-@log_to_db(context="get_processed_ccva_graphs", log_args=True)    
+#@log_to_db(context="get_processed_ccva_graphs", log_args=True)    
 @ccva_public_router.get("", status_code=status.HTTP_200_OK)
 async def get_processed_ccva_graphs(
     background_tasks: BackgroundTasks,
@@ -157,7 +157,7 @@ async def get_processed_ccva_graphs(
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to fetch processed CCVA graphs.")
 
 
-@log_to_db(context="get_processed_ccva_graphs_public", log_args=True)    
+#@log_to_db(context="get_processed_ccva_graphs_public", log_args=True)    
 @ccva_public_router.get("/", status_code=status.HTTP_200_OK)
 async def get_processed_ccva_graphs_public(
     background_tasks: BackgroundTasks,
@@ -203,7 +203,7 @@ async def get_processed_ccva_graphs_public(
 
 
     
-@log_to_db(context="get_all_processed_ccva_graphs", log_args=True)        
+#@log_to_db(context="get_all_processed_ccva_graphs", log_args=True)        
 @ccva_public_router.get("/list", status_code=status.HTTP_200_OK,)
 async def get_all_processed_ccva_graphs(
     background_tasks: BackgroundTasks,
@@ -213,7 +213,7 @@ async def get_all_processed_ccva_graphs(
 ):
    return await fetch_all_processed_ccva_graphs(db=db)
 
-@log_to_db(context="set_default_ccva", log_args=True)       
+#@log_to_db(context="set_default_ccva", log_args=True)       
 @ccva_public_router.post("/{ccva_id}/set-default", status_code=status.HTTP_200_OK)
 async def set_default_ccva(
     ccva_id: str,
@@ -227,7 +227,7 @@ async def set_default_ccva(
     return {"message": "CCVA set as default successfully"}
 
 # Service to delete a CCVA entry (requires authentication)
-@log_to_db(context="delete_ccva", log_args=True)       
+#@log_to_db(context="delete_ccva", log_args=True)       
 @ccva_public_router.delete("/{ccva_id}", status_code=status.HTTP_200_OK)
 async def delete_ccva(
     ccva_id: str,
@@ -241,7 +241,7 @@ async def delete_ccva(
     return {"message": "CCVA entry deleted successfully"}
 
 # Public service to delete CCVA entry by task_id (no authentication required)
-@log_to_db(context="delete_ccva_public", log_args=True)       
+#@log_to_db(context="delete_ccva_public", log_args=True)       
 @ccva_public_router.delete("/task/{task_id}", status_code=status.HTTP_200_OK)
 async def delete_ccva_by_task_id(
     task_id: str,
@@ -273,7 +273,7 @@ async def delete_ccva_by_task_id(
 
 
 # Endpoint to download the results as JSON or CSV
-@log_to_db(context="download_ccva_results", log_args=True)  
+#@log_to_db(context="download_ccva_results", log_args=True)  
 @ccva_public_router.get("/download_ccva_results/{task_id}", status_code=status.HTTP_200_OK)
 async def download_ccva_results(
     task_id: str,
