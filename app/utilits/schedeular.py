@@ -190,10 +190,14 @@ async def start_scheduler():
 
 async def shutdown_scheduler():
     """Shutdown the scheduler"""
-    if scheduler.running:
-        scheduler.shutdown()
-        logger.info("Scheduler shut down")
-        # 1. First, flush any remaining logs in the database logger
+    try:
+        if scheduler.running:
+            scheduler.shutdown()
+            logger.info("Scheduler shut down")
+    except Exception as e:
+        logger.error(f"Error shutting down scheduler: {e}")
+
+    # 1. First, flush any remaining logs in the database logger
     try:
         from app.utilits.db_logger import db_logger, background_processor
         
