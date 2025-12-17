@@ -3,6 +3,7 @@ from typing import List, Optional
 
 from arango import ArangoError
 from arango.database import StandardDatabase
+from fastapi.concurrency import run_in_threadpool
 
 from app.records.responses.data import map_to_data_response
 from app.settings.services.odk_configs import fetch_odk_config
@@ -68,13 +69,21 @@ async def fetch_va_records(current_user:dict,paging: bool = True, page_number: i
 
         query += "RETURN doc"
         # print(query)
-        cursor = db.aql.execute(query, bind_vars=bind_vars,cache=True)
-        data = [map_to_data_response(config,document) for document in cursor]
+        # print(query)
+        def execute_query():
+            cursor = db.aql.execute(query, bind_vars=bind_vars, cache=True)
+            return [map_to_data_response(config, document) for document in cursor]
+
+        data = await run_in_threadpool(execute_query)
 
         # Fetch total count of documents
         count_query = f"RETURN LENGTH({collection.name})"
-        total_records_cursor = db.aql.execute(count_query,cache=True)
-        total_records = total_records_cursor.next()
+        
+        def execute_count_query():
+            total_records_cursor = db.aql.execute(count_query, cache=True)
+            return total_records_cursor.next()
+
+        total_records = await run_in_threadpool(execute_count_query)
 
         return ResponseMainModel(
             data=data,
@@ -153,13 +162,21 @@ async def fetch_va_records_json(current_user:dict,paging: bool = True,data_sourc
 
         query += "RETURN doc"
         print(query)
-        cursor = db.aql.execute(query, bind_vars=bind_vars,cache=True)
-        data = [document for document in cursor]
+        print(query)
+        def execute_json_query():
+            cursor = db.aql.execute(query, bind_vars=bind_vars, cache=True)
+            return [document for document in cursor]
+
+        data = await run_in_threadpool(execute_json_query)
 
         # Fetch total count of documents
         count_query = f"RETURN LENGTH({collection.name})"
-        total_records_cursor = db.aql.execute(count_query,cache=True)
-        total_records = total_records_cursor.next()
+        
+        def execute_json_count_query():
+            total_records_cursor = db.aql.execute(count_query, cache=True)
+            return total_records_cursor.next()
+
+        total_records = await run_in_threadpool(execute_json_count_query)
 
         return ResponseMainModel(
             data=data,

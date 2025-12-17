@@ -435,7 +435,7 @@ async def get_cron_settings(
         print(e)
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
     
-@log_to_db(context="save_api_cron_settings", log_args=True)
+#@log_to_db(context="save_api_cron_settings", log_args=True)
 @settings_router.post("/cron", status_code=status.HTTP_200_OK, response_model=ResponseMainModel)
 async def save_api_cron_settings(
      background_tasks: BackgroundTasks,
@@ -465,7 +465,7 @@ async def save_api_cron_settings(
         print(e)
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
     
-@log_to_db(context="get_backup_settings", log_args=True)
+#@log_to_db(context="get_backup_settings", log_args=True)
 @settings_router.get("/backup", status_code=status.HTTP_200_OK, response_model=ResponseMainModel)
 async def get_backup_settings(
     current_user = Depends(get_current_user),
@@ -496,7 +496,7 @@ async def get_backup_settings(
     except Exception as e:
         print(e)
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
-@log_to_db(context="save_data_backup_settings", log_args=True)
+#@log_to_db(context="save_data_backup_settings", log_args=True)
 @settings_router.post("/backup", status_code=status.HTTP_200_OK, response_model=ResponseMainModel)
 async def save_data_backup_settings(
     settings: BackupSettings,

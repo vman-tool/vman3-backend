@@ -65,7 +65,7 @@ def day_of_week_to_cron(days: List[str]) -> str:
     return ','.join(cron_days) if cron_days else '*'
 
 # Create a wrapper function that creates a BackgroundTasks object
-@log_to_db(context="odk_fetch_job_wrapper")
+#@log_to_db(context="odk_fetch_job_wrapper")
 async def odk_fetch_job_wrapper(db=None):
     """Wrapper function to create BackgroundTasks and call the fetch function"""
     from fastapi import BackgroundTasks
@@ -85,7 +85,7 @@ async def odk_fetch_job_wrapper(db=None):
         logger.info(f"Scheduled ODK fetch job executed successfully at {datetime.now().isoformat()}")
     except Exception as e:
         logger.error(f"Error executing scheduled ODK fetch job: {str(e)}")
-@log_to_db(context="schedule_odk_fetch_job")
+#@log_to_db(context="schedule_odk_fetch_job")
 async def schedule_odk_fetch_job(db=None):
     """Schedule the ODK fetch job based on cron settings"""
 
@@ -128,7 +128,7 @@ async def schedule_odk_fetch_job(db=None):
     except Exception as e:
         logger.error(f"Error scheduling ODK fetch job: {str(e)}")
 
-@log_to_db(context="ccva_cleanup_job")
+#@log_to_db(context="ccva_cleanup_job")
 async def ccva_cleanup_job(db=None):
     """
     Cleanup job for expired CCVA public results based on TTL.
