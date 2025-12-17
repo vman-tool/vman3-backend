@@ -7,6 +7,7 @@ from typing import Dict, List
 import pandas as pd
 from arango.database import StandardDatabase
 from fastapi import HTTPException
+from fastapi.concurrency import run_in_threadpool
 from loguru import logger
 
 from app.odk.models.questions_models import VA_Question
@@ -350,7 +351,11 @@ async def get_margin_dates_and_records_count(db: StandardDatabase = None):
                 RETURN earliestRecord
             """
 
-    return db.aql.execute(query=query,cache=True).next()
+    def execute_query():
+        cursor = db.aql.execute(query=query, cache=True)
+        return cursor.next()
+
+    return await run_in_threadpool(execute_query)
 
 
 

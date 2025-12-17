@@ -7,6 +7,7 @@ import time
 from typing import Dict, Any, Optional
 from functools import wraps
 from arango.database import StandardDatabase
+from fastapi.concurrency import run_in_threadpool
 from loguru import logger
 
 class CollectionCache:
@@ -115,8 +116,11 @@ class StatisticsCache:
                 }}
             """
             
-            cursor = db.aql.execute(query, cache=True)
-            result = cursor.next()
+            def execute_query():
+                cursor = db.aql.execute(query, cache=True)
+                return cursor.next()
+
+            result = await run_in_threadpool(execute_query)
             return result
             
         except Exception as e:

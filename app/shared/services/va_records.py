@@ -2,6 +2,7 @@ from typing import Dict
 
 from arango.database import StandardDatabase
 from fastapi import HTTPException
+from fastapi.concurrency import run_in_threadpool
 
 from app.pcva.utilities.va_records_utils import format_va_record
 from app.settings.services.odk_configs import fetch_odk_config
@@ -41,8 +42,11 @@ async def shared_fetch_va_records(paging: bool = True,  page_number: int = 1, li
         )
     """
 
-    total_count_cursor = db.aql.execute(query = total_count_query, bind_vars = bind_vars)
-    total_count = total_count_cursor.next() 
+    def execute_total_count():
+        total_count_cursor = db.aql.execute(query = total_count_query, bind_vars = bind_vars)
+        return total_count_cursor.next()
+
+    total_count = await run_in_threadpool(execute_total_count) 
 
     if total_count is None or total_count == 0:
         return ResponseMainModel(
@@ -70,12 +74,16 @@ async def shared_fetch_va_records(paging: bool = True,  page_number: int = 1, li
             else:
                 query += f"RETURN {records_name}"
 
-            cursor = db.aql.execute(query, bind_vars=bind_vars)
+            def execute_records_query():
+                cursor = db.aql.execute(query, bind_vars=bind_vars)
+                return [document for document in cursor]
+
+            cursor_data = await run_in_threadpool(execute_records_query)
 
             if format_records:
-                data = [format_va_record(document, config) for document in cursor]
+                data = [format_va_record(document, config) for document in cursor_data]
             else:
-                data = [document for document in cursor]
+                data = cursor_data
             
                 
             
@@ -145,17 +153,21 @@ async def shared_fetch_va_records(paging: bool = True,  page_number: int = 1, li
             """
 
             if paging and page_number and limit:
-
                 bind_vars.update({
                     "offset": (page_number - 1) * limit,
                     "size": limit
                 })
-            cursor = db.aql.execute(query, bind_vars=bind_vars)
+            
+            def execute_assignments_query():
+                cursor = db.aql.execute(query, bind_vars=bind_vars)
+                return [document for document in cursor]
+
+            cursor_data = await run_in_threadpool(execute_assignments_query)
             
             if format_records:
-                data = [format_va_record(document, config) for document in cursor]
+                data = [format_va_record(document, config) for document in cursor_data]
             else:
-                data = [document for document in cursor]
+                data = cursor_data
 
             return ResponseMainModel(data=data, message="Records fetched successfully!", total = total_count, pager=Pager(page=page_number, limit=limit))
     
@@ -167,14 +179,16 @@ async def get_field_value_from_va_records(field: str, db: StandardDatabase = Non
     try:
 
         query = f"""
-            FOR doc IN {db_collections.VA_TABLE}
                 FILTER doc.{field} != null
                 COLLECT unique = doc.{field}
                 RETURN unique
         """
 
-        cursor = db.aql.execute(query)
-        data = [document for document in cursor]
+        def execute_field_query():
+            cursor = db.aql.execute(query)
+            return [document for document in cursor]
+
+        data = await run_in_threadpool(execute_field_query)
 
         return ResponseMainModel(data=data, message="Unique data fetched successfully!", total = len(data))
     

@@ -9,6 +9,7 @@ from typing import Dict, Optional
 import numpy as np
 import pandas as pd
 from arango.database import StandardDatabase
+from fastapi.concurrency import run_in_threadpool
 from app.ccva.utilits.interva.utils import csmf
 from app.ccva.utilits.pycrossva.transform import transform
 
@@ -464,10 +465,12 @@ async def fetch_ccva_results_and_errors(db: StandardDatabase, task_id: str):
         """
 
         # Execute the AQL query
-        cursor = db.aql.execute(query,cache=True)
+        def execute_query():
+            cursor = db.aql.execute(query, cache=True)
+            return cursor.next()
 
         # Retrieve the result (first result since RETURN only outputs one document)
-        result = cursor.next()
+        result = await run_in_threadpool(execute_query)
 
         return result
 
@@ -535,10 +538,13 @@ FOR doc IN {collection.name}
     """
     # print(query)
     # Execute the query with caching
-    cursor = db.aql.execute(query, cache=True)
+    # Execute the query with caching
+    def execute_va_data_query():
+        cursor = db.aql.execute(query, cache=True)
+        return {doc['uid']: doc for doc in cursor}
 
     # Convert the cursor to a dictionary keyed by UID for easy lookup
-    va_data_map = {doc['uid']: doc for doc in cursor}
+    va_data_map = await run_in_threadpool(execute_va_data_query)
     
     # print(va_data_map)
 
