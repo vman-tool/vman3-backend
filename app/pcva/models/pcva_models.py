@@ -8,8 +8,17 @@ from typing import Dict, List, Optional, Union
 from pydantic import BaseModel, Field
 
 
+class ICD10CategoryType(VManBaseModel):
+    name: str
+    description: str
+
+    @classmethod
+    def get_collection_name(cls) -> str:
+        return db_collections.ICD10_CATEGORY_TYPE
 class ICD10Category(VManBaseModel):
     name: str
+    type: str
+    description: Optional[str] = None
 
     @classmethod
     def get_collection_name(cls) -> str:

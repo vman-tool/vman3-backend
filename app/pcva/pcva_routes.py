@@ -8,6 +8,8 @@ import pandas as pd
 
 from app.pcva.requests.icd10_request_classes import (
     ICD10CategoryRequestClass,
+    ICD10CategoryTypeRequestClass,
+    ICD10CategoryTypeUpdateClass,
     ICD10CategoryUpdateClass,
     ICD10CreateRequestClass,
     ICD10UpdateRequestClass,
@@ -24,11 +26,13 @@ from app.pcva.responses.icd10_response_classes import (
 from app.pcva.responses.va_response_classes import CodedVAResponseClass
 from app.pcva.services.icd10_services import (
     create_icd10_categories_service,
+    create_icd10_category_types_service,
     create_icd10_codes,
     create_or_icd10_codes_from_file,
-    get_icd10_categories_service,
+    get_icd10_category_types_service,
     get_icd10_codes,
     update_icd10_categories_service,
+    update_icd10_category_types_service,
     update_icd10_codes,
 )
 from app.pcva.services.va_records_services import (
@@ -131,12 +135,12 @@ async def get_va_for_unnassignment(
     except Exception as e:
         raise e
 
-@log_to_db(context="get_icd10_categories", log_args=True)    
+@log_to_db(context="get_icd10_category_types", log_args=True)    
 @pcva_router.get(
-        path="/icd10-categories", 
+        path="/icd10-category-types", 
         status_code=status.HTTP_200_OK,
 )
-async def get_icd10_categories(
+async def get_icd10_category_types(
     paging: Optional[bool] = Query(None, alias="paging"),
     page_number: Optional[int] = Query(1, alias="page_number"),
     limit: Optional[int] = Query(10, alias="limit"),
@@ -146,7 +150,60 @@ async def get_icd10_categories(
     try:
         allowPaging = paging if paging is not None else True
         include_deleted = False if include_deleted is not None and include_deleted.lower() == 'false' else True
-        return await get_icd10_categories_service(
+        return await get_icd10_category_types_service(
+            paging = allowPaging, 
+            page_number = page_number, 
+            limit = limit, 
+            include_deleted = include_deleted, 
+            db = db)
+    except:
+        raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed get icd10 category types")
+
+@log_to_db(context="create_icd10_category_types", log_args=True)  
+@pcva_router.post("/create-icd10-category-types", status_code=status.HTTP_201_CREATED)
+async def create_icd10_category_types(
+    category_types: List[ICD10CategoryTypeRequestClass],
+    user: User = Depends(get_current_user),
+    db: StandardDatabase = Depends(get_arangodb_session)) -> ResponseMainModel:
+
+    try:
+        return await create_icd10_category_types_service(category_types, user, db)
+    except:
+        raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed create icd10 category types")
+
+@log_to_db(context="update_icd10_category_types", log_args=True)  
+@pcva_router.post(
+        path="/update-icd10-category-types", 
+        status_code=status.HTTP_200_OK,
+        description="Submit array of icd10 category types in a json format"
+)
+async def update_icd10_category_types(
+    category_types: List[ICD10CategoryTypeUpdateClass],
+    user: User = Depends(get_current_user),
+    db: StandardDatabase = Depends(get_arangodb_session)) -> ResponseMainModel:
+    try:
+        return await update_icd10_category_types_service(category_types, user, db)
+    except:
+        raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed update icd10 category types")
+
+
+
+@log_to_db(context="get_icd10_categories", log_args=True)    
+@pcva_router.get(
+        path="/icd10-categories", 
+        status_code=status.HTTP_200_OK,
+)
+async def get_icd10_category_types(
+    paging: Optional[bool] = Query(None, alias="paging"),
+    page_number: Optional[int] = Query(1, alias="page_number"),
+    limit: Optional[int] = Query(10, alias="limit"),
+    include_deleted: Optional[str] = Query(None, alias="include_deleted"),
+    db: StandardDatabase = Depends(get_arangodb_session)) -> ResponseMainModel:
+
+    try:
+        allowPaging = paging if paging is not None else True
+        include_deleted = False if include_deleted is not None and include_deleted.lower() == 'false' else True
+        return await get_icd10_category_types_service(
             paging = allowPaging, 
             page_number = page_number, 
             limit = limit, 
@@ -173,7 +230,7 @@ async def create_icd10_categories(
         status_code=status.HTTP_200_OK,
         description="Submit array of icd10 categories in a json format"
 )
-async def update_icd10_categories(
+async def update_icd10_category_types(
     categories: List[ICD10CategoryUpdateClass],
     user: User = Depends(get_current_user),
     db: StandardDatabase = Depends(get_arangodb_session)) -> ResponseMainModel:

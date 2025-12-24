@@ -8,6 +8,67 @@ from app.shared.configs.models import BaseResponseModel, ResponseUser
 from app.shared.utils.response import populate_user_fields
 
 
+class ICD10CategoryTypeFieldClass(BaseModel):
+    uuid: str
+    name: str    
+
+    @classmethod
+    def get_icd10_category_type(cls, category_type_uuid, db: StandardDatabase = None):
+        
+        query = f"""
+        FOR category_type IN {db_collections.ICD10_CATEGORY_TYPE}
+            FILTER category_type.uuid == @category_type_uuid
+            RETURN {{
+                uuid: category_type.uuid,
+                name: category_type.name,
+            }}
+        """
+        bind_vars = {'category_type_uuid': category_type_uuid}
+        cursor = db.aql.execute(query, bind_vars=bind_vars,cache=True)
+        category_data = cursor.next()
+        return cls(**category_data)
+
+class ICD10CategoryTypeResponseClass(BaseResponseModel):
+    uuid: str
+    name: str
+    created_by: Union[ResponseUser, None] | None
+    updated_by: Union[ResponseUser, None] | None
+
+    @classmethod
+    def get_icd10_category_types(cls, db: StandardDatabase = None):
+        
+        query = f"""
+        FOR category IN {db_collections.ICD10_CATEGORY_TYPE}
+            RETURN {{
+                uuid: category.uuid,
+                name: category.name,
+                created_by: category.created_by,
+                created_at: category.created_on
+            }}
+        """
+        cursor = db.aql.execute(query)
+        category_types_data = []
+        for category_type in cursor:
+            category_types_data.append(cls.populate_user_fields(db, category_type))
+        return [cls(**subject) for subject in category_types_data]
+    
+    @classmethod
+    async def get_structured_category_type(cls, icd10_category_type_uuid = None, icd10_category_type = None, db: StandardDatabase = None):
+        category_type_data = icd10_category_type
+        if not category_type_data:
+            query = f"""
+            FOR category_type IN {db_collections.ICD10_CATEGORY_TYPE}
+                FILTER category_type.uuid == @icd10_category_type_uuid
+                RETURN category_type
+            """
+            bind_vars = {'icd10_category_type_uuid': icd10_category_type_uuid}
+            cursor = db.aql.execute(query, bind_vars=bind_vars)
+            category_type_data = cursor.next()
+            category_type_data["type"] = ICD10CategoryTypeFieldClass.get_icd10_category_type(category_type_data["type"], db)
+        populated_category_type_data = await populate_user_fields(data = category_type_data, db = db)
+        return cls(**populated_category_type_data)
+
+
 class ICD10CategoryFieldClass(BaseModel):
     uuid: str
     name: str
@@ -47,7 +108,10 @@ class ICD10CategoryResponseClass(BaseResponseModel):
             }}
         """
         cursor = db.aql.execute(query)
-        categories_data = [cls.populate_user_fields(db, category) for category in cursor]
+        categories_data = []
+        for category in cursor:
+            categories_data.append(cls.populate_user_fields(db, category))
+            categories_data["type"] = ICD10CategoryTypeFieldClass.get_icd10_category_type(category["type"], db)
         return [cls(**subject) for subject in categories_data]
     
     @classmethod
@@ -62,6 +126,7 @@ class ICD10CategoryResponseClass(BaseResponseModel):
             bind_vars = {'icd10_category_uuid': icd10_category_uuid}
             cursor = db.aql.execute(query, bind_vars=bind_vars)
             category_data = cursor.next()
+            category_data["type"] = ICD10CategoryTypeFieldClass.get_icd10_category_type(category_data["type"], db)
         populated_category_data = await populate_user_fields(data = category_data, db = db)
         return cls(**populated_category_data)
 

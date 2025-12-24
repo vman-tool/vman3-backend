@@ -12,6 +12,7 @@ class db_collections():
     ROLES: str = 'role'
     USER_ROLES: str = 'user_roles'
     USER_ACCESS_LIMIT: str = 'user_access_limit'
+    ICD10_CATEGORY_TYPE: str = 'icd10_category_type'
     ICD10_CATEGORY: str = 'icd10_category'
     ICD10: str = 'icd10'
     ASSIGNED_VA: str = 'assigned_va'
@@ -66,9 +67,14 @@ collections_with_indexes = {
     db_collections.USER_ACCESS_LIMIT: [
         {"fields": ["is_deleted"], "type": "persistent", "name": "ucl_is_active"}
     ],
+    db_collections.ICD10_CATEGORY_TYPE: [
+        {"fields": ["is_deleted"], "type": "persistent", "name": "ict_is_active"},
+        {"fields": ["name"], "unique": True, "type": "persistent", "name": "category_type_name"}
+    ],
     db_collections.ICD10_CATEGORY: [
         {"fields": ["is_deleted"], "type": "persistent", "name": "ic_is_active"},
-        {"fields": ["name"], "unique": True, "type": "persistent", "name": "category_name"}
+        {"fields": ["name"], "unique": True, "type": "persistent", "name": "category_name"},
+        {"fields": ["type"], "unique": False, "type": "persistent", "name": "category_type"}
     ],
     db_collections.ICD10: [
         {"fields": ["is_deleted"], "type": "persistent", "name": "i_is_active"}
