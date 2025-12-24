@@ -3,12 +3,55 @@ from arango import ArangoError
 from arango.database import StandardDatabase
 from fastapi import HTTPException
 
-from app.pcva.models.pcva_models import ICD10, ICD10Category
-from app.pcva.responses.icd10_response_classes import ICD10CategoryResponseClass, ICD10ResponseClass
+from app.pcva.models.pcva_models import ICD10, ICD10Category, ICD10CategoryType
+from app.pcva.responses.icd10_response_classes import ICD10CategoryResponseClass, ICD10CategoryTypeResponseClass, ICD10ResponseClass
 from app.shared.configs.constants import db_collections
 from app.shared.configs.models import Pager, ResponseMainModel
 from app.users.models.user import User
 from app.shared.utils.database_utilities import replace_object_values
+
+async def create_icd10_category_types_service(category_types, user, db: StandardDatabase = None):
+    try:
+        created_category_types = []
+        for category_type in category_types:
+            category_type = category_type.model_dump()
+            category_type['created_by']=user.get('uuid', "")
+            saved_category_type = await ICD10CategoryType(**category_type).save(db)
+            created_category_type = await ICD10CategoryTypeResponseClass.get_structured_category_type(icd10_category_type = saved_category_type, db = db)
+            created_category_types.append(created_category_type)
+        return ResponseMainModel(data=created_category_types, message="Categories types created successfully", total=len(created_category_types))
+    except ArangoError as e:
+        raise HTTPException(status_code=500, detail=f"Failed to create categories: {e}")
+
+async def get_icd10_category_types_service(paging: bool = True,  page_number: int = 1, filters: Dict= {}, limit: int = 10, include_deleted: bool = None, db: StandardDatabase = None) -> ResponseMainModel:
+    try:
+        categoryTypesData = await ICD10CategoryType.get_many(
+            paging = paging, 
+            page_number = page_number, 
+            limit = limit, 
+            filters=filters,
+            include_deleted = include_deleted,
+            db = db
+        )
+        data = [await ICD10CategoryTypeResponseClass.get_structured_category_type(icd10_category_type = icd10_category_type, db = db) for icd10_category_type in categoryTypesData]
+        count_data = await ICD10CategoryType.count(filters=filters, include_deleted=include_deleted, db=db)
+        return ResponseMainModel(data=data, total=count_data, message="ICD10 Categories Types fetched successfully", pager=Pager(page=page_number, limit=limit))
+    except ArangoError as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get codes: {e}")
+
+
+async def update_icd10_category_types_service(category_types, user, db: StandardDatabase = None) -> ResponseMainModel:
+    try:
+        updated_category_types = []
+        for category_type in category_types:
+            category_json = category_type.model_dump()
+            saved_category_types = ICD10CategoryType(**category_json).update(user['uuid'], db)
+            created_category_types = await ICD10CategoryTypeResponseClass.get_structured_category_type(icd10_category_type = saved_category_types, db = db)
+            updated_category_types.append(created_category_types)
+        return ResponseMainModel(data=updated_category_types, message="Category types updated successfully", total=len(updated_category_types))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to update categories: {e}")
+
 
 async def create_icd10_categories_service(categories, user, db: StandardDatabase = None):
     try:
@@ -23,7 +66,7 @@ async def create_icd10_categories_service(categories, user, db: StandardDatabase
     except ArangoError as e:
         raise HTTPException(status_code=500, detail=f"Failed to create categories: {e}")
 
-async def get_icd10_categories_service(paging: bool = True,  page_number: int = 1, filters: Dict= {}, limit: int = 10, include_deleted: bool = None, db: StandardDatabase = None) -> ResponseMainModel:
+async def get_icd10_category_types_service(paging: bool = True,  page_number: int = 1, filters: Dict= {}, limit: int = 10, include_deleted: bool = None, db: StandardDatabase = None) -> ResponseMainModel:
     try:
         categoriesData = await ICD10Category.get_many(
             paging = paging, 
