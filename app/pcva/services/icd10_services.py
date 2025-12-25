@@ -9,6 +9,7 @@ from app.shared.configs.constants import db_collections
 from app.shared.configs.models import Pager, ResponseMainModel
 from app.users.models.user import User
 from app.shared.utils.database_utilities import replace_object_values
+from app.pcva.requests.icd10_request_classes import ICD10CategoryRequestClass
 
 async def create_icd10_category_types_service(category_types, user, db: StandardDatabase = None):
     try:
@@ -53,7 +54,7 @@ async def update_icd10_category_types_service(category_types, user, db: Standard
         raise HTTPException(status_code=500, detail=f"Failed to update categories: {e}")
 
 
-async def create_icd10_categories_service(categories, user, db: StandardDatabase = None):
+async def create_icd10_categories_service(categories: List[ICD10CategoryRequestClass], user, db: StandardDatabase = None):
     try:
         created_categories = []
         for category in categories:
@@ -111,6 +112,41 @@ async def get_icd10_codes(paging: bool = True,  page_number: int = 1, limit: int
         return ResponseMainModel(data=data, total=count_data, message="ICD10 fetched successfully", pager=Pager(page=page_number, limit=limit) if paging else None)
     except ArangoError as e:
         raise HTTPException(status_code=500, detail=f"Failed to get codes: {e}")
+    
+async def create_or_icd10_categories_from_file(categories, user, db: StandardDatabase):
+    try:
+        created_categories = []
+        for category in categories:
+            if "type" in category:
+                filters = {"or_conditions": [{"name": category.get("type", "")}, {"uuid": category.get("type", "")}]}
+                existing_category_type = await ICD10CategoryType.get_many(filters=filters, include_deleted=False, db = db)
+                if len(existing_category_type) > 0:
+                        category_type = existing_category_type[0]
+                else:
+                    to_save_category_type  = {
+                        "name": category.get("type", ""),
+                        "created_by": user['uuid'],
+                    }
+                    category_type = await ICD10CategoryType(**to_save_category_type).save(db = db)
+
+                category["type"] = category_type.get("uuid", "")
+
+                existing_category = await ICD10Category.get_many(include_deleted=False, filters={"name": category.get("name", "")}, db = db)
+                if len(existing_category) > 0:
+                    existing_category = existing_category[0]
+                    category = replace_object_values(category, existing_category)
+                    saved_category = await ICD10Category(**category).update(updated_by=user['uuid'], db = db)
+                    created_category = await ICD10CategoryResponseClass.get_structured_category(icd10_category = saved_category, db = db)
+                else:
+                    category['created_by']=user['uuid']
+                    saved_category = await ICD10Category(**category).save(db)
+                    created_category = await ICD10CategoryResponseClass.get_structured_category(icd10_category = saved_category, db = db)
+                created_categories.append(created_category)
+            else:
+                raise HTTPException(status_code=400, detail="Missing 'type' column in your uploaded file")
+        return ResponseMainModel(data=created_categories, message="Data imported successfully", total=len(created_categories))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to import file: {e}")
 
 async def create_icd10_codes(codes, user, db: StandardDatabase = None) -> ResponseMainModel:
     try:
