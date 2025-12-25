@@ -10,7 +10,7 @@ from app.shared.utils.response import populate_user_fields
 
 class ICD10CategoryTypeFieldClass(BaseModel):
     uuid: str
-    name: str    
+    name: str
 
     @classmethod
     def get_icd10_category_type(cls, category_type_uuid, db: StandardDatabase = None):
@@ -31,8 +31,8 @@ class ICD10CategoryTypeFieldClass(BaseModel):
 class ICD10CategoryTypeResponseClass(BaseResponseModel):
     uuid: str
     name: str
-    created_by: Union[ResponseUser, None] | None
-    updated_by: Union[ResponseUser, None] | None
+    created_by: Union[ResponseUser, None] = None
+    updated_by: Union[ResponseUser, None] = None
 
     @classmethod
     def get_icd10_category_types(cls, db: StandardDatabase = None):
@@ -94,6 +94,7 @@ class ICD10CategoryResponseClass(BaseResponseModel):
     name: str
     created_by: Union[ResponseUser, None] | None
     updated_by: Union[ResponseUser, None] | None
+    type: Union[ICD10CategoryTypeFieldClass, None] = None
 
     @classmethod
     def get_icd10_categories(cls, db: StandardDatabase = None):
