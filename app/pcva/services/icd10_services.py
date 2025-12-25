@@ -66,7 +66,7 @@ async def create_icd10_categories_service(categories, user, db: StandardDatabase
     except ArangoError as e:
         raise HTTPException(status_code=500, detail=f"Failed to create categories: {e}")
 
-async def get_icd10_category_types_service(paging: bool = True,  page_number: int = 1, filters: Dict= {}, limit: int = 10, include_deleted: bool = None, db: StandardDatabase = None) -> ResponseMainModel:
+async def get_icd10_categories_service(paging: bool = True,  page_number: int = 1, filters: Dict= {}, limit: int = 10, include_deleted: bool = None, db: StandardDatabase = None) -> ResponseMainModel:
     try:
         categoriesData = await ICD10Category.get_many(
             paging = paging, 
