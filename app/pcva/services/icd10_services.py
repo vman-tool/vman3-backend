@@ -189,6 +189,18 @@ async def create_or_icd10_codes_from_file(codes, user, db: StandardDatabase):
     try:
         created_codes = []
         for code in codes:
+            category_type = None
+            if "type" in code:
+                filters = {"or_conditions": [{"name": code.get("type", "")}, {"uuid": code.get("type", "")}]}
+                existing_category_type = await ICD10CategoryType.get_many(filters=filters, include_deleted=False, db = db)
+                if len(existing_category_type) > 0:
+                        category_type = existing_category_type[0]
+                else:
+                    to_save_category_type  = {
+                        "name": code.get("type", ""),
+                        "created_by": user['uuid'],
+                    }
+                    category_type = await ICD10CategoryType(**to_save_category_type).save(db = db)
             if "category" in code:
                 filters = {"or_conditions": [{"name": code.get("category", "")}, {"uuid": code.get("category", "")}]}
                 existing_category = await ICD10Category.get_many(filters=filters, include_deleted=False, db = db)
@@ -198,6 +210,7 @@ async def create_or_icd10_codes_from_file(codes, user, db: StandardDatabase):
                     to_save_category  = {
                         "name": code.get("category", ""),
                         "created_by": user['uuid'],
+                        "type": category_type.get("uuid", "") if category_type and "uuid" in category_type else None,
                     }
                     category = await ICD10Category(**to_save_category).save(db = db)
                 
