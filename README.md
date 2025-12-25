@@ -83,8 +83,13 @@ docker compose up arango-db -d
 
 Run the following command to start the FastAPI application:
 
+```bash
+uvicorn app.main:app --host 0.0.0.0 --port 8080 --reload
 ```
-bash uvicorn app.main:app --host 0.0.0.0 --port 8080 --reload
+
+**Note:** Make sure your virtual environment is activated. If `uvicorn` is not found, use:
+```bash
+python -m uvicorn app.main:app --host 0.0.0.0 --port 8080 --reload
 ```
 
 The application will be accessible at `http://localhost:8080/vman/api/v1`.
@@ -96,6 +101,38 @@ The application will be accessible at `http://localhost:8080/vman/api/v1`.
 
 After ensuring the above configurations, build and run the Docker containers:
 
+```bash
+docker compose up --build
 ```
-bash docker-compose up --build
+
+## Development Guidelines
+
+### 1. Asynchronous vs Synchronous Code
+This project uses **FastAPI**, which is built on an asynchronous core. However, we use **ArangoDB** via `python-arango`, which is a synchronous library.
+
+**CRITICAL RULE**: You must **never** call blocking synchronous code directly within an `async def` function. This will freeze the entire server event loop.
+
+#### Correct Pattern (Using Threadpool)
+Use `run_in_threadpool` to bridge synchronous calls:
+```python
+from fastapi.concurrency import run_in_threadpool
+
+async def my_async_endpoint():
+    # WRONG: Blocks server
+    # cursor = db.aql.execute(query) 
+    
+    # CORRECT: Runs in separate thread
+    def execute_query():
+        return db.aql.execute(query)
+        
+    cursor = await run_in_threadpool(execute_query)
 ```
+
+**When to use `run_in_threadpool`**:
+-   Any Database Call (`db.aql.execute`, `collection.insert`, etc.)
+-   File I/O
+-   Heavy CPU computations
+
+**When NOT to use it**:
+-   Simple variable assignment
+-   Should be native async libraries (like `httpx`)

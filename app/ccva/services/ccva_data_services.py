@@ -4,6 +4,7 @@ from typing import List, Optional
 from arango import ArangoError
 from arango.database import StandardDatabase
 from fastapi import HTTPException, status
+from fastapi.concurrency import run_in_threadpool
 
 from app.settings.services.odk_configs import fetch_odk_config
 from app.shared.configs.constants import db_collections
@@ -11,7 +12,7 @@ from app.shared.configs.models import ResponseMainModel
 from app.shared.middlewares.exceptions import BadRequestException
 from app.utilits.db_logger import db_logger, log_to_db
 
-@log_to_db(context="fetch_ccva_records", log_args=True)
+# #@log_to_db(context="fetch_ccva_records", log_args=True)
 async def fetch_ccva_records(paging: bool = True, page_number: int = 1, limit: int = 10, start_date: Optional[date] = None, end_date: Optional[date] = None, locations: Optional[List[str]] = None, db: StandardDatabase = None) -> ResponseMainModel:
     try:
         config = await fetch_odk_config(db, True)
@@ -47,13 +48,21 @@ async def fetch_ccva_records(paging: bool = True, page_number: int = 1, limit: i
 
         query += "RETURN doc"
         # print(query)
-        cursor = db.aql.execute(query, bind_vars=bind_vars,cache=True)
-        data = [document for document in cursor]
+        # print(query)
+        def execute_query():
+            cursor = db.aql.execute(query, bind_vars=bind_vars, cache=True)
+            return [document for document in cursor]
+
+        data = await run_in_threadpool(execute_query)
 
         # Fetch total count of documents
         count_query = f"RETURN LENGTH({collection.name})"
-        total_records_cursor = db.aql.execute(count_query,cache=True)
-        total_records = total_records_cursor.next()
+        
+        def execute_count_query():
+            total_records_cursor = db.aql.execute(count_query, cache=True)
+            return total_records_cursor.next()
+
+        total_records = await run_in_threadpool(execute_count_query)
 
         return ResponseMainModel(
             data=data,
@@ -62,13 +71,13 @@ async def fetch_ccva_records(paging: bool = True, page_number: int = 1, limit: i
         )
     except ArangoError as e:
         
-        await db_logger.log(
-            message="Failed to fetched records " + str(e),
-            level=db_logger.LogLevel.ERROR,
-            context="fetch_ccva_records",
-            data={}
+    #     await db_logger.log(
+    #         message="Failed to fetched records " + str(e),
+    #         level=db_logger.LogLevel.ERROR,
+    #         context="fetch_ccva_records",
+    #         data={}
          
-    )
+    # )
         raise BadRequestException("Failed to fetched records",str(e))
     except Exception as e:
         print(e)
@@ -139,9 +148,11 @@ async def fetch_processed_ccva_graphs(
         RETURN doc
         """
 
-        cursor = db.aql.execute(query, bind_vars=bind_vars,cache=True)
+        def execute_processed_query():
+            cursor = db.aql.execute(query, bind_vars=bind_vars, cache=True)
+            return [document for document in cursor]
 
-        data = [document for document in cursor]
+        data = await run_in_threadpool(execute_processed_query)
 
         if not data:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No records found")
@@ -217,8 +228,11 @@ async def fetch_processed_individual_ccva_graphs(
         RETURN doc
         """
 
-        cursor = db.aql.execute(query, bind_vars=bind_vars,cache=True)
-        data = [document for document in cursor]
+        def execute_individual_query():
+            cursor = db.aql.execute(query, bind_vars=bind_vars, cache=True)
+            return [document for document in cursor]
+
+        data = await run_in_threadpool(execute_individual_query)
 
         if not data:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No records found")
@@ -282,8 +296,11 @@ async def fetch_all_processed_ccva_graphs(paging: bool = True, page_number: int 
         }
         """
 
-        cursor = db.aql.execute(query, bind_vars=bind_vars,cache=True)
-        data = [document for document in cursor]
+        def execute_all_processed_query():
+            cursor = db.aql.execute(query, bind_vars=bind_vars, cache=True)
+            return [document for document in cursor]
+
+        data = await run_in_threadpool(execute_all_processed_query)
 
 
         # Fetch total count of documents
@@ -309,8 +326,12 @@ async def update_ccva_entry(ccva_id: str, update_data: dict, db: StandardDatabas
 
         # Fetch the existing document
         query = f"FOR doc IN {collection.name} FILTER doc._key == @ccva_id RETURN doc"
-        cursor = db.aql.execute(query, bind_vars={"ccva_id": ccva_id},cache=True)
-        ccva_doc = next(cursor, None)
+        
+        def execute_fetch_entry():
+            cursor = db.aql.execute(query, bind_vars={"ccva_id": ccva_id}, cache=True)
+            return next(cursor, None)
+
+        ccva_doc = await run_in_threadpool(execute_fetch_entry)
 
         if not ccva_doc:
             raise BadRequestException(f"CCVA entry with id {ccva_id} not found")
@@ -321,10 +342,12 @@ async def update_ccva_entry(ccva_id: str, update_data: dict, db: StandardDatabas
             "ccva_id": ccva_id,
             "update_data": update_data
         }
-        cursor = db.aql.execute(query, bind_vars=bind_vars,cache=True)
+        
+        def execute_update_entry():
+            cursor = db.aql.execute(query, bind_vars=bind_vars, cache=True)
+            return next(cursor, None)
 
-        # Return the updated document
-        updated_doc = next(cursor, None)
+        updated_doc = await run_in_threadpool(execute_update_entry)
         return ResponseMainModel(
             data=updated_doc,
             message=f"CCVA entry with id {ccva_id} updated successfully",
@@ -348,20 +371,22 @@ async def set_ccva_as_default(ccva_id: str, db: StandardDatabase) -> ResponseMai
         UPDATE doc WITH {{ isDefault: false }} IN {collection.name}
         RETURN NEW
         """
-        db.aql.execute(query_unset_default,cache=True)  # Unset the current default entry
+        
+        def execute_toggle_default():
+            db.aql.execute(query_unset_default, cache=True)  # Unset the current default entry
 
-        # Step 2: Set the new CCVA as default
-        query_set_default = f"""
-        FOR doc IN {collection.name} 
-        FILTER doc._key == @ccva_id 
-        UPDATE doc WITH {{ isDefault: true }} IN {collection.name}
-        RETURN NEW
-        """
-        bind_vars = {"ccva_id": ccva_id}
-        cursor = db.aql.execute(query_set_default, bind_vars=bind_vars,cache=True)
+            # Step 2: Set the new CCVA as default
+            query_set_default = f"""
+            FOR doc IN {collection.name} 
+            FILTER doc._key == @ccva_id 
+            UPDATE doc WITH {{ isDefault: true }} IN {collection.name}
+            RETURN NEW
+            """
+            bind_vars = {"ccva_id": ccva_id}
+            cursor = db.aql.execute(query_set_default, bind_vars=bind_vars, cache=True)
+            return next(cursor, None)
 
-        # Fetch the updated document
-        updated_doc = next(cursor, None)
+        updated_doc = await run_in_threadpool(execute_toggle_default)
         if not updated_doc:
             raise BadRequestException(f"CCVA entry with id {ccva_id} not found")
 
@@ -386,20 +411,23 @@ async def delete_ccva_entry(ccva_id: str, db: StandardDatabase) -> ResponseMainM
 
         # Check if the document exists
         query = f"FOR doc IN {collection.name} FILTER doc._key == @ccva_id RETURN doc"
-        cursor = db.aql.execute(query, bind_vars={"ccva_id": ccva_id},cache=True)
-        ccva_doc = next(cursor, None)
+        
+        def execute_delete_entry():
+            cursor = db.aql.execute(query, bind_vars={"ccva_id": ccva_id}, cache=True)
+            ccva_doc = next(cursor, None)
 
+            if not ccva_doc:
+                raise BadRequestException(f"CCVA entry with id {ccva_id} not found")
+        
+            # Delete the document
+            query_delete = f"REMOVE {{ _key: @ccva_id }} IN {collection.name}"
+            bind_vars = {"ccva_id": ccva_id}
+            db.aql.execute(query_delete, bind_vars=bind_vars, cache=True)
+            db.collection(db_collections.CCVA_RESULTS).delete_match({
+                "task_id": ccva_doc.get("task_id")
+            })
 
-        if not ccva_doc:
-            raise BadRequestException(f"CCVA entry with id {ccva_id} not found")
-       
-        # Delete the document
-        query = f"REMOVE {{ _key: @ccva_id }} IN {collection.name}"
-        bind_vars = {"ccva_id": ccva_id}
-        db.aql.execute(query, bind_vars=bind_vars,cache=True)
-        db.collection(db_collections.CCVA_RESULTS).delete_match({
-            "task_id": ccva_doc.get("task_id")
-        })
+        await run_in_threadpool(execute_delete_entry)
 
         return ResponseMainModel(
             data=None,

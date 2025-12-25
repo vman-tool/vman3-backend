@@ -12,6 +12,8 @@ from app.shared.configs.arangodb import get_arangodb_session
 from app.shared.configs.constants import db_collections
 from app.utilits.db_logger import log_to_db
 from app.utilits.logger import app_logger
+from app.ccva.services.ccva_public_services import cleanup_expired_ccva_public_results
+from app.ccva_public_module.config import CCVA_PUBLIC_CLEANUP_ENABLED
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
@@ -63,7 +65,7 @@ def day_of_week_to_cron(days: List[str]) -> str:
     return ','.join(cron_days) if cron_days else '*'
 
 # Create a wrapper function that creates a BackgroundTasks object
-@log_to_db(context="odk_fetch_job_wrapper")
+#@log_to_db(context="odk_fetch_job_wrapper")
 async def odk_fetch_job_wrapper(db=None):
     """Wrapper function to create BackgroundTasks and call the fetch function"""
     from fastapi import BackgroundTasks
@@ -83,7 +85,7 @@ async def odk_fetch_job_wrapper(db=None):
         logger.info(f"Scheduled ODK fetch job executed successfully at {datetime.now().isoformat()}")
     except Exception as e:
         logger.error(f"Error executing scheduled ODK fetch job: {str(e)}")
-@log_to_db(context="schedule_odk_fetch_job")
+#@log_to_db(context="schedule_odk_fetch_job")
 async def schedule_odk_fetch_job(db=None):
     """Schedule the ODK fetch job based on cron settings"""
 
@@ -126,6 +128,29 @@ async def schedule_odk_fetch_job(db=None):
     except Exception as e:
         logger.error(f"Error scheduling ODK fetch job: {str(e)}")
 
+#@log_to_db(context="ccva_cleanup_job")
+async def ccva_cleanup_job(db=None):
+    """
+    Cleanup job for expired CCVA public results based on TTL.
+    Privacy-first backup: Frontend deletes immediately on completion,
+    but this ensures cleanup if user closes browser or deletion fails.
+    """
+    try:
+        # If db is not provided, get a new connection
+        if db is None:
+            db = await get_arangodb_session()
+        
+        logger.info(f"CCVA cleanup job started at {datetime.now().isoformat()}")
+        result = await cleanup_expired_ccva_public_results(db)
+        
+        if result:
+            logger.info(f"CCVA cleanup job completed: Deleted {result.get('deleted_count', 0)} expired record(s)")
+        else:
+            logger.warning("CCVA cleanup job completed but returned no result")
+            
+    except Exception as e:
+        logger.error(f"Error executing CCVA cleanup job: {str(e)}")
+
 async def start_scheduler():
     db = None
     async for session in get_arangodb_session():
@@ -146,13 +171,33 @@ async def start_scheduler():
     import asyncio
     loop = asyncio.get_event_loop()
     loop.create_task(schedule_odk_fetch_job(db))
+    
+    # Schedule CCVA cleanup job to run every 6 hours for privacy
+    # This will clean up expired TTL records from CCVA_PUBLIC_RESULTS
+    # Privacy-first: Frontend deletes immediately on completion, but this is a backup
+    # in case user closes browser or deletion fails
+    # Only schedule if CCVA Public module cleanup is enabled
+    if CCVA_PUBLIC_CLEANUP_ENABLED and not scheduler.get_job('ccva_cleanup_job'):
+        scheduler.add_job(
+            ccva_cleanup_job,
+            'interval',
+            hours=6,  # Run every 6 hours for faster cleanup
+            id='ccva_cleanup_job',
+            replace_existing=True,
+            kwargs={'db': db}
+        )
+        logger.info("Scheduled CCVA cleanup job to run every 6 hours (privacy-first backup)")
 
 async def shutdown_scheduler():
     """Shutdown the scheduler"""
-    if scheduler.running:
-        scheduler.shutdown()
-        logger.info("Scheduler shut down")
-        # 1. First, flush any remaining logs in the database logger
+    try:
+        if scheduler.running:
+            scheduler.shutdown()
+            logger.info("Scheduler shut down")
+    except Exception as e:
+        logger.error(f"Error shutting down scheduler: {e}")
+
+    # 1. First, flush any remaining logs in the database logger
     try:
         from app.utilits.db_logger import db_logger, background_processor
         

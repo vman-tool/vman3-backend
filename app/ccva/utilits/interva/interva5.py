@@ -242,6 +242,8 @@ class InterVA5:
 
         :return: None
         """
+        progress = 0
+        elapsed_time =f"{(datetime.datetime.now() - self.start_time).seconds // 3600}:{(datetime.datetime.now() - self.start_time).seconds // 60 % 60}:{(datetime.datetime.now() - self.start_time).seconds % 60}"
 
         if self.directory is None and self.write:
             raise IOError(
@@ -295,14 +297,16 @@ class InterVA5:
             self.causetextV5.drop(self.causetextV5.columns[1],
                                   axis=1, inplace=True)
         logger = None
+        now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         
         if self.write:
             logger = getLogger(__name__)
             logger.setLevel(INFO)
             file_handler = FileHandler(self.task_id + "_" + "errorlogV5.txt", mode="w")
             logger.addHandler(file_handler)
-            now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             logger.info(f"Error & warning log built for InterVA5 {now}\n")
+        if self.update_callback:
+                asyncio.run(self.update_callback({"progress": 0,"message": "Error & warning log built for InterVA5","log": f"Error & warning log built for InterVA5 {now}","elapsed_time": elapsed_time,"error": False, "total_records":self.va_input.shape[0]}))
         if isinstance(self.va_input, str) and self.va_input[-4:] == ".csv":
             self.va_input = read_csv(self.va_input)
         if "i183o" in self.va_input.columns:
@@ -399,16 +403,23 @@ class InterVA5:
         np = max(1, round(N/10))
 
         if self.write:
+            # elapsed_time =f"{(datetime.datetime.now() - self.start_time).seconds // 3600}:{(datetime.datetime.now() - self.start_time).seconds // 60 % 60}:{(datetime.datetime.now() - self.start_time).seconds % 60}"
             logger.info("\nThe following records are incomplete and "
                         "excluded from further processing:\n")
+            if self.update_callback:
+                asyncio.run(self.update_callback({"progress": 0,"message": "The following records are incomplete and excluded from further processing:","log": "The following records are incomplete and excluded from further processing:","elapsed_time": elapsed_time,"error": False, "total_records":self.va_input.shape[0]}))
 
         first_pass = []
         second_pass = []
         list_checked_data = []
         list_dem_group = []
 
+        # Log start of analysis
+        if self.update_callback:
+            asyncio.run(self.update_callback({"progress": 0,"message": "Running InterVA5 analysis...","log": "Running InterVA5 analysis...","elapsed_time": elapsed_time,"error": False, "total_records":self.va_input.shape[0]}))
+
         for i in range(N):
-            elapsed_time =f"{(datetime.datetime.now() - self.start_time).seconds // 3600}:{(datetime.datetime.now() - self.start_time).seconds // 60 % 60}:{(datetime.datetime.now() - self.start_time).seconds % 60}"
+            # elapsed_time =f"{(datetime.datetime.now() - self.start_time).seconds // 3600}:{(datetime.datetime.now() - self.start_time).seconds // 60 % 60}:{(datetime.datetime.now() - self.start_time).seconds % 60}"
             if self.gui_ctrl["break"]:
                 raise RuntimeError
             k = i + 1
@@ -418,12 +429,12 @@ class InterVA5:
                 progress = round(k / N * 100)
                 print(f"{progress}% completed -x")
                 if self.update_callback:
-                   asyncio.run(self.update_callback({"progress": progress,"message": "Running InterVA5 analysis...","elapsed_time": elapsed_time,"error": False, "total_records":self.va_input.shape[0]}))
+                   asyncio.run(self.update_callback({"progress": progress,"message": "Running InterVA5 analysis...","log": f"Running InterVA5 analysis... Processing record {k}/{N} ({progress}% completed)","elapsed_time": elapsed_time,"error": False, "total_records":self.va_input.shape[0]}))
 
             if k == N:
                 print("100% completed -----")
                 if self.update_callback:
-                    asyncio.run(self.update_callback({"progress": 90,"message": "Running InterVA5 analysis...","elapsed_time": elapsed_time,"total_records":self.va_input.shape[0], "error": False}))
+                    asyncio.run(self.update_callback({"progress": 90,"message": "Running InterVA5 analysis...","log": f"Running InterVA5 analysis... Completed processing all {N} records (100%)","elapsed_time": elapsed_time,"total_records":self.va_input.shape[0], "error": False}))
 
  
 
@@ -443,14 +454,19 @@ class InterVA5:
             input_current[0] = 0
             if nansum(input_current[5:12]) < 1:
                 if self.write:
-                    logger.info(index_current +
-                                " Error in age indicator: Not Specified")
+                    if self.update_callback:
+                        asyncio.run(self.update_callback({"progress": progress,"message": index_current + " Error in age indicator: Not Specified","log": f"WARNING: Record {index_current} - Error in age indicator: Not Specified","elapsed_time": elapsed_time,"error": False, "total_records":self.va_input.shape[0]}))
+
+                        logger.info(index_current +
+                                    " Error in age indicator: Not Specified")
                 if self.openva_app:
                     progress = int(100 * k / N)
                     self.openva_app.emit(progress)
                 continue
             if nansum(input_current[3:5]) < 1:
                 if self.write:
+                    if self.update_callback:
+                        asyncio.run(self.update_callback({"progress": progress,"message": index_current + " Error in sex indicator: Not Specified","log": f"WARNING: Record {index_current} - Error in sex indicator: Not Specified","elapsed_time": elapsed_time,"error": False, "total_records":self.va_input.shape[0]}))
                     logger.info(index_current +
                                 " Error in sex indicator: Not Specified")
                 if self.openva_app:
@@ -459,6 +475,8 @@ class InterVA5:
                 continue
             if nansum(input_current[20:328]) < 1:
                 if self.write:
+                    if self.update_callback:
+                        asyncio.run(self.update_callback({"progress": progress,"message": index_current + " Error in indicators: No symptoms specified","log": f"WARNING: Record {index_current} - Error in indicators: No symptoms specified","elapsed_time": elapsed_time,"error": False, "total_records":self.va_input.shape[0]}))
                     logger.info(index_current +
                                 " Error in indicators: No symptoms specified")
                 if self.openva_app:
@@ -608,6 +626,10 @@ class InterVA5:
                 progress = int(100 * k / N)
                 self.openva_app.emit(progress)
         if self.write:
+            
+            if self.update_callback:
+                
+                asyncio.run(self.update_callback({"progress": progress,"message": "The following data discrepancies were identified and handled:","log": "The following data discrepancies were identified and handled:","elapsed_time": elapsed_time,"error": False, "total_records":self.va_input.shape[0]}))
             logger.info("\nThe following data discrepancies were identified "
                         "and handled:\n")
             for j in range(len(first_pass)):
@@ -616,6 +638,7 @@ class InterVA5:
                     for k in item:
                         logger.info(k)
             logger.info("\nSecond pass\n")
+            
             for j in range(len(second_pass)):
                 item = second_pass[j]
                 if item:

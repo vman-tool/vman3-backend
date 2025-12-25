@@ -2,6 +2,7 @@ from datetime import date
 from typing import List, Optional
 
 from arango.database import StandardDatabase
+from fastapi.concurrency import run_in_threadpool
 
 from app.settings.services.odk_configs import fetch_odk_config
 from app.shared.configs.constants import db_collections
@@ -78,8 +79,11 @@ async def fetch_va_map_records(
             }}
         """
 
-        cursor = db.aql.execute(query, bind_vars=bind_vars,cache=True)
-        data = [document for document in cursor]
+        def execute_map_query():
+            cursor = db.aql.execute(query, bind_vars=bind_vars, cache=True)
+            return [document for document in cursor]
+
+        data = await run_in_threadpool(execute_map_query)
         
         
         # Remove duplicates based on coordinates, since it is useless in the frontend
@@ -92,8 +96,12 @@ async def fetch_va_map_records(
 
         # Fetch total count of documents
         count_query = f"RETURN LENGTH({collection.name})"
-        total_records_cursor = db.aql.execute(count_query,cache=True)
-        total_records = total_records_cursor.next()
+        
+        def execute_map_count_query():
+            total_records_cursor = db.aql.execute(count_query, cache=True)
+            return total_records_cursor.next()
+
+        total_records = await run_in_threadpool(execute_map_count_query)
 
         return ResponseMainModel(
             data=data,

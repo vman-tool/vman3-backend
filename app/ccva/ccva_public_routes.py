@@ -12,19 +12,16 @@ from fastapi import (APIRouter, BackgroundTasks, Body, Depends, File,
 from app.ccva.services.ccva_data_services import (
     delete_ccva_entry, fetch_all_processed_ccva_graphs,
     fetch_processed_ccva_graphs, set_ccva_as_default)
-from app.ccva.services.ccva_graph_services import \
-    fetch_db_processed_ccva_graphs
-from app.ccva.services.ccva_services import (fetch_ccva_results_and_errors,
-                                             get_record_to_run_ccva, run_ccva)
-from app.ccva.services.ccva_upload import insert_all_csv_data
+
+from app.ccva.services.ccva_public_services import (fetch_ccva_results_and_errors,
+                                              run_ccva_public)
 from app.shared.configs.arangodb import get_arangodb_session
 from app.shared.configs.models import ResponseMainModel
-from app.shared.services.task_progress_service import TaskProgressService
-from app.users.decorators.user import get_current_user, oauth2_scheme
+from app.users.decorators.user import get_current_user
 from app.utilits.db_logger import  log_to_db
 
-ccva_router = APIRouter(
-    prefix="/ccva",
+ccva_public_router = APIRouter(
+    prefix="/ccva_public",
     tags=["CCVA"],
     responses={404: {"description": "Not found"}},
     # dependencies=[Depends(oauth2_scheme), Depends(get_current_user)]
@@ -34,16 +31,16 @@ ccva_router = APIRouter(
 task_results = {}
 
 #@log_to_db(context="run_ccva_with_csv", log_args=True)
-@ccva_router.post("/upload", status_code=status.HTTP_200_OK)
+@ccva_public_router.post("/upload", status_code=status.HTTP_200_OK)
 async def run_ccva_with_csv(
     background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
     unique_id: Optional[str] = Body ('KEY', alias="unique_id"),
-    oauth = Depends(oauth2_scheme),
+    # oauth = Depends(oauth2_scheme),
     malaria_status = Body('h', alias="malaria_status"),
     ccva_algorithm: Optional[str] = Body(None, alias="ccva_algorithm"),
     hiv_status: Optional[str] = Body('h', alias="hiv_status"),
-    current_user: Optional[str] = Depends(get_current_user),
+    # current_user: Optional[str] = Depends(get_current_user),
     start_date: Optional[date] = Body(None, alias="start_date"),
     end_date: Optional[date] = Body(None, alias="end_date"),
     date_type: Optional[str]=Query(None, alias="date_type"),
@@ -86,25 +83,16 @@ async def run_ccva_with_csv(
         recordsDF = df.to_dict(orient='records')
         print('before insert_all_csv_data', len(recordsDF))
         
-        await insert_all_csv_data(recordsDF)
-        records = await get_record_to_run_ccva(current_user, db, 'uploaded_csv',task_id, task_results, start_date, end_date,date_type=date_type,)
-        records = records.data or []
+        # print(recordsDF)
+        records = recordsDF or []
         print('data 3', len(records))
-        if not records:
+        if not records or len(records)<=0:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No records found in the uploaded CSV")
-        
-        print('before background task')
-        # return  ResponseMainModel(data={"task_id": task_id, "total_records": len(records), ** {}}, message="CCVA is running with uploaded CSV data...")
 
+        #TODO: check the data to detamin the algorithim and data version to use
 
         # Add the CCVA task to background
-        background_tasks.add_task(run_ccva, db, ResponseMainModel(
-            data=records,
-            total= len(records),
-            message="Collecting data.",
-            error=False
-            
-        ), task_id, task_results, start_date, end_date, malaria_status, hiv_status, ccva_algorithm)
+        background_tasks.add_task(run_ccva_public, db, records, task_id, task_results, start_date, end_date, malaria_status, hiv_status, ccva_algorithm)
 
         # Constructing response
         datas = {
@@ -123,77 +111,10 @@ async def run_ccva_with_csv(
         # Raising the error so FastAPI can handle it
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
     
-#@log_to_db(context="run_internal_ccva", log_args=True)
-@ccva_router.post("", status_code=status.HTTP_200_OK,)
-async def run_internal_ccva(
-    background_tasks: BackgroundTasks,
-    oauth = Depends(oauth2_scheme), 
-    malaria_status = Body('h', alias="malaria_status"),
-    ccva_algorithm: Optional[str] = Body(None, alias="ccva_algorithm"),
-    hiv_status: Optional[str] = Body('h', alias="hiv_status"),
-    current_user: Optional[str] = Depends(get_current_user),
-    start_date: Optional[date] = Body(None, alias="start_date"),
-    end_date: Optional[date] = Body(None, alias="end_date"),
-    date_type: Optional[str]=Query(None, alias="date_type"),
-    db: StandardDatabase = Depends(get_arangodb_session)
-):
-    start_time = datetime.now()
 
-    try:
-        # Validate ccva_algorithm
-        if ccva_algorithm is not None and ccva_algorithm not in ["InterVA5"]:
-            print(ccva_algorithm)
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid CCVA algorithm, or algorithm not yet supported.")
-
-        # Generate task ID and fetch records
-        task_id = str(uuid.uuid4())
-        task_results = {}  # Initialize task results storage
-        records = await get_record_to_run_ccva(current_user,db,None, task_id, task_results, start_date, end_date,date_type=date_type,)
-
-        # Handle no records scenario
-        if not records:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No records found to run CCVA")
-        print('before background task')
-        # Add the CCVA task to background
-        
-        background_tasks.add_task(run_ccva, db, records, task_id, task_results, start_date, end_date, malaria_status, hiv_status, ccva_algorithm)
-        print('after background task')
-        # Constructing response
-        datas = {
-            "progress": 1,
-            "total_records": len(records.data),
-            "message": "Collecting data.",
-            "status": 'init',
-            "elapsed_time": f"{(datetime.now() - start_time).seconds // 3600}:{(datetime.now() - start_time).seconds // 60 % 60}:{(datetime.now() - start_time).seconds % 60}",
-            "task_id": task_id,
-            "error": False
-        }
-
-
-        return ResponseMainModel(data={"task_id": task_id, "total_records": len(records.data), **datas}, message="CCVA is running...")
     
-    except Exception as e:
-        print(e)
-        # Raising the error so FastAPI can handle it
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
-
-@ccva_router.get("/progress/{task_id}", status_code=status.HTTP_200_OK)
-async def get_ccva_progress(
-    task_id: str,
-    db: StandardDatabase = Depends(get_arangodb_session)
-):
-    """
-    Fetch the current progress of a running task from the database.
-    Useful for resuming progress tracking on page reload.
-    """
-    progress = await TaskProgressService.get_progress(db, task_id)
-    if not progress:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task progress not found.")
-    
-    return ResponseMainModel(data=progress, message="Progress fetched", error=False)
-
 #@log_to_db(context="get_processed_ccva_graphs", log_args=True)    
-@ccva_router.get("", status_code=status.HTTP_200_OK)
+@ccva_public_router.get("", status_code=status.HTTP_200_OK)
 async def get_processed_ccva_graphs(
     background_tasks: BackgroundTasks,
     ccva_id: Optional[str] = None,
@@ -207,8 +128,8 @@ async def get_processed_ccva_graphs(
     end_date: Optional[date] = Query(None, alias="end_date"),
     date_type: Optional[str]=Query(None, alias="date_type"),
     locations: Optional[str] = Query(None, alias="locations"),
-    oauth = Depends(oauth2_scheme), 
-    current_user = Depends(get_current_user),
+    # oauth = Depends(oauth2_scheme), 
+    # current_user = Depends(get_current_user),
     db: StandardDatabase = Depends(get_arangodb_session)
 ):
     """
@@ -216,45 +137,74 @@ async def get_processed_ccva_graphs(
     """
 
     try:
-        # Fetch processed CCVA data
-        print(ccva_graph_db_source)
-        if ccva_graph_db_source:
 
-            response =  await fetch_db_processed_ccva_graphs (
-                current_user=current_user,
-                ccva_id=ccva_id,
-                selected_success_type=selected_success_type,
-                is_default=True,
-                paging=paging,
-                page_number=page_number,
-                limit=limit,
-                start_date=start_date,
-                end_date=end_date,
-                locations=locations.split(",") if locations else None,
-                date_type=date_type,
-                db=db
-            )
-        else:
-            response = await fetch_processed_ccva_graphs(
-                ccva_id=ccva_id,
-                is_default=is_default,
-                paging=paging,
-                page_number=page_number,
-                limit=limit,
-                start_date=start_date,
-                end_date=end_date,
-                locations=locations.split(",") if locations else None,
-                date_type=date_type,
-                db=db
-            )
+        response = await fetch_processed_ccva_graphs(
+            ccva_id=ccva_id,
+            is_default=is_default,
+            paging=paging,
+            page_number=page_number,
+            limit=limit,
+            start_date=start_date,
+            end_date=end_date,
+            locations=locations.split(",") if locations else None,
+            date_type=date_type,
+            db=db
+        )
+
+        return response
+    except Exception as e:
+        print(f"Error: {str(e)}")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to fetch processed CCVA graphs.")
+
+
+#@log_to_db(context="get_processed_ccva_graphs_public", log_args=True)    
+@ccva_public_router.get("/", status_code=status.HTTP_200_OK)
+async def get_processed_ccva_graphs_public(
+    background_tasks: BackgroundTasks,
+    ccva_id: Optional[str] = None,
+    selected_success_type=None,
+    is_default: Optional[bool] = None,
+    paging: bool = True,
+    page_number: int = 1,
+    limit: int = 30,
+    ccva_graph_db_source: Optional[bool] = True,
+    start_date: Optional[date] = Query(None, alias="start_date"),
+    end_date: Optional[date] = Query(None, alias="end_date"),
+    date_type: Optional[str]=Query(None, alias="date_type"),
+    locations: Optional[str] = Query(None, alias="locations"),
+    # oauth = Depends(oauth2_scheme), 
+    # current_user = Depends(get_current_user),
+    db: StandardDatabase = Depends(get_arangodb_session)
+):
+    """
+    Route to fetch processed CCVA graphs, either by ccva_id, is_default, or with regular pagination and filtering.
+    """
+
+    try:
+
+        response = await fetch_processed_ccva_graphs(
+            ccva_id=ccva_id,
+            is_default=is_default,
+            paging=paging,
+            page_number=page_number,
+            limit=limit,
+            start_date=start_date,
+            end_date=end_date,
+            locations=locations.split(",") if locations else None,
+            date_type=date_type,
+            db=db
+        )
  
         return response
     except Exception as e:
         print(f"Error: {str(e)}")
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to fetch processed CCVA graphs.")
     
+
+
+    
 #@log_to_db(context="get_all_processed_ccva_graphs", log_args=True)        
-@ccva_router.get("/list", status_code=status.HTTP_200_OK,)
+@ccva_public_router.get("/list", status_code=status.HTTP_200_OK,)
 async def get_all_processed_ccva_graphs(
     background_tasks: BackgroundTasks,
     # oauth = Depends(oauth2_scheme), 
@@ -264,7 +214,7 @@ async def get_all_processed_ccva_graphs(
    return await fetch_all_processed_ccva_graphs(db=db)
 
 #@log_to_db(context="set_default_ccva", log_args=True)       
-@ccva_router.post("/{ccva_id}/set-default", status_code=status.HTTP_200_OK)
+@ccva_public_router.post("/{ccva_id}/set-default", status_code=status.HTTP_200_OK)
 async def set_default_ccva(
     ccva_id: str,
     db: StandardDatabase = Depends(get_arangodb_session),
@@ -276,9 +226,9 @@ async def set_default_ccva(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="CCVA not found or could not be set as default")
     return {"message": "CCVA set as default successfully"}
 
-# Service to delete a CCVA entry
+# Service to delete a CCVA entry (requires authentication)
 #@log_to_db(context="delete_ccva", log_args=True)       
-@ccva_router.delete("/{ccva_id}", status_code=status.HTTP_200_OK)
+@ccva_public_router.delete("/{ccva_id}", status_code=status.HTTP_200_OK)
 async def delete_ccva(
     ccva_id: str,
     db: StandardDatabase = Depends(get_arangodb_session),
@@ -290,12 +240,41 @@ async def delete_ccva(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="CCVA not found or could not be deleted")
     return {"message": "CCVA entry deleted successfully"}
 
+# Public service to delete CCVA entry by task_id (no authentication required)
+#@log_to_db(context="delete_ccva_public", log_args=True)       
+@ccva_public_router.delete("/task/{task_id}", status_code=status.HTTP_200_OK)
+async def delete_ccva_by_task_id(
+    task_id: str,
+    db: StandardDatabase = Depends(get_arangodb_session)
+):
+    """
+    Delete CCVA results from server database by task_id.
+    This is a public endpoint that doesn't require authentication.
+    Used after data is confirmed saved in browser IndexedDB.
+    Deletes from the single CCVA_PUBLIC_RESULTS collection.
+    """
+    try:
+        from app.shared.configs.constants import db_collections
+        
+        # Delete from the single public collection
+        public_collection = db.collection(db_collections.CCVA_PUBLIC_RESULTS)
+        public_collection.delete_match({"task_id": task_id})
+        
+        return ResponseMainModel(
+            data=None,
+            message=f"CCVA entry with task_id {task_id} deleted successfully from server",
+            error=False
+        )
+    except Exception as e:
+        print(f"Error deleting CCVA entry: {e}")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to delete CCVA entry: {str(e)}")
+
 
 
 
 # Endpoint to download the results as JSON or CSV
 #@log_to_db(context="download_ccva_results", log_args=True)  
-@ccva_router.get("/download_ccva_results/{task_id}", status_code=status.HTTP_200_OK)
+@ccva_public_router.get("/download_ccva_results/{task_id}", status_code=status.HTTP_200_OK)
 async def download_ccva_results(
     task_id: str,
     db: StandardDatabase = Depends(get_arangodb_session),

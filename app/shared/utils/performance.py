@@ -7,6 +7,7 @@ import time
 from typing import Dict, Any, Optional
 from functools import wraps
 from arango.database import StandardDatabase
+from fastapi.concurrency import run_in_threadpool
 from loguru import logger
 
 class CollectionCache:
@@ -80,43 +81,46 @@ class StatisticsCache:
     async def _compute_stats(cls, db: StandardDatabase, collection_name: str) -> Dict[str, Any]:
         """Compute statistics using optimized queries"""
         try:
-            # Use collection statistics for count (much faster than LENGTH())
-            collection = db.collection(collection_name)
-            collection_stats = collection.statistics()
-            total_records = collection_stats.get('count', 0)
-            
-            if total_records == 0:
-                return {
-                    'total_records': 0,
-                    'earliest_date': None,
-                    'latest_date': None
-                }
-            
-            # Optimized query for date range using indexes
-            query = f"""
-                LET latest = (
-                    FOR doc IN {collection_name}
-                    SORT doc.submissiondate DESC
-                    LIMIT 1
-                    RETURN doc.submissiondate
-                )[0]
+            def execute_compute():
+                # Use collection statistics for count (much faster than LENGTH())
+                collection = db.collection(collection_name)
+                collection_stats = collection.statistics()
+                total_records = collection_stats.get('count', 0)
                 
-                LET earliest = (
-                    FOR doc IN {collection_name}
-                    SORT doc.submissiondate ASC
-                    LIMIT 1
-                    RETURN doc.submissiondate
-                )[0]
+                if total_records == 0:
+                    return {
+                        'total_records': 0,
+                        'earliest_date': None,
+                        'latest_date': None
+                    }
                 
-                RETURN {{
-                    total_records: {total_records},
-                    latest_date: latest,
-                    earliest_date: earliest
-                }}
-            """
-            
-            cursor = db.aql.execute(query, cache=True)
-            result = cursor.next()
+                # Optimized query for date range using indexes
+                query = f"""
+                    LET latest = (
+                        FOR doc IN {collection_name}
+                        SORT doc.submissiondate DESC
+                        LIMIT 1
+                        RETURN doc.submissiondate
+                    )[0]
+                    
+                    LET earliest = (
+                        FOR doc IN {collection_name}
+                        SORT doc.submissiondate ASC
+                        LIMIT 1
+                        RETURN doc.submissiondate
+                    )[0]
+                    
+                    RETURN {{
+                        total_records: {total_records},
+                        latest_date: latest,
+                        earliest_date: earliest
+                    }}
+                """
+                
+                cursor = db.aql.execute(query, cache=True)
+                return cursor.next()
+
+            result = await run_in_threadpool(execute_compute)
             return result
             
         except Exception as e:
@@ -218,35 +222,38 @@ class DatabaseIndexManager:
         """Ensure critical indexes exist for optimal performance"""
         logger.info("Checking and creating database indexes for performance...")
         
-        for collection_name, indexes in cls.CRITICAL_INDEXES.items():
-            if not CollectionCache.exists(db, collection_name):
-                logger.warning(f"Collection {collection_name} does not exist, skipping indexes")
-                continue
-            
-            collection = db.collection(collection_name)
-            existing_indexes = {idx['fields']: idx for idx in collection.indexes()}
-            
-            for index_config in indexes:
-                fields = index_config['fields']
-                index_type = index_config['type']
-                
-                # Skip if index already exists
-                if tuple(fields) in existing_indexes:
-                    logger.debug(f"Index on {fields} already exists for {collection_name}")
+        def execute_ensure_indexes():
+            for collection_name, indexes in cls.CRITICAL_INDEXES.items():
+                if not CollectionCache.exists(db, collection_name):
+                    logger.warning(f"Collection {collection_name} does not exist, skipping indexes")
                     continue
                 
-                try:
-                    if index_type == 'hash':
-                        collection.add_hash_index(fields=fields)
-                    elif index_type == 'persistent':
-                        collection.add_persistent_index(fields=fields)
-                    elif index_type == 'primary':
-                        continue  # Primary index is automatic
+                collection = db.collection(collection_name)
+                existing_indexes = {tuple(idx['fields']): idx for idx in collection.indexes()}
+                
+                for index_config in indexes:
+                    fields = tuple(index_config['fields'])
+                    index_type = index_config['type']
                     
-                    logger.info(f"Created {index_type} index on {fields} for {collection_name}")
+                    # Skip if index already exists
+                    if fields in existing_indexes:
+                        logger.debug(f"Index on {fields} already exists for {collection_name}")
+                        continue
                     
-                except Exception as e:
-                    logger.error(f"Failed to create index on {fields} for {collection_name}: {e}")
+                    try:
+                        if index_type == 'hash':
+                            collection.add_hash_index(fields=list(fields))
+                        elif index_type == 'persistent':
+                            collection.add_persistent_index(fields=list(fields))
+                        elif index_type == 'primary':
+                            continue  # Primary index is automatic
+                        
+                        logger.info(f"Created {index_type} index on {fields} for {collection_name}")
+                        
+                    except Exception as e:
+                        logger.error(f"Failed to create index on {fields} for {collection_name}: {e}")
+
+        await run_in_threadpool(execute_ensure_indexes)
 
 # Performance monitoring utilities
 class PerformanceMonitor:

@@ -4,6 +4,7 @@ from typing import List, Optional
 from arango import ArangoError
 from arango.database import StandardDatabase
 from fastapi import HTTPException, status
+from fastapi.concurrency import run_in_threadpool
 
 from app.settings.services.odk_configs import fetch_odk_config
 from app.shared.configs.constants import db_collections
@@ -312,8 +313,11 @@ async def fetch_db_processed_ccva_graphs(
         }
 
         # print(query, 'query',ccva_task_id)
-        cursor = db.aql.execute(query, bind_vars=bind_vars, cache=True)
-        data = [document for document in cursor]
+        def execute_query():
+            cursor = db.aql.execute(query, bind_vars=bind_vars, cache=True)
+            return [document for document in cursor]
+
+        data = await run_in_threadpool(execute_query)
 
 
         if not data:
