@@ -5,9 +5,12 @@ from typing import Any, Dict, List, Optional, Union
 from arango.database import StandardDatabase
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, WebSocket, WebSocketDisconnect, status, Request
 import pandas as pd
+import numpy as np
 
 from app.pcva.requests.icd10_request_classes import (
     ICD10CategoryRequestClass,
+    ICD10CategoryTypeRequestClass,
+    ICD10CategoryTypeUpdateClass,
     ICD10CategoryUpdateClass,
     ICD10CreateRequestClass,
     ICD10UpdateRequestClass,
@@ -24,11 +27,15 @@ from app.pcva.responses.icd10_response_classes import (
 from app.pcva.responses.va_response_classes import CodedVAResponseClass
 from app.pcva.services.icd10_services import (
     create_icd10_categories_service,
+    create_icd10_category_types_service,
+    create_or_icd10_categories_from_file,
+    get_icd10_categories_service,
     create_icd10_codes,
     create_or_icd10_codes_from_file,
-    get_icd10_categories_service,
+    get_icd10_category_types_service,
     get_icd10_codes,
     update_icd10_categories_service,
+    update_icd10_category_types_service,
     update_icd10_codes,
 )
 from app.pcva.services.va_records_services import (
@@ -131,12 +138,65 @@ async def get_va_for_unnassignment(
     except Exception as e:
         raise e
 
+@log_to_db(context="get_icd10_category_types", log_args=True)    
+@pcva_router.get(
+        path="/icd10-category-types", 
+        status_code=status.HTTP_200_OK,
+)
+async def get_icd10_category_types(
+    paging: Optional[bool] = Query(None, alias="paging"),
+    page_number: Optional[int] = Query(1, alias="page_number"),
+    limit: Optional[int] = Query(10, alias="limit"),
+    include_deleted: Optional[str] = Query(None, alias="include_deleted"),
+    db: StandardDatabase = Depends(get_arangodb_session)) -> ResponseMainModel:
+
+    try:
+        allowPaging = paging if paging is not None else True
+        include_deleted = False if include_deleted is not None and include_deleted.lower() == 'false' else True
+        return await get_icd10_category_types_service(
+            paging = allowPaging, 
+            page_number = page_number, 
+            limit = limit, 
+            include_deleted = include_deleted, 
+            db = db)
+    except:
+        raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed get icd10 category types")
+
+@log_to_db(context="create_icd10_category_types", log_args=True)  
+@pcva_router.post("/create-icd10-category-types", status_code=status.HTTP_201_CREATED)
+async def create_icd10_category_types(
+    category_types: List[ICD10CategoryTypeRequestClass],
+    user: User = Depends(get_current_user),
+    db: StandardDatabase = Depends(get_arangodb_session)) -> ResponseMainModel:
+
+    try:
+        return await create_icd10_category_types_service(category_types, user, db)
+    except:
+        raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed create icd10 category types")
+
+@log_to_db(context="update_icd10_category_types", log_args=True)  
+@pcva_router.post(
+        path="/update-icd10-category-types", 
+        status_code=status.HTTP_200_OK,
+        description="Submit array of icd10 category types in a json format"
+)
+async def update_icd10_category_types(
+    category_types: List[ICD10CategoryTypeUpdateClass],
+    user: User = Depends(get_current_user),
+    db: StandardDatabase = Depends(get_arangodb_session)) -> ResponseMainModel:
+    try:
+        return await update_icd10_category_types_service(category_types, user, db)
+    except:
+        raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed update icd10 category types")
+
+
+
 @log_to_db(context="get_icd10_categories", log_args=True)    
 @pcva_router.get(
         path="/icd10-categories", 
         status_code=status.HTTP_200_OK,
 )
-async def get_icd10_categories(
+async def get_icd10_category(
     paging: Optional[bool] = Query(None, alias="paging"),
     page_number: Optional[int] = Query(1, alias="page_number"),
     limit: Optional[int] = Query(10, alias="limit"),
@@ -152,7 +212,8 @@ async def get_icd10_categories(
             limit = limit, 
             include_deleted = include_deleted, 
             db = db)
-    except:
+    except Exception as e:
+        print("Error: ", e)
         raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed get icd10 categories")
 
 @log_to_db(context="create_icd10_categories", log_args=True)  
@@ -164,7 +225,7 @@ async def create_icd10_categories(
 
     try:
         return await create_icd10_categories_service(categories, user, db)
-    except:
+    except Exception as e:
         raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed create icd10 categories")
 
 @log_to_db(context="update_icd10_categories", log_args=True)  
@@ -173,7 +234,7 @@ async def create_icd10_categories(
         status_code=status.HTTP_200_OK,
         description="Submit array of icd10 categories in a json format"
 )
-async def update_icd10_categories(
+async def update_icd10_category(
     categories: List[ICD10CategoryUpdateClass],
     user: User = Depends(get_current_user),
     db: StandardDatabase = Depends(get_arangodb_session)) -> ResponseMainModel:
@@ -181,6 +242,39 @@ async def update_icd10_categories(
         return await update_icd10_categories_service(categories, user, db)
     except:
         raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed update icd10 codes")
+
+
+@log_to_db(context="upload_categories_file", log_args=True)  
+@pcva_router.post(
+        path="/upload-icd10-categories-data", 
+        status_code=status.HTTP_200_OK,
+        description="Update categories in excel or csv or json format"
+)
+async def upload_categories_file(
+    file: UploadFile = File(),
+    user: User = Depends(get_current_user),
+    db: StandardDatabase = Depends(get_arangodb_session)
+    ) -> ResponseMainModel:
+    try:
+        file_extension = file.filename.split(".")[-1].lower()
+
+        content = await file.read()
+        file_content = BytesIO(content)
+
+        if file_extension == "csv":
+            df = pd.read_csv(file_content)
+        elif file_extension == "xlsx" or file_extension == "xls":
+            df = pd.read_excel(file_content)
+        elif file_extension == "json":
+            data = json.loads(content)
+            df = pd.json_normalize(data)
+        else:
+            raise HTTPException(status_code=400, detail="Invalid file type")
+        df = df.replace({np.nan: None})
+        data_dictionary = df.head().to_dict(orient="records")
+        return await create_or_icd10_categories_from_file(data_dictionary, user, db)
+    except Exception as e:
+        raise e
 
 
 @log_to_db(context="upload_file", log_args=True)  
@@ -209,7 +303,7 @@ async def upload_file(
             df = pd.json_normalize(data)
         else:
             raise HTTPException(status_code=400, detail="Invalid file type")
-        
+        df = df.replace({np.nan: None})
         data_dictionary = df.head().to_dict(orient="records")
         return await create_or_icd10_codes_from_file(data_dictionary, user, db)
     except Exception as e:
