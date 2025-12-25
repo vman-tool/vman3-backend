@@ -5,6 +5,7 @@ from typing import Any, Dict, List, Optional, Union
 from arango.database import StandardDatabase
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, WebSocket, WebSocketDisconnect, status, Request
 import pandas as pd
+import numpy as np
 
 from app.pcva.requests.icd10_request_classes import (
     ICD10CategoryRequestClass,
@@ -269,7 +270,7 @@ async def upload_categories_file(
             df = pd.json_normalize(data)
         else:
             raise HTTPException(status_code=400, detail="Invalid file type")
-        
+        df = df.replace({np.nan: None})
         data_dictionary = df.head().to_dict(orient="records")
         return await create_or_icd10_categories_from_file(data_dictionary, user, db)
     except Exception as e:
@@ -302,7 +303,7 @@ async def upload_file(
             df = pd.json_normalize(data)
         else:
             raise HTTPException(status_code=400, detail="Invalid file type")
-        
+        df = df.replace({np.nan: None})
         data_dictionary = df.head().to_dict(orient="records")
         return await create_or_icd10_codes_from_file(data_dictionary, user, db)
     except Exception as e:
