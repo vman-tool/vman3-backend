@@ -27,6 +27,7 @@ from app.pcva.responses.va_response_classes import CodedVAResponseClass
 from app.pcva.services.icd10_services import (
     create_icd10_categories_service,
     create_icd10_category_types_service,
+    create_or_icd10_categories_from_file,
     get_icd10_categories_service,
     create_icd10_codes,
     create_or_icd10_codes_from_file,
@@ -270,7 +271,7 @@ async def upload_categories_file(
             raise HTTPException(status_code=400, detail="Invalid file type")
         
         data_dictionary = df.head().to_dict(orient="records")
-        return await create_or_icd10_codes_from_file(data_dictionary, user, db)
+        return await create_or_icd10_categories_from_file(data_dictionary, user, db)
     except Exception as e:
         raise e
 
