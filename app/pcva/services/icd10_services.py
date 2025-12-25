@@ -190,8 +190,10 @@ async def create_or_icd10_codes_from_file(codes, user, db: StandardDatabase):
         created_codes = []
         for code in codes:
             category_type = None
-            if "type" in code:
+            print("Type of nan: ", type(code.get("type", "")), " for", code.get("type", ""))
+            if "type" in code and code.get("type", "") != None and code.get("type", "") != "":
                 filters = {"or_conditions": [{"name": code.get("type", "")}, {"uuid": code.get("type", "")}]}
+                print("Ite went through Types: ", filters)
                 existing_category_type = await ICD10CategoryType.get_many(filters=filters, include_deleted=False, db = db)
                 if len(existing_category_type) > 0:
                         category_type = existing_category_type[0]
@@ -201,7 +203,9 @@ async def create_or_icd10_codes_from_file(codes, user, db: StandardDatabase):
                         "created_by": user['uuid'],
                     }
                     category_type = await ICD10CategoryType(**to_save_category_type).save(db = db)
-            if "category" in code:
+            
+            if "category" in code and code.get("category", "") != None and code.get("category", "") != "":
+                print("Ite went through Categories")
                 filters = {"or_conditions": [{"name": code.get("category", "")}, {"uuid": code.get("category", "")}]}
                 existing_category = await ICD10Category.get_many(filters=filters, include_deleted=False, db = db)
                 if len(existing_category) > 0:
