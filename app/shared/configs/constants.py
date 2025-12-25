@@ -27,6 +27,8 @@ class db_collections():
     CCVA_GRAPH_RESULTS: str = 'ccva_graph_results'
     CCVA_ERRORS:str = 'ccva_errors'
     CCVA_ERRORS_CORRECTIONS:str = 'ccva_errors_corrections'
+    CCVA_PUBLIC_RESULTS: str = 'ccva_public_results'  # Single collection for all public CCVA data (temporary with TTL)
+    TASK_PROGRESS: str = 'task_progress'
 
 class Special_Constants():
     UPLOAD_FOLDER: str = '/uploads'
@@ -46,6 +48,14 @@ collections_with_indexes = {
         {"fields": ["id10005r"], "unique": False, "type": "persistent", "name": "idx_region"},
         {"fields": ["id10012"], "unique": False, "type": "persistent", "name": "idx_date"},
         {"fields": ["today"], "unique": False, "type": "persistent", "name": "idx_submission"},
+        
+        # New Optimization Indexes
+        {"fields": ["id10005d"], "unique": False, "type": "persistent", "name": "idx_district"},
+        {"fields": ["id10023"], "unique": False, "type": "persistent", "name": "idx_death_date"},
+        {"fields": ["id10005r", "today"], "unique": False, "type": "persistent", "name": "idx_region_submission"},
+        {"fields": ["id10005d", "today"], "unique": False, "type": "persistent", "name": "idx_district_submission"},
+        {"fields": ["id10005r", "id10005d"], "unique": False, "type": "persistent", "name": "idx_region_district"},
+        
         # {"fields": ["age_group"], "unique": False, "type": "persistent", "name": "idx_age_group"},
         {"fields": ["id10007"], "unique": False, "type": "persistent", "name": "idx_interviewer"}
     ],
@@ -108,7 +118,14 @@ collections_with_indexes = {
         
     ],
     db_collections.CCVA_ERRORS: [],
-    db_collections.CCVA_ERRORS_CORRECTIONS: []
+    db_collections.CCVA_ERRORS_CORRECTIONS: [],
+    db_collections.CCVA_PUBLIC_RESULTS: [
+        {"fields": ["task_id"], "unique": True, "type": "persistent", "name": "idx_task_id"},
+        {"fields": ["ttl"], "type": "persistent", "name": "idx_ttl"}
+    ],
+    db_collections.TASK_PROGRESS: [
+        {"fields": ["expires_at"], "type": "persistent", "name": "idx_expires_at", "expireAfter": 0}
+    ]
 }
 
 class AccessPrivileges():
@@ -126,7 +143,12 @@ class AccessPrivileges():
     PCVA_VIEW_ICD10_CATEGORIES: str = 'PCVA_VIEW_ICD10_CATEGORIES'
     PCVA_UPDATE_ICD10_CATEGORIES: str = 'PCVA_UPDATE_ICD10_CATEGORIES'
     PCVA_DELETE_ICD10_CATEGORIES: str = 'PCVA_DELETE_ICD10_CATEGORIES'
-
+    PCVA_CREATE_ICD10_CATEGORY_TYPES: str = 'PCVA_CREATE_ICD10_CATEGORY_TYPES'
+    PCVA_VIEW_ICD10_CATEGORY_TYPES: str = 'PCVA_VIEW_ICD10_CATEGORY_TYPES'
+    PCVA_UPDATE_ICD10_CATEGORY_TYPES: str = 'PCVA_UPDATE_ICD10_CATEGORY_TYPES'
+    PCVA_DELETE_ICD10_CATEGORY_TYPES: str = 'PCVA_DELETE_ICD10_CATEGORY_TYPES'
+    PCVA_UPLOAD_CATEGORIES_VIA_FILE: str = 'PCVA_UPLOAD_CATEGORIES_VIA_FILE'
+    PCVA_UPLOAD_CODES_VIA_FILE: str = 'PCVA_UPLOAD_CODES_VIA_FILE'
     PCVA_VIEW_VA_RECORDS: str = 'PCVA_VIEW_VA_RECORDS'
     PCVA_VIEW_CODERS: str = 'PCVA_VIEW_CODERS'
     PCVA_CODE_VA: str = 'PCVA_CODE_VA'

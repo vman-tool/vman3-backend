@@ -45,14 +45,66 @@ class ArangoDBClient:
     def _create_collections_sync(self):
         create_collections_and_indexes(self.db, collections_with_indexes)
 
-    async def insert_many(self, collection_name: str, documents: list[dict], overwrite_mode: str = 'ignore'):
+    async def insert_many(self, collection_name: str, documents: list[dict], overwrite_mode: str = 'ignore', 
+                         batch_size: int = 1000, sanitize: bool = True):
         # Wrap the synchronous insert_many in a thread pool
-        return await run_in_threadpool(self._insert_many_sync, collection_name, documents, overwrite_mode)
+        return await run_in_threadpool(self._insert_many_sync, collection_name, documents, overwrite_mode, batch_size, sanitize)
 
-    def _insert_many_sync(self, collection_name: str, documents: list[dict], overwrite_mode: str):
+    def _insert_many_sync(self, collection_name: str, documents: list[dict], overwrite_mode: str, 
+                         batch_size: int = 1000, sanitize: bool = True):
+        """
+        Insert many documents with batching for better performance.
+        
+        Args:
+            collection_name: Name of the collection
+            documents: List of documents to insert
+            overwrite_mode: Overwrite mode ('ignore', 'update', 'replace')
+            batch_size: Number of documents to insert per batch (default: 1000)
+            sanitize: Whether to sanitize documents (default: True). Set False if already sanitized upstream.
+        """
+        if not documents:
+            return []
+        
         collection = self.db.collection(collection_name)
-        documents = [sanitize_document(doc) for doc in documents]
-        collection.insert_many(documents, overwrite=True, overwrite_mode=overwrite_mode, keep_none=False,  silent=True)
+        
+        # Sanitize documents if needed (skip if already sanitized upstream to avoid double processing)
+        if sanitize:
+            documents = [sanitize_document(doc) for doc in documents]
+        
+        # Batch inserts for better performance with large datasets
+        # ArangoDB handles batches efficiently, but very large batches can be slow
+        total_docs = len(documents)
+        
+        # For small datasets, insert all at once
+        if total_docs <= batch_size:
+            result = collection.insert_many(
+                documents, 
+                overwrite=True, 
+                overwrite_mode=overwrite_mode, 
+                keep_none=False, 
+                silent=True
+            )
+            # When silent=True, ArangoDB returns True/False or None, not a list
+            # Return empty list for consistency, or the result if it's a list
+            return result if isinstance(result, list) else []
+        
+        # For large datasets, process in batches
+        for i in range(0, total_docs, batch_size):
+            batch = documents[i:i + batch_size]
+            batch_result = collection.insert_many(
+                batch, 
+                overwrite=True, 
+                overwrite_mode=overwrite_mode, 
+                keep_none=False, 
+                silent=True
+            )
+            # When silent=True, batch_result is typically True/False/None, not a list
+            # We don't need to extend results since we're not tracking individual results
+            if not batch_result:
+                logger.warning(f"Batch insert failed for batch starting at index {i}")
+        
+        # Return empty list since silent=True doesn't return detailed results
+        return []
 
 
     

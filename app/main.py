@@ -96,8 +96,11 @@ async def lifespan(app: FastAPI):
     finally:
         # Application shutdown logic
         logger.info("🛑 Application shutdown")
-        shutdown_scheduler()
-        scheduler.shutdown()
+        await shutdown_scheduler()
+        
+        # Determine if we should also close the loop (usually not in lifespan)
+        # scheduler.shutdown() # Removed because shutdown_scheduler() handles it.
+        
         logger.info("✅ Shutdown completed")
         
 

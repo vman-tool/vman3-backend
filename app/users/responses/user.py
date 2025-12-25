@@ -4,6 +4,7 @@ from typing import Dict, List, Union
 from arango import Optional
 from arango.database import StandardDatabase
 from pydantic import BaseModel, EmailStr
+from fastapi.concurrency import run_in_threadpool
 
 from app.shared.configs.constants import db_collections
 from app.shared.configs.models import BaseResponseModel, ResponseUser
@@ -46,8 +47,11 @@ class RoleResponse(BaseResponseModel):
                 RETURN role
             """
             bind_vars = {'role_uuid': role_uuid}
-            cursor = db.aql.execute(query, bind_vars=bind_vars,cache=True)
-            role = cursor.next()
+            def execute_role_query():
+                cursor = db.aql.execute(query, bind_vars=bind_vars, cache=True)
+                return cursor.next()
+            
+            role = await run_in_threadpool(execute_role_query)
         populated_role_data = await populate_user_fields(data = role, db=db)
         return cls(**populated_role_data)
 
@@ -94,8 +98,11 @@ class UserRolesResponse(BaseResponseModel):
 
             """
             bind_vars = {'user_uuid': user_uuid}
-            cursor = db.aql.execute(query, bind_vars=bind_vars,cache=True)
-            user_role = cursor.next()
+            def execute_user_role_query():
+                cursor = db.aql.execute(query, bind_vars=bind_vars, cache=True)
+                return cursor.next()
+
+            user_role = await run_in_threadpool(execute_user_role_query)
         roles = []
         if 'roles' in user_role and len(user_role['roles']) > 0:
             for role in user_role["roles"]:

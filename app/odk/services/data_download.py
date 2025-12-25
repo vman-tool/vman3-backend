@@ -7,6 +7,7 @@ from typing import Dict, List
 import pandas as pd
 from arango.database import StandardDatabase
 from fastapi import HTTPException
+from fastapi.concurrency import run_in_threadpool
 from loguru import logger
 
 from app.odk.models.questions_models import VA_Question
@@ -308,6 +309,8 @@ async def insert_data_to_arangodb(data: dict,data_source:str=None):
     except Exception as e:
         print(e)
         raise e
+    
+    
 async def insert_many_data_to_arangodb(data: List[dict], overwrite_mode: str = 'ignore'):
 
     try:
@@ -319,7 +322,8 @@ async def insert_many_data_to_arangodb(data: List[dict], overwrite_mode: str = '
 
 
         db:ArangoDBClient = await get_arangodb_client()
-        await db.insert_many(collection_name=db_collections.VA_TABLE, documents=data,overwrite_mode = overwrite_mode)
+        # Pass sanitize=False since we already sanitized above to avoid double processing
+        return await db.insert_many(collection_name=db_collections.VA_TABLE, documents=data, overwrite_mode=overwrite_mode, sanitize=False)
 
     except Exception as e:
         print(e)
@@ -347,7 +351,11 @@ async def get_margin_dates_and_records_count(db: StandardDatabase = None):
                 RETURN earliestRecord
             """
 
-    return db.aql.execute(query=query,cache=True).next()
+    def execute_query():
+        cursor = db.aql.execute(query=query, cache=True)
+        return cursor.next()
+
+    return await run_in_threadpool(execute_query)
 
 
 
