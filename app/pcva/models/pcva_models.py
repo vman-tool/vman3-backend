@@ -10,15 +10,15 @@ from pydantic import BaseModel, Field
 
 class ICD10CategoryType(VManBaseModel):
     name: str
-    description: str
+    description: Union[str, None] = None
 
     @classmethod
     def get_collection_name(cls) -> str:
         return db_collections.ICD10_CATEGORY_TYPE
 class ICD10Category(VManBaseModel):
     name: str
-    type: str
-    description: Optional[str] = None
+    type: Union[str, None] = None
+    description: Union[str, None] = None
 
     @classmethod
     def get_collection_name(cls) -> str:
@@ -27,7 +27,7 @@ class ICD10Category(VManBaseModel):
 class ICD10(VManBaseModel):
     code: str
     name: str
-    category: Optional[str] = None
+    category: Union[str, None] = None
 
     @classmethod
     def get_collection_name(cls) -> str:

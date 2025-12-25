@@ -14,14 +14,16 @@ class ICD10CategoryTypeFieldClass(BaseModel):
 
     @classmethod
     def get_icd10_category_type(cls, category_type_uuid, db: StandardDatabase = None):
+        if not category_type_uuid:
+            return None
         
         query = f"""
-        FOR category_type IN {db_collections.ICD10_CATEGORY_TYPE}
-            FILTER category_type.uuid == @category_type_uuid
-            RETURN {{
-                uuid: category_type.uuid,
-                name: category_type.name,
-            }}
+            FOR category_type IN {db_collections.ICD10_CATEGORY_TYPE}
+                FILTER category_type.uuid == @category_type_uuid
+                RETURN {{
+                    uuid: category_type.uuid,
+                    name: category_type.name,
+                }}
         """
         bind_vars = {'category_type_uuid': category_type_uuid}
         cursor = db.aql.execute(query, bind_vars=bind_vars,cache=True)
@@ -72,9 +74,10 @@ class ICD10CategoryTypeResponseClass(BaseResponseModel):
 class ICD10CategoryFieldClass(BaseModel):
     uuid: str
     name: str
+    type: Union[ICD10CategoryTypeFieldClass, None] = None
 
     @classmethod
-    def get_icd10_category(cls, category_uuid, db: StandardDatabase = None):
+    def get_icd10_category(cls, category_uuid, include_type: bool = False, db: StandardDatabase = None):
         
         query = f"""
         FOR category IN {db_collections.ICD10_CATEGORY}
@@ -82,11 +85,16 @@ class ICD10CategoryFieldClass(BaseModel):
             RETURN {{
                 uuid: category.uuid,
                 name: category.name,
+                type: category.type
             }}
         """
         bind_vars = {'category_uuid': category_uuid}
         cursor = db.aql.execute(query, bind_vars=bind_vars,cache=True)
         category_data = cursor.next()
+        if include_type:
+            category_data["type"] = ICD10CategoryTypeFieldClass.get_icd10_category_type(category_data.get("type", ""), db)
+        else:
+            category_data["type"] = None
         return cls(**category_data)
 
 class ICD10CategoryResponseClass(BaseResponseModel):
@@ -127,7 +135,7 @@ class ICD10CategoryResponseClass(BaseResponseModel):
             bind_vars = {'icd10_category_uuid': icd10_category_uuid}
             cursor = db.aql.execute(query, bind_vars=bind_vars)
             category_data = cursor.next()
-            category_data["type"] = ICD10CategoryTypeFieldClass.get_icd10_category_type(category_data["type"], db)
+        category_data["type"] = ICD10CategoryTypeFieldClass.get_icd10_category_type(category_data.get("type", ""), db)
         populated_category_data = await populate_user_fields(data = category_data, db = db)
         return cls(**populated_category_data)
 
@@ -144,17 +152,17 @@ class ICD10ResponseClass(BaseResponseModel):
         query = f"""
         FOR code IN {db_collections.ICD10}
             RETURN {{
-                uuid: category.uuid,
-                name: category.name,
-                created_at: category.created_at,
-                created_by: category.created_by,
-                category: category.category
+                uuid: code.uuid,
+                name: code.name,
+                created_at: code.created_at,
+                created_by: code.created_by,
+                category: code.category
             }}
         """
         cursor = db.aql.execute(query)
         codes_data = []
         for code in cursor:
-            code['category'] = ICD10CategoryFieldClass.get_icd10_category(code['category'], db)
+            code['category'] = ICD10CategoryFieldClass.get_icd10_category(category_uuid=code['category'], include_type=True, db=db)
             codes_data.append[cls.populate_user_fields(db, code)]
         return [cls(**code) for code in codes_data]
     
@@ -171,6 +179,5 @@ class ICD10ResponseClass(BaseResponseModel):
             cursor = db.aql.execute(query, bind_vars=bind_vars)
             code_data = cursor.next()
         populated_code_data = await populate_user_fields(code_data, db=db)
-        # print("With User Data: ", populated_code_data)
-        populated_code_data['category'] = ICD10CategoryFieldClass.get_icd10_category(populated_code_data['category'], db)
+        populated_code_data['category'] = ICD10CategoryFieldClass.get_icd10_category(category_uuid=populated_code_data['category'], include_type=True, db= db)
         return cls(**populated_code_data)

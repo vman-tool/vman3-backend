@@ -210,7 +210,8 @@ async def get_icd10_category(
             limit = limit, 
             include_deleted = include_deleted, 
             db = db)
-    except:
+    except Exception as e:
+        print("Error: ", e)
         raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed get icd10 categories")
 
 @log_to_db(context="create_icd10_categories", log_args=True)  
@@ -222,7 +223,7 @@ async def create_icd10_categories(
 
     try:
         return await create_icd10_categories_service(categories, user, db)
-    except:
+    except Exception as e:
         raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed create icd10 categories")
 
 @log_to_db(context="update_icd10_categories", log_args=True)  
@@ -239,6 +240,39 @@ async def update_icd10_category(
         return await update_icd10_categories_service(categories, user, db)
     except:
         raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed update icd10 codes")
+
+
+@log_to_db(context="upload_categories_file", log_args=True)  
+@pcva_router.post(
+        path="/upload-icd10-categories-data", 
+        status_code=status.HTTP_200_OK,
+        description="Update categories in excel or csv or json format"
+)
+async def upload_categories_file(
+    file: UploadFile = File(),
+    user: User = Depends(get_current_user),
+    db: StandardDatabase = Depends(get_arangodb_session)
+    ) -> ResponseMainModel:
+    try:
+        file_extension = file.filename.split(".")[-1].lower()
+
+        content = await file.read()
+        file_content = BytesIO(content)
+
+        if file_extension == "csv":
+            df = pd.read_csv(file_content)
+        elif file_extension == "xlsx" or file_extension == "xls":
+            df = pd.read_excel(file_content)
+        elif file_extension == "json":
+            data = json.loads(content)
+            df = pd.json_normalize(data)
+        else:
+            raise HTTPException(status_code=400, detail="Invalid file type")
+        
+        data_dictionary = df.head().to_dict(orient="records")
+        return await create_or_icd10_codes_from_file(data_dictionary, user, db)
+    except Exception as e:
+        raise e
 
 
 @log_to_db(context="upload_file", log_args=True)  
