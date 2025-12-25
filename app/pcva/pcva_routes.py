@@ -27,6 +27,7 @@ from app.pcva.responses.va_response_classes import CodedVAResponseClass
 from app.pcva.services.icd10_services import (
     create_icd10_categories_service,
     create_icd10_category_types_service,
+    get_icd10_categories_service,
     create_icd10_codes,
     create_or_icd10_codes_from_file,
     get_icd10_category_types_service,
@@ -193,7 +194,7 @@ async def update_icd10_category_types(
         path="/icd10-categories", 
         status_code=status.HTTP_200_OK,
 )
-async def get_icd10_category_types(
+async def get_icd10_category(
     paging: Optional[bool] = Query(None, alias="paging"),
     page_number: Optional[int] = Query(1, alias="page_number"),
     limit: Optional[int] = Query(10, alias="limit"),
@@ -203,7 +204,7 @@ async def get_icd10_category_types(
     try:
         allowPaging = paging if paging is not None else True
         include_deleted = False if include_deleted is not None and include_deleted.lower() == 'false' else True
-        return await get_icd10_category_types_service(
+        return await get_icd10_categories_service(
             paging = allowPaging, 
             page_number = page_number, 
             limit = limit, 
@@ -230,7 +231,7 @@ async def create_icd10_categories(
         status_code=status.HTTP_200_OK,
         description="Submit array of icd10 categories in a json format"
 )
-async def update_icd10_category_types(
+async def update_icd10_category(
     categories: List[ICD10CategoryUpdateClass],
     user: User = Depends(get_current_user),
     db: StandardDatabase = Depends(get_arangodb_session)) -> ResponseMainModel:
