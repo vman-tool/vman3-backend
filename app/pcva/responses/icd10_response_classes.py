@@ -134,11 +134,14 @@ class ICD10CategoryResponseClass(BaseResponseModel):
                 RETURN category
             """
             bind_vars = {'icd10_category_uuid': icd10_category_uuid}
+            
             def execute_category_query():
                 cursor = db.aql.execute(query, bind_vars=bind_vars)
                 return cursor.next()
 
+            print("Here is category data: ")
             category_data = await run_in_threadpool(execute_category_query)
+        category_data["type"] = ICD10CategoryTypeFieldClass.get_icd10_category_type(category_data.get("type", ""), db)
         populated_category_data = await populate_user_fields(data = category_data, db = db)
         return cls(**populated_category_data)
 
