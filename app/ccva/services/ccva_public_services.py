@@ -484,6 +484,9 @@ def process_ccva_errorlogs(output_folder: str,task_id:str=None):
 
     return log_entries
 
+
+from fastapi.concurrency import run_in_threadpool
+
 async def fetch_ccva_results_and_errors(db: StandardDatabase, task_id: str):
     """
     Fetch CCVA results from the public collection.
@@ -492,49 +495,51 @@ async def fetch_ccva_results_and_errors(db: StandardDatabase, task_id: str):
     exclusively to CCVA_PUBLIC_RESULTS collection only.
     """
     try:
-        # First try to fetch from the public collection (where all new data is stored)
-        public_collection = db.collection(db_collections.CCVA_PUBLIC_RESULTS)
-        public_result = public_collection.find({"task_id": task_id})
-        
-        if public_result and len(public_result) > 0:
-            result_doc = public_result[0]
-            return {
-                "results": result_doc.get("processed_data", []),
-                "error_logs": result_doc.get("error_logs", []),
-                "graphs": result_doc.get("graphs", {}),
-                "task_id": result_doc.get("task_id"),
-                "total_records": result_doc.get("total_records"),
-                "elapsed_time": result_doc.get("elapsed_time"),
-                "range": result_doc.get("range", {})
-            }
-        
-        # Fallback to old collections for reading legacy data only (read-only, no writes)
-        query = f"""
-        LET graph_results = (
-            FOR g IN ccva_errors
-            FILTER g.task_id == "{task_id}"
-            RETURN g
-        )
+        def execute_fetch():
+            # First try to fetch from the public collection (where all new data is stored)
+            public_collection = db.collection(db_collections.CCVA_PUBLIC_RESULTS)
+            public_result = public_collection.find({"task_id": task_id})
+            
+            if public_result and len(public_result) > 0:
+                result_doc = public_result[0]
+                return {
+                    "results": result_doc.get("processed_data", []),
+                    "error_logs": result_doc.get("error_logs", []),
+                    "graphs": result_doc.get("graphs", {}),
+                    "task_id": result_doc.get("task_id"),
+                    "total_records": result_doc.get("total_records"),
+                    "elapsed_time": result_doc.get("elapsed_time"),
+                    "range": result_doc.get("range", {})
+                }
+            
+            # Fallback to old collections for reading legacy data only (read-only, no writes)
+            query = f"""
+            LET graph_results = (
+                FOR g IN ccva_errors
+                FILTER g.task_id == "{task_id}"
+                RETURN g
+            )
 
-        LET indiv_results = (
-            FOR d IN ccva_results
-            FILTER d.task_id == "{task_id}"
-            RETURN d
-        )
+            LET indiv_results = (
+                FOR d IN ccva_results
+                FILTER d.task_id == "{task_id}"
+                RETURN d
+            )
 
-        RETURN {{
-            results: indiv_results,
-            error_logs: LENGTH(graph_results) > 0 ? graph_results : null
-        }}
-        """
+            RETURN {{
+                results: indiv_results,
+                error_logs: LENGTH(graph_results) > 0 ? graph_results : null
+            }}
+            """
 
-        # Execute the AQL query
-        cursor = db.aql.execute(query, cache=True)
+            # Execute the AQL query
+            cursor = db.aql.execute(query, cache=True)
 
-        # Retrieve the result (first result since RETURN only outputs one document)
-        result = cursor.next()
+            # Retrieve the result (first result since RETURN only outputs one document)
+            result = cursor.next()
+            return result
 
-        return result
+        return await run_in_threadpool(execute_fetch)
 
     except Exception as e:
         print(f"Error fetching CCVA results and error logs: {e}")
@@ -569,24 +574,27 @@ async def cleanup_expired_ccva_public_results(db: StandardDatabase = None):
         # Get current datetime for comparison
         current_time = datetime.now()
         
-        # Query to find and delete expired records
-        # TTL is stored as ISO format string (e.g., "2024-01-15T10:30:00")
-        # We compare ISO strings directly since they sort chronologically
-        query = f"""
-        FOR doc IN {db_collections.CCVA_PUBLIC_RESULTS}
-            FILTER doc.ttl != null AND doc.ttl != "" AND doc.ttl < @current_time
-            REMOVE doc IN {db_collections.CCVA_PUBLIC_RESULTS}
-            RETURN OLD._key
-        """
+        def execute_cleanup():
+            # Query to find and delete expired records
+            # TTL is stored as ISO format string (e.g., "2024-01-15T10:30:00")
+            # We compare ISO strings directly since they sort chronologically
+            query = f"""
+            FOR doc IN {db_collections.CCVA_PUBLIC_RESULTS}
+                FILTER doc.ttl != null AND doc.ttl != "" AND doc.ttl < @current_time
+                REMOVE doc IN {db_collections.CCVA_PUBLIC_RESULTS}
+                RETURN OLD._key
+            """
+            
+            bind_vars = {
+                "current_time": current_time.isoformat()
+            }
+            
+            # Execute the query
+            cursor = db.aql.execute(query, bind_vars=bind_vars, cache=False)
+            deleted_keys = [key for key in cursor]
+            return deleted_keys
         
-        bind_vars = {
-            "current_time": current_time.isoformat()
-        }
-        
-        # Execute the query
-        cursor = db.aql.execute(query, bind_vars=bind_vars, cache=False)
-        deleted_keys = [key for key in cursor]
-        
+        deleted_keys = await run_in_threadpool(execute_cleanup)
         deleted_count = len(deleted_keys)
         
         if deleted_count > 0:
