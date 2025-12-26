@@ -19,6 +19,7 @@ from app.ccva.services.ccva_services import (fetch_ccva_results_and_errors,
 from app.ccva.services.ccva_upload import insert_all_csv_data
 from app.shared.configs.arangodb import get_arangodb_session
 from app.shared.configs.models import ResponseMainModel
+from app.shared.services.task_progress_service import TaskProgressService
 from app.users.decorators.user import get_current_user, oauth2_scheme
 from app.utilits.db_logger import  log_to_db
 
@@ -175,6 +176,22 @@ async def run_internal_ccva(
         print(e)
         # Raising the error so FastAPI can handle it
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+
+@ccva_router.get("/progress/{task_id}", status_code=status.HTTP_200_OK)
+async def get_ccva_progress(
+    task_id: str,
+    db: StandardDatabase = Depends(get_arangodb_session)
+):
+    """
+    Fetch the current progress of a running task from the database.
+    Useful for resuming progress tracking on page reload.
+    """
+    progress = await TaskProgressService.get_progress(db, task_id)
+    if not progress:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task progress not found.")
+    
+    return ResponseMainModel(data=progress, message="Progress fetched", error=False)
+
 #@log_to_db(context="get_processed_ccva_graphs", log_args=True)    
 @ccva_router.get("", status_code=status.HTTP_200_OK)
 async def get_processed_ccva_graphs(

@@ -172,7 +172,7 @@ def add_query_filters(filters: Dict = None, bind_vars: Dict = None, document_nam
         """Generate filter for LIKE conditions for partial string matching"""
         if isinstance(like_value, dict):
             pattern = like_value.get('pattern', f"%{like_value.get('value', '')}%")
-            case_insensitive = like_value.get('case_insensitive', True)  # Default to case insensitive
+            case_insensitive = like_value.get('case_insensitive', True)
             if case_insensitive:
                 bind_var_key = f"{field}_like_ci"
                 return f"LOWER({document_name}.{field}) LIKE LOWER(@{bind_var_key})", {bind_var_key: pattern}
@@ -180,7 +180,6 @@ def add_query_filters(filters: Dict = None, bind_vars: Dict = None, document_nam
                 bind_var_key = f"{field}_like"
                 return f"{document_name}.{field} LIKE @{bind_var_key}", {bind_var_key: pattern}
         else:
-            # Simple string, wrap with % for partial match (case insensitive by default)
             bind_var_key = f"{field}_like_ci"
             return f"LOWER({document_name}.{field}) LIKE LOWER(@{bind_var_key})", {bind_var_key: f"%{like_value}%"}
 

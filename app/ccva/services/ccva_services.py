@@ -20,6 +20,8 @@ from app.settings.services.odk_configs import fetch_odk_config
 from app.shared.configs.arangodb import null_convert_data, remove_null_values
 from app.shared.configs.constants import db_collections
 from app.shared.configs.models import ResponseMainModel
+from app.shared.services.task_progress_service import TaskProgressService
+from app.utilits.logger import app_logger
 
 
 # The websocket_broadcast function for broadcasting progress updates
@@ -48,14 +50,52 @@ async def get_record_to_run_ccva(current_user:dict,db: StandardDatabase,data_sou
 async def run_ccva(db: StandardDatabase, records:ResponseMainModel, task_id: str, task_results: Dict,start_date: Optional[date] = None, end_date: Optional[date] = None, malaria_status:Optional[str]=None, hiv_status:Optional[str]=None, ccva_algorithm:Optional[str]=None):
     try:
                 # Define the async callback to send progress updates
-        async def update_callback(progress):
+                # Define the async callback to send progress updates
+        # Capture the main loop to ensure thread-safe callbacks
+        try:
+            main_loop = asyncio.get_running_loop()
+        except RuntimeError:
+            # Should not happen in run_ccva as it's an async endpoint
+            app_logger.error("No running loop found in run_ccva!")
+            return
+
+        async def _persist_and_broadcast(progress):
+            """Internal function to save to DB and broadcast"""
+            # 1. Broadcast via WebSocket
             await websocket_broadcast(task_id, progress)
-                # Initial update for task start
+            
+            # 2. Save to Database
+            progress_dict = progress.model_dump() if hasattr(progress, 'model_dump') else progress
+            if isinstance(progress_dict, str):
+                 try:
+                     progress_dict = json.loads(progress_dict)
+                 except:
+                     pass
+            
+            # Use TaskProgressService (async wrapper)
+            await TaskProgressService.save_progress(db, task_id, progress_dict)
+
+        async def update_callback(progress):
+            """
+            Thread-safe callback wrapper.
+            If called from a thread (different loop), schedules _persist_and_broadcast on the main loop.
+            """
+            try:
+                curr_loop = asyncio.get_running_loop()
+            except RuntimeError:
+                curr_loop = None
+
+            if curr_loop == main_loop:
+                 await _persist_and_broadcast(progress)
+            else:
+                 # We are in a thread/different context, update on main loop
+                 future = asyncio.run_coroutine_threadsafe(_persist_and_broadcast(progress), main_loop)
+                 return future.result()
+
+        # Initial update for task start
         start_time = datetime.now()
 
-        # initial_message = {"progress": 1, "message": "Collecting data.", "status":'init',"elapsed_time": f"{(datetime.now() - start_time).seconds // 3600}:{(datetime.now() - start_time).seconds // 60 % 60}:{(datetime.now() - start_time).seconds % 60}","task_id": task_id, "error": False}
-        # await update_callback(initial_message)
-        await websocket_broadcast(task_id=task_id, progress_data= InterVA5Progress(
+        initial_progress = InterVA5Progress(
             progress=1,
             total_records= len(records.data),
             message="Collecting data.",
@@ -63,7 +103,9 @@ async def run_ccva(db: StandardDatabase, records:ResponseMainModel, task_id: str
             elapsed_time=f"{(datetime.now() - start_time).seconds // 3600}:{(datetime.now() - start_time).seconds // 60 % 60}:{(datetime.now() - start_time).seconds % 60}",
             task_id=task_id,
             error=False
-        ).model_dump_json())
+        )
+        
+        await update_callback(initial_progress.model_dump_json())
 
 
         # Convert records to DataFrame directly
@@ -564,15 +606,14 @@ FOR doc IN {collection.name}
 
 
 def ensure_task(task):
+    """
+    Helper to run a coroutine task safely.
+    If there's a running loop, schedule it.
+    If not (e.g. in a thread), run it synchronously (which is what we want for update_callback wrapper).
+    """
     try:
-        # Check if an event loop is running
         loop = asyncio.get_running_loop()
+        return loop.create_task(task)
     except RuntimeError:
-        # If no running loop, create a new one and run the task
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        loop.run_until_complete(task)
-        loop.close()
-    else:
-        # If a running loop is available, create a task in the existing loop
-        loop.create_task(websocket_broadcast(task))
+        # No running loop, run it synchronously
+        return asyncio.run(task)

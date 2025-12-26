@@ -104,3 +104,35 @@ After ensuring the above configurations, build and run the Docker containers:
 ```bash
 docker compose up --build
 ```
+
+## Development Guidelines
+
+### 1. Asynchronous vs Synchronous Code
+This project uses **FastAPI**, which is built on an asynchronous core. However, we use **ArangoDB** via `python-arango`, which is a synchronous library.
+
+**CRITICAL RULE**: You must **never** call blocking synchronous code directly within an `async def` function. This will freeze the entire server event loop.
+
+#### Correct Pattern (Using Threadpool)
+Use `run_in_threadpool` to bridge synchronous calls:
+```python
+from fastapi.concurrency import run_in_threadpool
+
+async def my_async_endpoint():
+    # WRONG: Blocks server
+    # cursor = db.aql.execute(query) 
+    
+    # CORRECT: Runs in separate thread
+    def execute_query():
+        return db.aql.execute(query)
+        
+    cursor = await run_in_threadpool(execute_query)
+```
+
+**When to use `run_in_threadpool`**:
+-   Any Database Call (`db.aql.execute`, `collection.insert`, etc.)
+-   File I/O
+-   Heavy CPU computations
+
+**When NOT to use it**:
+-   Simple variable assignment
+-   Should be native async libraries (like `httpx`)
