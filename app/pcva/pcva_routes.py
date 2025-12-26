@@ -201,18 +201,18 @@ async def get_icd10_category(
     page_number: Optional[int] = Query(1, alias="page_number"),
     limit: Optional[int] = Query(10, alias="limit"),
     include_deleted: Optional[str] = Query(None, alias="include_deleted"),
-    name: Optional[str] = Query(None, alias="name"),
-    type: Optional[str] = Query(None, alias="type"),
+    search_term: Optional[str] = Query(None, alias="search_term"),
+    types: Optional[str] = Query(None, alias="types"),
     db: StandardDatabase = Depends(get_arangodb_session)) -> ResponseMainModel:
 
     try:
         allowPaging = paging if paging is not None else True
         include_deleted = False if include_deleted is not None and include_deleted.lower() == 'false' else True
         filters: Dict = {}
-        if name and name != "":
-            filters["like_conditions"] =  [{'name': name}]
-        if type and type != "":
-            filters['in_conditions'] = [{"type": [type.strip() for type in type.split(",")]}]   
+        if search_term and search_term != "":
+            filters["like_conditions"] =  [{'name': search_term}]
+        if types and types.strip():
+            filters['in_conditions'] = [{"type": [type.strip() for type in types.split(",")]}]
 
         return await get_icd10_categories_service(
             paging = allowPaging, 
