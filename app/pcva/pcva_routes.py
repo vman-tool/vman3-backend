@@ -332,7 +332,7 @@ async def get_icd10(
     page_number: Optional[int] = Query(1, alias="page_number"),
     limit: Optional[int] = Query(10, alias="limit"),
     include_deleted: Optional[str] = Query(None, alias="include_deleted"),
-    search_text: Optional[str] = Query(None, alias="search_text"),
+    search_term: Optional[str] = Query(None, alias="search_term"),
     category: Optional[str] = Query(None, alias="category"),
     type: Optional[str] = Query(None, alias="type"),
     db: StandardDatabase = Depends(get_arangodb_session)) -> ResponseMainModel:
@@ -341,8 +341,8 @@ async def get_icd10(
         allowPaging = paging if paging is not None else True
         include_deleted = False if include_deleted is not None and include_deleted.lower() == 'false' else True
         filters = {}
-        if search_text and search_text.strip():
-            filters["like_conditions"] =  [{'name': search_text}, {'code': search_text}]
+        if search_term and search_term.strip():
+            filters["like_conditions"] =  [{'name': search_term}, {'code': search_term}]
         if category and category.strip():
             filters['in_conditions'] = [{"category" : category.split(',')}]
 
