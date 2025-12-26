@@ -212,7 +212,7 @@ async def get_icd10_category(
         if name and name != "":
             filters["like_conditions"] =  [{'name': name}]
         if type and type != "":
-            filters['type'] = type
+            filters['in_conditions'] = [{"type": [type.strip() for type in type.split(",")]}]   
 
         return await get_icd10_categories_service(
             paging = allowPaging, 
@@ -344,7 +344,7 @@ async def get_icd10(
         if search_text and search_text.strip():
             filters["like_conditions"] =  [{'name': search_text}, {'code': search_text}]
         if category and category.strip():
-            filters['category'] = category
+            filters['in_conditions'] = [{"category" : category.split(',')}]
 
         return await get_icd10_codes(
             paging = allowPaging, 
