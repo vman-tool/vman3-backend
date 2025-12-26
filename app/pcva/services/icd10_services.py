@@ -97,17 +97,26 @@ async def update_icd10_categories_service(categories, user, db: StandardDatabase
         raise HTTPException(status_code=500, detail=f"Failed to update categories: {e}")
 
 async def includeTypeFilter(type: str = None, filters: Dict = {}, db: StandardDatabase = None) -> Dict:
-    if type and type != "":
-        extracted_types = await ICD10CategoryType.get_many(filters={"uuid": type}, include_deleted=False, db = db)
+    if type and type.strip():
+        typeFilters = {"in_conditions": [{"uuid": [type.strip() for type in type.split(",")]}]}
+        extracted_types = await ICD10CategoryType.get_many(filters=typeFilters, include_deleted = False, db = db)
         if len(extracted_types) > 0:
-            type_obj = extracted_types[0]
-            categories_of_type = await ICD10Category.get_many(filters={"type": type_obj.get("uuid", "")}, include_deleted=False, db = db)
-            selected_category = None
-            if "category" in filters:
-                selected_category = filters.pop("category")
+            categories_of_type = []
+            for type_obj in extracted_types:
+                type_obj = extracted_types[0]
+                categories_of_type.extend(await ICD10Category.get_many(filters={"type": type_obj.get("uuid", "")}, include_deleted=False, db = db))
+            
+            selected_categories = []
+            if "in_conditions" in filters:
+                for condition in filters["in_conditions"]:
+                    if "category" in condition:
+                        selected_categories = condition.pop("category")
+            
             category_uuids = [category.get("uuid", "") for category in categories_of_type]
-            if selected_category not in category_uuids and selected_category is not None:
-                category_uuids.append(selected_category)
+            
+            for selected_category in selected_categories:
+                if selected_category not in category_uuids and selected_category is not None:
+                    category_uuids.append(selected_category)
             if "in_conditions" in filters:
                 filters["in_conditions"].extend([{"category": category_uuids}])
             else:
