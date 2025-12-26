@@ -201,16 +201,25 @@ async def get_icd10_category(
     page_number: Optional[int] = Query(1, alias="page_number"),
     limit: Optional[int] = Query(10, alias="limit"),
     include_deleted: Optional[str] = Query(None, alias="include_deleted"),
+    name: Optional[str] = Query(None, alias="name"),
+    type: Optional[str] = Query(None, alias="type"),
     db: StandardDatabase = Depends(get_arangodb_session)) -> ResponseMainModel:
 
     try:
         allowPaging = paging if paging is not None else True
         include_deleted = False if include_deleted is not None and include_deleted.lower() == 'false' else True
+        filters: Dict = {}
+        if name and name != "":
+            filters["like_conditions"] =  [{'name': name}]
+        if type and type != "":
+            filters['type'] = type
+
         return await get_icd10_categories_service(
             paging = allowPaging, 
             page_number = page_number, 
-            limit = limit, 
-            include_deleted = include_deleted, 
+            limit = limit,
+            filters = filters, 
+            include_deleted = include_deleted,
             db = db)
     except Exception as e:
         print("Error: ", e)
@@ -316,23 +325,34 @@ async def upload_file(
 @pcva_router.get(
         path="/get-icd10", 
         status_code=status.HTTP_200_OK,
-        description="Submit array of icd10 codes in a json format"
+        description="Get ICD10 as saved in our database"
 )
 async def get_icd10(
     paging: Optional[bool] = Query(None, alias="paging"),
     page_number: Optional[int] = Query(1, alias="page_number"),
     limit: Optional[int] = Query(10, alias="limit"),
     include_deleted: Optional[str] = Query(None, alias="include_deleted"),
+    search_text: Optional[str] = Query(None, alias="search_text"),
+    category: Optional[str] = Query(None, alias="category"),
+    type: Optional[str] = Query(None, alias="type"),
     db: StandardDatabase = Depends(get_arangodb_session)) -> ResponseMainModel:
 
     try:
         allowPaging = paging if paging is not None else True
         include_deleted = False if include_deleted is not None and include_deleted.lower() == 'false' else True
+        filters = {}
+        if search_text and search_text.strip():
+            filters["like_conditions"] =  [{'name': search_text}, {'code': search_text}]
+        if category and category.strip():
+            filters['category'] = category
+
         return await get_icd10_codes(
             paging = allowPaging, 
             page_number = page_number, 
             limit = limit, 
-            include_deleted = include_deleted, 
+            include_deleted = include_deleted,
+            filters = filters,
+            type=type,
             db = db)
     except Exception as e:
         raise e

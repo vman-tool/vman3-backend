@@ -96,8 +96,31 @@ async def update_icd10_categories_service(categories, user, db: StandardDatabase
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to update categories: {e}")
 
-async def get_icd10_codes(paging: bool = True,  page_number: int = 1, limit: int = 10, filters: Dict= None, include_deleted: bool = None, db: StandardDatabase = None) -> List[ICD10ResponseClass]:
+async def includeTypeFilter(type: str = None, filters: Dict = {}, db: StandardDatabase = None) -> Dict:
+    if type and type != "":
+        extracted_types = await ICD10CategoryType.get_many(filters={"uuid": type}, include_deleted=False, db = db)
+        if len(extracted_types) > 0:
+            type_obj = extracted_types[0]
+            categories_of_type = await ICD10Category.get_many(filters={"type": type_obj.get("uuid", "")}, include_deleted=False, db = db)
+            selected_category = None
+            if "category" in filters:
+                selected_category = filters.pop("category")
+            category_uuids = [category.get("uuid", "") for category in categories_of_type]
+            if selected_category not in category_uuids and selected_category is not None:
+                category_uuids.append(selected_category)
+            if "in_conditions" in filters:
+                filters["in_conditions"].extend([{"category": category_uuids}])
+            else:
+                filters["in_conditions"] = [{"category": category_uuids}]
+    return filters
+
+
+async def get_icd10_codes(paging: bool = True,  page_number: int = 1, limit: int = 10, filters: Dict= None, include_deleted: bool = None, type: str = None, db: StandardDatabase = None) -> List[ICD10ResponseClass]:
     try:
+        if filters is None:
+            filters = {}
+        filters = await includeTypeFilter(type=type, filters=filters, db=db)
+
         data = [
             await ICD10ResponseClass.get_structured_code(icd10_code = icd10_code, db = db) 
             for icd10_code in await ICD10.get_many(
