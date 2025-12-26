@@ -333,8 +333,8 @@ async def get_icd10(
     limit: Optional[int] = Query(10, alias="limit"),
     include_deleted: Optional[str] = Query(None, alias="include_deleted"),
     search_term: Optional[str] = Query(None, alias="search_term"),
-    category: Optional[str] = Query(None, alias="category"),
-    type: Optional[str] = Query(None, alias="type"),
+    categories: Optional[str] = Query(None, alias="categories"),
+    types: Optional[str] = Query(None, alias="types"),
     db: StandardDatabase = Depends(get_arangodb_session)) -> ResponseMainModel:
 
     try:
@@ -343,8 +343,8 @@ async def get_icd10(
         filters = {}
         if search_term and search_term.strip():
             filters["like_conditions"] =  [{'name': search_term}, {'code': search_term}]
-        if category and category.strip():
-            filters['in_conditions'] = [{"category" : category.split(',')}]
+        if categories and categories.strip():
+            filters['in_conditions'] = [{"category" : categories.split(',')}]
 
         return await get_icd10_codes(
             paging = allowPaging, 
@@ -352,7 +352,7 @@ async def get_icd10(
             limit = limit, 
             include_deleted = include_deleted,
             filters = filters,
-            type=type,
+            type=types,
             db = db)
     except Exception as e:
         raise e
