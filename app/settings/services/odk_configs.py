@@ -10,9 +10,7 @@ from app.shared.configs.constants import db_collections
 from app.shared.configs.models import ResponseMainModel
 from app.shared.middlewares.exceptions import BadRequestException
 from app.shared.utils.database_utilities import replace_object_values
-from app.utilits import db_logger
-from app.utilits.db_logger import log_to_db
-
+from app.shared.utils.cache import ttl_cache, invalidate_cache
 
 def validate_configs(config: SettingsConfigData):
     if (config.field_mapping.submitted_date is None or 
@@ -66,7 +64,7 @@ async def fetch_odk_config(db: StandardDatabase, is_validate_configs: bool = Fal
         raise ValueError(e)
 
 
-
+@ttl_cache(ttl=3600, key_prefix="system_configs")
 async def fetch_configs_settings(db: StandardDatabase = None):
     try:
         config_data= await fetch_odk_config(db)
@@ -163,6 +161,9 @@ async def add_configs_settings(configData: SettingsConfigData, db: StandardDatab
 
         # db.collection(db_collections.SYSTEM_CONFIGS).insert(data, overwrite=False)
         results = await save_system_settings(data = data, db = db)
+        
+        # Invalidate Configs Cache
+        await invalidate_cache("system_configs")
 
         # Return success response
         return ResponseMainModel(
@@ -227,6 +228,7 @@ async def get_questioners_fields(db: StandardDatabase = None):
             total=None
         )
     
+@ttl_cache(ttl=3600, key_prefix="system_images") # Cache for 1 hour
 async def get_system_images(db: StandardDatabase = None):
     aql_query = f"""
         FOR settings in  {db_collections.SYSTEM_CONFIGS}
@@ -253,9 +255,14 @@ async def save_system_images(data: ImagesConfigData, reset: bool = False, db: St
             saving_data['system_images'] = updated_images
             await save_system_settings(saving_data, db)
             
+            # Invalidate cache for smart update
+            await invalidate_cache("system_images")
+            
             return await get_system_images(db)
         else:
             await save_system_settings(saving_data, db)
+            # Invalidate cache for smart update
+            await invalidate_cache("system_images")
 
             return await get_system_images(db)
     except Exception:
