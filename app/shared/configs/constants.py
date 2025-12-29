@@ -12,6 +12,7 @@ class db_collections():
     ROLES: str = 'role'
     USER_ROLES: str = 'user_roles'
     USER_ACCESS_LIMIT: str = 'user_access_limit'
+    ICD10_CATEGORY_TYPE: str = 'icd10_category_type'
     ICD10_CATEGORY: str = 'icd10_category'
     ICD10: str = 'icd10'
     ASSIGNED_VA: str = 'assigned_va'
@@ -78,9 +79,14 @@ collections_with_indexes = {
     db_collections.USER_ACCESS_LIMIT: [
         {"fields": ["is_deleted"], "type": "persistent", "name": "ucl_is_active"}
     ],
+    db_collections.ICD10_CATEGORY_TYPE: [
+        {"fields": ["is_deleted"], "type": "persistent", "name": "ict_is_active"},
+        {"fields": ["name"], "unique": True, "type": "persistent", "name": "category_type_name"}
+    ],
     db_collections.ICD10_CATEGORY: [
         {"fields": ["is_deleted"], "type": "persistent", "name": "ic_is_active"},
-        {"fields": ["name"], "unique": True, "type": "persistent", "name": "category_name"}
+        {"fields": ["name"], "unique": True, "type": "persistent", "name": "category_name"},
+        {"fields": ["type"], "unique": False, "type": "persistent", "name": "category_type"}
     ],
     db_collections.ICD10: [
         {"fields": ["is_deleted"], "type": "persistent", "name": "i_is_active"}
@@ -139,7 +145,12 @@ class AccessPrivileges():
     PCVA_VIEW_ICD10_CATEGORIES: str = 'PCVA_VIEW_ICD10_CATEGORIES'
     PCVA_UPDATE_ICD10_CATEGORIES: str = 'PCVA_UPDATE_ICD10_CATEGORIES'
     PCVA_DELETE_ICD10_CATEGORIES: str = 'PCVA_DELETE_ICD10_CATEGORIES'
-
+    PCVA_CREATE_ICD10_CATEGORY_TYPES: str = 'PCVA_CREATE_ICD10_CATEGORY_TYPES'
+    PCVA_VIEW_ICD10_CATEGORY_TYPES: str = 'PCVA_VIEW_ICD10_CATEGORY_TYPES'
+    PCVA_UPDATE_ICD10_CATEGORY_TYPES: str = 'PCVA_UPDATE_ICD10_CATEGORY_TYPES'
+    PCVA_DELETE_ICD10_CATEGORY_TYPES: str = 'PCVA_DELETE_ICD10_CATEGORY_TYPES'
+    PCVA_UPLOAD_CATEGORIES_VIA_FILE: str = 'PCVA_UPLOAD_CATEGORIES_VIA_FILE'
+    PCVA_UPLOAD_CODES_VIA_FILE: str = 'PCVA_UPLOAD_CODES_VIA_FILE'
     PCVA_VIEW_VA_RECORDS: str = 'PCVA_VIEW_VA_RECORDS'
     PCVA_VIEW_CODERS: str = 'PCVA_VIEW_CODERS'
     PCVA_CODE_VA: str = 'PCVA_CODE_VA'
