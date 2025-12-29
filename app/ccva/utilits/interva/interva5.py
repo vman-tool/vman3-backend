@@ -416,7 +416,7 @@ class InterVA5:
 
         # Log start of analysis
         if self.update_callback:
-            asyncio.run(self.update_callback({"progress": 0,"message": "Running InterVA5 analysis...","log": "Running InterVA5 analysis...","elapsed_time": elapsed_time,"error": False, "total_records":self.va_input.shape[0]}))
+            asyncio.run(self.update_callback({"progress": 0,"message": "    InterVA5 analysis in progress...","log": "InterVA5 analysis in progress...","elapsed_time": elapsed_time,"error": False, "total_records":self.va_input.shape[0]}))
 
         for i in range(N):
             # elapsed_time =f"{(datetime.datetime.now() - self.start_time).seconds // 3600}:{(datetime.datetime.now() - self.start_time).seconds // 60 % 60}:{(datetime.datetime.now() - self.start_time).seconds % 60}"
@@ -429,12 +429,12 @@ class InterVA5:
                 progress = round(k / N * 100)
                 print(f"{progress}% completed -x")
                 if self.update_callback:
-                   asyncio.run(self.update_callback({"progress": progress,"message": "Running InterVA5 analysis...","log": f"Running InterVA5 analysis... Processing record {k}/{N} ({progress}% completed)","elapsed_time": elapsed_time,"error": False, "total_records":self.va_input.shape[0]}))
+                   asyncio.run(self.update_callback({"progress": progress,"message": "InterVA5 analysis in progress...","log": f"Running InterVA5 analysis... Processing record {k}/{N} ({progress}% completed)","elapsed_time": elapsed_time,"error": False, "total_records":self.va_input.shape[0]}))
 
             if k == N:
                 print("100% completed -----")
                 if self.update_callback:
-                    asyncio.run(self.update_callback({"progress": 90,"message": "Running InterVA5 analysis...","log": f"Running InterVA5 analysis... Completed processing all {N} records (100%)","elapsed_time": elapsed_time,"total_records":self.va_input.shape[0], "error": False}))
+                    asyncio.run(self.update_callback({"progress": 90,"message": "InterVA5 analysis completed","log": f"Running InterVA5 analysis... Completed processing all {N} records (100%)","elapsed_time": elapsed_time,"total_records":self.va_input.shape[0], "error": False}))
 
  
 
@@ -455,7 +455,7 @@ class InterVA5:
             if nansum(input_current[5:12]) < 1:
                 if self.write:
                     if self.update_callback:
-                        asyncio.run(self.update_callback({"progress": progress,"message": index_current + " Error in age indicator: Not Specified","log": f"WARNING: Record {index_current} - Error in age indicator: Not Specified","elapsed_time": elapsed_time,"error": False, "total_records":self.va_input.shape[0]}))
+                        asyncio.run(self.update_callback({"progress": progress,"message": "Running InterVA5 analysis...","log": f"WARNING: Record {index_current} - Error in age indicator: Not Specified","elapsed_time": elapsed_time,"error": False, "total_records":self.va_input.shape[0]}))
 
                         logger.info(index_current +
                                     " Error in age indicator: Not Specified")
@@ -466,7 +466,7 @@ class InterVA5:
             if nansum(input_current[3:5]) < 1:
                 if self.write:
                     if self.update_callback:
-                        asyncio.run(self.update_callback({"progress": progress,"message": index_current + " Error in sex indicator: Not Specified","log": f"WARNING: Record {index_current} - Error in sex indicator: Not Specified","elapsed_time": elapsed_time,"error": False, "total_records":self.va_input.shape[0]}))
+                        asyncio.run(self.update_callback({"progress": progress,"message": "Running InterVA5 analysis...","log": f"WARNING: Record {index_current} - Error in sex indicator: Not Specified","elapsed_time": elapsed_time,"error": False, "total_records":self.va_input.shape[0]}))
                     logger.info(index_current +
                                 " Error in sex indicator: Not Specified")
                 if self.openva_app:
@@ -476,7 +476,7 @@ class InterVA5:
             if nansum(input_current[20:328]) < 1:
                 if self.write:
                     if self.update_callback:
-                        asyncio.run(self.update_callback({"progress": progress,"message": index_current + " Error in indicators: No symptoms specified","log": f"WARNING: Record {index_current} - Error in indicators: No symptoms specified","elapsed_time": elapsed_time,"error": False, "total_records":self.va_input.shape[0]}))
+                        asyncio.run(self.update_callback({"progress": progress,"message": "Running InterVA5 analysis...","log": f"WARNING: Record {index_current} - Error in indicators: No symptoms specified","elapsed_time": elapsed_time,"error": False, "total_records":self.va_input.shape[0]}))
                     logger.info(index_current +
                                 " Error in indicators: No symptoms specified")
                 if self.openva_app:

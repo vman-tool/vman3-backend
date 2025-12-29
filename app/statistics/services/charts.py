@@ -10,6 +10,9 @@ from app.shared.configs.models import ResponseMainModel
 from app.shared.configs.security import get_location_limit_values
 
 
+from app.shared.utils.cache import ttl_cache
+
+@ttl_cache(ttl=300) # Cache for 5 minutes
 async def fetch_charts_statistics( current_user: dict,paging: bool = True, page_number: int = 1, limit: int = 10, start_date: Optional[date] = None, end_date: Optional[date] = None, locations: Optional[List[str]] = None,  date_type:Optional[str]=None, db: StandardDatabase = None) -> ResponseMainModel:
     try:
         print("Fetching charts statistics")

@@ -32,6 +32,8 @@ class db_collections():
 class Special_Constants():
     UPLOAD_FOLDER: str = '/uploads'
     FILE_URL: str = '/vman/api/v1/uploads'
+
+REDIS_URL = 'redis://localhost:6370'
    
     
 collections_with_indexes = {

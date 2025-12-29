@@ -12,6 +12,7 @@ from app.statistics.services.submissions import fetch_submissions_statistics
 from app.users.decorators.user import get_current_user
 from app.utilits.db_logger import db_logger, log_to_db
 
+from app.shared.utils.cache import cache
 # from sqlalchemy.orm import Session
 
 
@@ -25,6 +26,7 @@ statistics_router = APIRouter(
 
 #@log_to_db(context="get_submissions_statistics", log_args=True)
 @statistics_router.get("/submissions", status_code=status.HTTP_200_OK, response_model=ResponseMainModel)
+@cache(namespace='submissions',expire=6000)
 async def get_submissions_statistics(
       current_user = Depends(get_current_user),
     paging: Optional[str] = Query(None, alias="paging"),
@@ -42,6 +44,7 @@ async def get_submissions_statistics(
 
 #@log_to_db(context="get_charts_statistics", log_args=True)
 @statistics_router.get("/charts", status_code=status.HTTP_200_OK, response_model=ResponseMainModel)
+@cache(namespace='charts_gets',expire=6000)
 async def get_charts_statistics(
     current_user = Depends(get_current_user),
     paging: Optional[str] = Query(None, alias="paging"),
