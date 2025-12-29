@@ -1,14 +1,28 @@
 version: "3.8"
 
 services:
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+    # depends_on:
+      # - frontend
+      # - backend
+      # - docs
+    networks:
+      - vman3-net
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: any
+
   frontend:
     image: ilyatuu/vman3_frontend
     ports:
-      - target: 80
-        published: 4200
-        protocol: tcp
+      - "4200:80"
     volumes:
-      #- config_json:/usr/share/nginx/html/assets/config.json
       - ./config.json:/usr/share/nginx/html/assets/config.json
     networks:
       - vman3-net
@@ -30,19 +44,15 @@ services:
         "--workers",
         "2"
       ]
-    ports:
-      - target: 8080
-        published: 8080
-        protocol: tcp
+    env_file:
+      - .env
+    environment:
+      PYTHONUNBUFFERED: "1"
     volumes:
       - ccva_files:/app/ccva_files
       - app_data:/app
       - settings_json:/vman3/settings.json
       - uploads:/vman3/app/uploads
-    env_file:
-      - .env
-    environment:
-      PYTHONUNBUFFERED: "1"
     networks:
       - vman3-net
     deploy:
@@ -51,13 +61,7 @@ services:
         condition: any
 
   # docs:
-  #   #build:
-  #   #  context: ./docs
-  #   image: ilyatuu/vman3_docs:latest
-  #   ports:
-  #     - target: 3000
-  #       published: 3000
-  #       protocol: tcp
+  #   image: crisskimaryo/vman3_docs
   #   networks:
   #     - vman3-net
   #   deploy:
@@ -67,10 +71,6 @@ services:
 
   arango-db:
     image: arangodb/arangodb:3.12.2
-    ports:
-      - target: 8529
-        published: 8529
-        protocol: tcp
     env_file:
       - .env
     volumes:
@@ -88,17 +88,26 @@ services:
         condition: any
 
   redis:
-    image: redis:latest
+    image: redis:7
+    command: redis-server --requirepass vman@1029
     ports:
-      - '6370:6379'
+      - "6370:6379"
+    networks:
+      - vman3-net
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: any
+
 networks:
   vman3-net:
     driver: overlay
+    attachable: true
+
 
 volumes:
   vman3db:
   ccva_files:
   app_data:
   uploads:
-  #config_json:
   settings_json:
