@@ -7,70 +7,54 @@ services:
       - "80:80"
     volumes:
       - ./nginx.conf:/etc/nginx/nginx.conf:ro
-    # depends_on:
-      # - frontend
-      # - backend
-      # - docs
     networks:
       - vman3-net
-    deploy:
-      replicas: 1
-      restart_policy:
-        condition: any
+    restart: always
 
   frontend:
     image: ilyatuu/vman3_frontend
     ports:
-      - "4200:80"
+      - "4200:4200"
     volumes:
       - ./config.json:/usr/share/nginx/html/assets/config.json
     networks:
       - vman3-net
-    deploy:
-      replicas: 1
-      restart_policy:
-        condition: any
+    restart: always
 
   backend:
     image: ilyatuu/vman3_backend:latest
     command:
       [
-        "uvicorn",
-        "app.main:app",
-        "--host",
-        "0.0.0.0",
-        "--port",
-        "8080",
-        "--workers",
-        "2"
+        "gunicorn",
+        "-k",
+        "uvicorn.workers.UvicornWorker",
+        "-w",
+        "3",
+        "-b",
+        "0.0.0.0:8080",
+        "--timeout",
+        "120",
+        "app.main:app"
       ]
-    env_file:
-      - .env
-    environment:
-      PYTHONUNBUFFERED: "1"
+    ports:
+      - "8080:8080"
     volumes:
       - ccva_files:/app/ccva_files
       - app_data:/app
       - settings_json:/vman3/settings.json
       - uploads:/vman3/app/uploads
+    env_file:
+      - .env
+    environment:
+      PYTHONUNBUFFERED: "1"
     networks:
       - vman3-net
-    deploy:
-      replicas: 3
-      restart_policy:
-        condition: any
-
-  # docs:
-  #   image: crisskimaryo/vman3_docs
-  #   networks:
-  #     - vman3-net
-  #   deploy:
-  #     replicas: 1
-  #     restart_policy:
-  #       condition: any
+    restart: always
 
   arango-db:
     image: arangodb/arangodb:3.12.2
+    ports:
+      - "8529:8529"
     env_file:
       - .env
     volumes:
@@ -82,28 +66,20 @@ services:
       - --rocksdb.total-write-buffer-size=512MB
     networks:
       - vman3-net
-    deploy:
-      replicas: 1
-      restart_policy:
-        condition: any
+    restart: always
 
   redis:
-    image: redis:7
+    image: redis:latest
     command: redis-server --requirepass vman@1029
     ports:
       - "6370:6379"
     networks:
       - vman3-net
-    deploy:
-      replicas: 1
-      restart_policy:
-        condition: any
+    restart: always
 
 networks:
   vman3-net:
-    driver: overlay
-    attachable: true
-
+    driver: bridge
 
 volumes:
   vman3db:
