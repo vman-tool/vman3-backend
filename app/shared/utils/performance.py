@@ -8,7 +8,9 @@ from typing import Dict, Any, Optional
 from functools import wraps
 from arango.database import StandardDatabase
 from fastapi.concurrency import run_in_threadpool
+from fastapi.concurrency import run_in_threadpool
 from loguru import logger
+from app.shared.configs.constants import db_collections
 
 class CollectionCache:
     """Cache collection existence to avoid repeated database checks"""
@@ -195,7 +197,8 @@ class DatabaseIndexManager:
     """Manage database indexes for optimal performance"""
     
     CRITICAL_INDEXES = {
-        'va_table': [
+        db_collections.VA_TABLE: [
+            {'fields': ['vman_data_source'], 'type': 'persistent'},
             {'fields': ['submissiondate'], 'type': 'persistent'},
             {'fields': ['status'], 'type': 'hash'},
             {'fields': ['submissiondate', 'status'], 'type': 'persistent'},

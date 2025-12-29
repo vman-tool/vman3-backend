@@ -46,6 +46,7 @@ async def run_ccva_with_csv(
     hiv_status: Optional[str] = Body('h', alias="hiv_status"),
     current_user: Optional[str] = Depends(get_current_user),
     start_date: Optional[date] = Body(None, alias="start_date"),
+    top: Optional[int] = Body(None, alias="top"),
     end_date: Optional[date] = Body(None, alias="end_date"),
     date_type: Optional[str]=Query(None, alias="date_type"),
     db: StandardDatabase = Depends(get_arangodb_session)
@@ -75,6 +76,7 @@ async def run_ccva_with_csv(
             current_user=current_user,
             start_date=start_date,
             end_date=end_date,
+            top=top,
             date_type=date_type,
             malaria_status=malaria_status,
             hiv_status=hiv_status,
@@ -114,6 +116,7 @@ async def run_internal_ccva(
     current_user: Optional[str] = Depends(get_current_user),
     start_date: Optional[date] = Body(None, alias="start_date"),
     end_date: Optional[date] = Body(None, alias="end_date"),
+    top: Optional[int] = Body(None, alias="top"),
     date_type: Optional[str]=Query(None, alias="date_type"),
     db: StandardDatabase = Depends(get_arangodb_session)
 ):
@@ -127,8 +130,9 @@ async def run_internal_ccva(
 
         # Generate task ID and fetch records
         task_id = str(uuid.uuid4())
+        ## show the progress of getting data from db in web socket
         task_results = {}  # Initialize task results storage
-        records = await get_record_to_run_ccva(current_user,db,None, task_id, task_results, start_date, end_date,date_type=date_type,)
+        records = await get_record_to_run_ccva(current_user,db,None, task_id, task_results, start_date, end_date,date_type=date_type,top=top)
 
         # Handle no records scenario
         if not records:
