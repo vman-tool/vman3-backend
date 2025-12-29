@@ -1,47 +1,104 @@
-version: '3.8'
+version: "3.8"
 
 services:
   frontend:
     image: ilyatuu/vman3_frontend
     ports:
-      - 4200:80
+      - target: 80
+        published: 4200
+        protocol: tcp
     volumes:
+      #- config_json:/usr/share/nginx/html/assets/config.json
       - ./config.json:/usr/share/nginx/html/assets/config.json
-    depends_on:
-      - backend
-      - arango-db
     networks:
-      - default
+      - vman3-net
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: any
 
   backend:
-    image: ilyatuu/vman3_backend
+    image: ilyatuu/vman3_backend:latest
+    command:
+      [
+        "uvicorn",
+        "app.main:app",
+        "--host",
+        "0.0.0.0",
+        "--port",
+        "8080",
+        "--workers",
+        "2"
+      ]
     ports:
-      - '8080:8080'
+      - target: 8080
+        published: 8080
+        protocol: tcp
     volumes:
-      - ./ccva_files:/app/ccva_files
-      - ./app:/app
-      - .settings.json:/vman3/settings.json
-    environment:
-      - PYTHONUNBUFFERED=1
-      - REDIS_URL=redis://redis:6379
+      - ccva_files:/app/ccva_files
+      - app_data:/app
+      - settings_json:/vman3/settings.json
+      - uploads:/vman3/app/uploads
     env_file:
       - .env
+    environment:
+      PYTHONUNBUFFERED: "1"
+    networks:
+      - vman3-net
+    deploy:
+      replicas: 3
+      restart_policy:
+        condition: any
 
-    depends_on:
-      - arangodb
-      - redis
+  # docs:
+  #   #build:
+  #   #  context: ./docs
+  #   image: ilyatuu/vman3_docs:latest
+  #   ports:
+  #     - target: 3000
+  #       published: 3000
+  #       protocol: tcp
+  #   networks:
+  #     - vman3-net
+  #   deploy:
+  #     replicas: 1
+  #     restart_policy:
+  #       condition: any
 
   arango-db:
-    image: arangodb/arangodb:12
+    image: arangodb/arangodb:3.12.2
+    ports:
+      - target: 8529
+        published: 8529
+        protocol: tcp
     env_file:
       - .env
     volumes:
       - vman3db:/var/lib/arangodb3
-    ports:
-      - '8529:8529'
     command:
       - arangod
       - --server.endpoint=tcp://0.0.0.0:8529
+      - --rocksdb.write-buffer-size=128MB
+      - --rocksdb.total-write-buffer-size=512MB
+    networks:
+      - vman3-net
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: any
+
+  redis:
+    image: redis:latest
+    ports:
+      - '6370:6379'
+networks:
+  vman3-net:
+    driver: overlay
 
 volumes:
   vman3db:
+  ccva_files:
+  app_data:
+  uploads:
+  #config_json:
+  settings_json:

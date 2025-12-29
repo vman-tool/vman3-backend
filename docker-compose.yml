@@ -8,7 +8,7 @@ services:
       - ./.env:/app/.env
     environment:
       - PYTHONUNBUFFERED=1
-      - REDIS_URL=redis://redis:6379
+      - REDIS_URL=redis://:vman@1029@redis:6379
     depends_on:
       - arangodb
       - redis
@@ -34,7 +34,7 @@ services:
       - .settings.json:/vman3/settings.json
     environment:
       - PYTHONUNBUFFERED=1
-      - REDIS_URL=redis://redis:6379
+      - REDIS_URL=redis://:vman@1029@redis:6379
     env_file:
       - .env
 
@@ -53,6 +53,7 @@ services:
       # - --rocksdb.block-cache-size=1024MB
   redis:
     image: redis:7
+    command: redis-server --requirepass vman@1029
     ports:
       - '6370:6379'
 volumes:

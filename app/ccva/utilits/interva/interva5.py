@@ -629,7 +629,8 @@ class InterVA5:
             
             if self.update_callback:
                 
-                asyncio.run(self.update_callback({"progress": progress,"message": "The following data discrepancies were identified and handled:","log": "The following data discrepancies were identified and handled:","elapsed_time": elapsed_time,"error": False, "total_records":self.va_input.shape[0]}))
+                if len(first_pass)>0 or len(second_pass)>0:
+                    asyncio.run(self.update_callback({"progress": progress,"message": "The following data discrepancies were identified and handled:","log": "The following data discrepancies were identified and handled:","elapsed_time": elapsed_time,"error": False, "total_records":self.va_input.shape[0]}))
             logger.info("\nThe following data discrepancies were identified "
                         "and handled:\n")
             for j in range(len(first_pass)):

@@ -286,6 +286,12 @@ async def fetch_all_processed_ccva_graphs(paging: bool = True, page_number: int 
             })
 
         query += """
+        LET user = (
+            FOR u IN @@users_collection
+            FILTER u._key == doc.user_id OR u.id == doc.user_id OR u.uid == doc.user_id
+            LIMIT 1
+            RETURN u
+        )[0]
         RETURN {
             
             "id": doc._key,
@@ -295,9 +301,13 @@ async def fetch_all_processed_ccva_graphs(paging: bool = True, page_number: int 
             "elapsed_time": doc.elapsed_time,
             "start": doc.range.start,
             "end": doc.range.end,
-            "isDefault": doc.isDefault
+            "isDefault": doc.isDefault,
+            "run_by_name": user ? user.name : "Unknown"
+
         }
         """
+        bind_vars["@users_collection"] = db_collections.USERS
+        print(query)
 
         def execute_all_processed_query():
             cursor = db.aql.execute(query, bind_vars=bind_vars, cache=True)
