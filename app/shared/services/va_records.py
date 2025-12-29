@@ -176,6 +176,7 @@ async def shared_fetch_va_records(paging: bool = True,  page_number: int = 1, li
     
 
 async def get_field_value_from_va_records(field: str, db: StandardDatabase = None):
+
     try:
 
         query = f"""

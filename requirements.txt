@@ -1,4 +1,4 @@
-aioredis==2.0.1
+redis>=4.6.0,<5.0.0
 aiosmtplib==2.0.2
 annotated-types==0.7.0
 anyio==4.4.0
@@ -23,6 +23,7 @@ exceptiongroup==1.2.1
 executing==2.1.0
 fastapi==0.111.0
 fastapi-cli==0.0.4
+fastapi-cache2[redis]==0.2.1
 fastapi-mail==1.4.1
 gunicorn==23.0.0
 h11==0.14.0

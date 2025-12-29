@@ -19,6 +19,9 @@ from app.users.decorators.user import get_current_user_ws
 from app.users.models.user import User
 from app.pcva.services.va_records_services import save_discordant_message_service
 from app.utilits.schedeular import shutdown_scheduler, start_scheduler
+from redis import asyncio as aioredis
+from fastapi_cache import FastAPICache
+from fastapi_cache.backends.redis import RedisBackend
 
 
 logger.add("./logs/app.log", rotation="500 MB")
@@ -91,12 +94,17 @@ async def lifespan(app: FastAPI):
     # Start background initialization tasks without blocking
     asyncio.create_task(run_background_initialization())
     
+    # Initialize Redis
+    redis = aioredis.from_url(config('REDIS_URL', default="redis://localhost:6379"))
+    FastAPICache.init(RedisBackend(redis), prefix="vman_cache")
+    
     try:
         yield
     finally:
         # Application shutdown logic
         logger.info("🛑 Application shutdown")
         await shutdown_scheduler()
+        await redis.close()
         
         # Determine if we should also close the loop (usually not in lifespan)
         # scheduler.shutdown() # Removed because shutdown_scheduler() handles it.

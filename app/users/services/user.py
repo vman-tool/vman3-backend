@@ -38,6 +38,7 @@ from app.users.services.email import (
 from app.users.utils.string import unique_string
 from app.utilits.data_validation import validate_privileges
 from app.utilits.helpers import save_file
+from app.shared.utils.cache import ttl_cache
 
 settings = get_settings()
 
@@ -510,6 +511,7 @@ async def unassign_roles(data: AssignRolesRequest = None, current_user: User = N
     except Exception as e:
         raise e
     
+@ttl_cache(ttl=300, key_prefix="user_roles")
 async def get_user_roles(user_uuid: str  = None, current_user: User = None, db: StandardDatabase = None):
     try:
         if user_uuid is None:

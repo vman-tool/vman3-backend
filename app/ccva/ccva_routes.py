@@ -15,13 +15,14 @@ from app.ccva.services.ccva_data_services import (
 from app.ccva.services.ccva_graph_services import \
     fetch_db_processed_ccva_graphs
 from app.ccva.services.ccva_services import (fetch_ccva_results_and_errors,
-                                             get_record_to_run_ccva, run_ccva)
+                                             get_record_to_run_ccva, run_ccva, process_upload_and_run_ccva)
 from app.ccva.services.ccva_upload import insert_all_csv_data
 from app.shared.configs.arangodb import get_arangodb_session
 from app.shared.configs.models import ResponseMainModel
 from app.shared.services.task_progress_service import TaskProgressService
 from app.users.decorators.user import get_current_user, oauth2_scheme
 from app.utilits.db_logger import  log_to_db
+from app.shared.utils.cache import cache
 
 ccva_router = APIRouter(
     prefix="/ccva",
@@ -56,68 +57,47 @@ async def run_ccva_with_csv(
         if ccva_algorithm is not None and ccva_algorithm not in ["InterVA5"]:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid CCVA algorithm, or algorithm not yet supported.")
 
-        # # Generate task ID
+        # Generate task ID
         task_id = str(uuid.uuid4())
         task_results = {}  # Initialize task results storage
 
-        # Read CSV file
+        # Read CSV file immediately
         contents = await file.read()
-        df = pd.read_csv(io.StringIO(contents.decode('utf-8')), low_memory=False)
-        print(unique_id, df.columns)
-        if 'instanceID' in df.columns:
-            df['instanceid'] = df['instanceID']
-            df.drop(columns=['instanceID'], inplace=True)
-        if 'instanceid' not in df.columns:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Instance ID (instanceid) not found in the uploaded CSV")
-        if unique_id not in df.columns:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Unique ID not found in the uploaded CSV")
-       # Add additional fields to the DataFrame
-        df['vman_data_source'] = 'uploaded_csv'
-        df['vman_data_name'] = 't'
-        df['__id'] =df[unique_id]
-
-         
         
-        df['version_number'] = '1.0'
-        df['trackid'] = task_id
-   
+        # Prepare extra info for progress tracking (initial immediate response)
+        user_id = current_user.get('uid') or current_user.get('id') or "unknown" if isinstance(current_user, dict) else "unknown"
 
-        # Convert DataFrame back to a list of dictionaries
-        recordsDF = df.to_dict(orient='records')
-        print('before insert_all_csv_data', len(recordsDF))
-        
-        await insert_all_csv_data(recordsDF)
-        records = await get_record_to_run_ccva(current_user, db, 'uploaded_csv',task_id, task_results, start_date, end_date,date_type=date_type,)
-        records = records.data or []
-        print('data 3', len(records))
-        if not records:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No records found in the uploaded CSV")
-        
-        print('before background task')
-        # return  ResponseMainModel(data={"task_id": task_id, "total_records": len(records), ** {}}, message="CCVA is running with uploaded CSV data...")
+        # Add the entire process (Upload -> Insert -> CCVA) to background tasks
+        background_tasks.add_task(
+            process_upload_and_run_ccva,
+            file_contents=contents,
+            unique_id=unique_id,
+            current_user=current_user,
+            start_date=start_date,
+            end_date=end_date,
+            date_type=date_type,
+            malaria_status=malaria_status,
+            hiv_status=hiv_status,
+            ccva_algorithm=ccva_algorithm,
+            task_id=task_id,
+            task_results=task_results,
+            db=db
+        )
 
-
-        # Add the CCVA task to background
-        background_tasks.add_task(run_ccva, db, ResponseMainModel(
-            data=records,
-            total= len(records),
-            message="Collecting data.",
-            error=False
-            
-        ), task_id, task_results, start_date, end_date, malaria_status, hiv_status, ccva_algorithm)
-
-        # Constructing response
+        # Constructing initial response
         datas = {
             "progress": 1,
-            "total_records": len(records),
-            "message": "Processing uploaded CSV data.",
+            "total_records": 0, # Unknown yet
+            "message": "Initializing upload...",
             "status": 'init',
-            "elapsed_time": f"{(datetime.now() - start_time).seconds // 3600}:{(datetime.now() - start_time).seconds // 60 % 60}:{(datetime.now() - start_time).seconds % 60}",
+            "elapsed_time": "0:00:00",
             "task_id": task_id,
-            "error": False
+            "error": False,
+            "user_id": user_id
         }
 
-        return ResponseMainModel(data={"task_id": task_id, "total_records": len(records), **datas}, message="CCVA is running with uploaded CSV data...")
+        # Return immediately so frontend can connect to socket
+        return ResponseMainModel(data=datas, message="CCVA upload started. Check progress...")
 
     except Exception as e:
         # Raising the error so FastAPI can handle it
@@ -154,9 +134,12 @@ async def run_internal_ccva(
         if not records:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No records found to run CCVA")
         print('before background task')
-        # Add the CCVA task to background
         
-        background_tasks.add_task(run_ccva, db, records, task_id, task_results, start_date, end_date, malaria_status, hiv_status, ccva_algorithm)
+        # Prepare extra info for progress tracking
+        user_id = current_user.get('uid') or current_user.get('id') or "unknown"
+
+        # Add the CCVA task to background
+        background_tasks.add_task(run_ccva, db, records, task_id, task_results, start_date, end_date, malaria_status, hiv_status, ccva_algorithm, user_id)
         print('after background task')
         # Constructing response
         datas = {
@@ -166,7 +149,8 @@ async def run_internal_ccva(
             "status": 'init',
             "elapsed_time": f"{(datetime.now() - start_time).seconds // 3600}:{(datetime.now() - start_time).seconds // 60 % 60}:{(datetime.now() - start_time).seconds % 60}",
             "task_id": task_id,
-            "error": False
+            "error": False,
+            "user_id": user_id
         }
 
 
@@ -194,6 +178,7 @@ async def get_ccva_progress(
 
 #@log_to_db(context="get_processed_ccva_graphs", log_args=True)    
 @ccva_router.get("", status_code=status.HTTP_200_OK)
+@cache(namespace='ccva_graphs_get',expire=6000)
 async def get_processed_ccva_graphs(
     background_tasks: BackgroundTasks,
     ccva_id: Optional[str] = None,
@@ -255,6 +240,7 @@ async def get_processed_ccva_graphs(
     
 #@log_to_db(context="get_all_processed_ccva_graphs", log_args=True)        
 @ccva_router.get("/list", status_code=status.HTTP_200_OK,)
+@cache(namespace='ccva_graphs_list_get',expire=6000)
 async def get_all_processed_ccva_graphs(
     background_tasks: BackgroundTasks,
     # oauth = Depends(oauth2_scheme), 

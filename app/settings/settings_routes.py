@@ -27,6 +27,7 @@ from app.settings.services.odk_configs import (
     get_system_images,
     save_system_images,
 )
+from app.shared.utils.cache import invalidate_cache_pattern
 from datetime import datetime
 from app.shared.configs.arangodb import get_arangodb_session
 from app.shared.configs.constants import AccessPrivileges, db_collections
@@ -36,7 +37,7 @@ from app.users.decorators.user import check_privileges, get_current_user
 from app.utilits.db_logger import db_logger, log_to_db
 from app.utilits.helpers import delete_file, save_file
 from app.utilits.schedeular import schedule_odk_fetch_job
-
+from app.shared.utils.cache import cache
 # from sqlalchemy.orm import Session
 
 async def get_current_total_data_count(db: StandardDatabase):
@@ -92,6 +93,7 @@ settings_router = APIRouter(
 
      
 @settings_router.get("/system_configs", status_code=status.HTTP_200_OK, response_model=ResponseMainModel)
+@cache(namespace='system_configs',expire=6000)
 async def get_configs_settings(
     db: StandardDatabase = Depends(get_arangodb_session)):
     # Note: Removed print statement to prevent log spam
@@ -132,6 +134,7 @@ async def save_configs_settings(
 
 
 @settings_router.get("/questioner_fields", status_code=status.HTTP_200_OK, response_model=ResponseMainModel)
+@cache(namespace='questioner_fields_get',expire=6000)
 async def get_questioner_fileds(
     current_user = Depends(get_current_user),
     db: StandardDatabase = Depends(get_arangodb_session)):
@@ -141,6 +144,7 @@ async def get_questioner_fileds(
 
 
 @settings_router.get("/get-field-unique-value", status_code=status.HTTP_200_OK, response_model=ResponseMainModel)
+@cache(namespace='get_field_unique_value',expire=6000)
 async def get_field_unique_value(
     field: Optional[str] = Query(None, alias="field"),
     current_user = Depends(get_current_user),
@@ -193,6 +197,7 @@ async def upload_image(
         raise HTTPException(status_code=500, detail=str(e))
 
 @settings_router.get("/system_images/", description="Get System Images")
+@cache(namespace='system_images_get',expire=6000)
 async def get_images(
     db: StandardDatabase = Depends(get_arangodb_session)
 ):
@@ -293,6 +298,9 @@ async def upload_csv(
         # Update sync status after successful CSV upload
         await update_csv_sync_status(db, len(recordsDF))
 
+        # Invalidate regions cache as data has changed
+        await invalidate_cache_pattern("unique_regions:*")
+
         return ResponseMainModel(data={"task_id": task_id, "total_records": len(recordsDF),}, message="CSV data uploaded successfully and sync status updated")
 
     except Exception as e:
@@ -372,6 +380,7 @@ async def upload_csv(
 # Add these endpoints to your existing settings_router
 
 @settings_router.get("/sync-settings", status_code=status.HTTP_200_OK, response_model=ResponseMainModel)
+@cache(namespace='sync_settings_get',expire=6000)
 async def get_sync_settings(
     current_user = Depends(get_current_user),
     db: StandardDatabase = Depends(get_arangodb_session)):
@@ -409,6 +418,7 @@ async def get_sync_settings(
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
 
 @settings_router.get("/cron", status_code=status.HTTP_200_OK, response_model=ResponseMainModel)
+@cache(namespace='cron_settings_get',expire=6000)
 async def get_cron_settings(
     current_user = Depends(get_current_user),
     db: StandardDatabase = Depends(get_arangodb_session)):
@@ -467,6 +477,7 @@ async def save_api_cron_settings(
     
 #@log_to_db(context="get_backup_settings", log_args=True)
 @settings_router.get("/backup", status_code=status.HTTP_200_OK, response_model=ResponseMainModel)
+@cache(namespace='backup_settings_get',expire=6000)
 async def get_backup_settings(
     current_user = Depends(get_current_user),
     db: StandardDatabase = Depends(get_arangodb_session)):

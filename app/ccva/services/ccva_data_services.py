@@ -11,7 +11,8 @@ from app.shared.configs.constants import db_collections
 from app.shared.configs.models import ResponseMainModel
 from app.shared.middlewares.exceptions import BadRequestException
 from app.utilits.db_logger import db_logger, log_to_db
-
+from app.shared.utils.cache import ttl_cache, invalidate_cache_pattern
+from fastapi_cache.decorator import cache
 # #@log_to_db(context="fetch_ccva_records", log_args=True)
 async def fetch_ccva_records(paging: bool = True, page_number: int = 1, limit: int = 10, start_date: Optional[date] = None, end_date: Optional[date] = None, locations: Optional[List[str]] = None, db: StandardDatabase = None) -> ResponseMainModel:
     try:
@@ -92,6 +93,8 @@ async def fetch_ccva_records(paging: bool = True, page_number: int = 1, limit: i
     
     
     
+# @ttl_cache(ttl=300, key_prefix="ccva_processed_graphs")
+@cache(expire=6000, namespace="ccva_processed_graphs")
 async def fetch_processed_ccva_graphs(
     ccva_id: Optional[str] = None, 
     is_default: Optional[bool] = None, 
@@ -348,6 +351,7 @@ async def update_ccva_entry(ccva_id: str, update_data: dict, db: StandardDatabas
             return next(cursor, None)
 
         updated_doc = await run_in_threadpool(execute_update_entry)
+        await invalidate_cache_pattern("ccva_*")
         return ResponseMainModel(
             data=updated_doc,
             message=f"CCVA entry with id {ccva_id} updated successfully",
@@ -390,6 +394,7 @@ async def set_ccva_as_default(ccva_id: str, db: StandardDatabase) -> ResponseMai
         if not updated_doc:
             raise BadRequestException(f"CCVA entry with id {ccva_id} not found")
 
+        await invalidate_cache_pattern("ccva_*")
         # Step 3: Return the updated document as a response
         return ResponseMainModel(
             data=updated_doc,
@@ -428,6 +433,8 @@ async def delete_ccva_entry(ccva_id: str, db: StandardDatabase) -> ResponseMainM
             })
 
         await run_in_threadpool(execute_delete_entry)
+        
+        await invalidate_cache_pattern("ccva_*")
 
         return ResponseMainModel(
             data=None,

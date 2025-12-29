@@ -24,6 +24,7 @@ import pandas as pd
 from app.pcva.requests.configurations_request_classes import PCVAConfigurationsRequest
 from app.pcva.utilities.pcva_utils import fetch_pcva_settings
 from app.shared.utils.response import populate_user_fields
+from app.shared.utils.cache import ttl_cache
    
 
 
@@ -652,6 +653,7 @@ async def get_discordants_va_service(
         raise HTTPException(status_code=500, detail=f"Failed to get discordants: {e}")
     
 
+@ttl_cache(ttl=300, key_prefix="form_questions")
 async def get_form_questions_service(filters: Dict = None, db: StandardDatabase = None):
     questions = await VA_Question.get_many(paging=False, filters=filters, db=db)
 

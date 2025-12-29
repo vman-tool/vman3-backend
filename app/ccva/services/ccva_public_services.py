@@ -68,6 +68,21 @@ async def run_ccva_public(db: StandardDatabase, records:any, task_id: str, task_
                 # Define the async callback to send progress updates
         async def update_callback(progress):
             try:
+                # Cleanup progress dict if it's a string
+                if isinstance(progress, str):
+                     try:
+                         progress = json.loads(progress)
+                     except:
+                         pass
+                
+                if isinstance(progress, dict):
+                     # Separation of concerns: Keep 'message' stable for UI status, move details to 'log'
+                    if 'log' in progress and progress['log']:
+                        # Check if message is essentially the log (InterVA5 behavior)
+                        msg = progress.get('message', '')
+                        if "Error" in msg or "WARNING" in msg or "Not Specified" in msg:
+                            progress['message'] = "Running InterVA5 analysis..."
+                            
                 await websocket_broadcast(task_id, progress)
             except Exception as e:
              raise e
@@ -85,8 +100,8 @@ async def run_ccva_public(db: StandardDatabase, records:any, task_id: str, task_
         ).model_dump_json())
 
 
-        # Convert records to DataFrame directly
-        database_dataframe = pd.DataFrame.from_records( remove_null_values(records))
+        # Convert records to DataFrame directly - Run in thread to prevent blocking
+        database_dataframe = await asyncio.to_thread(lambda: pd.DataFrame.from_records(remove_null_values(records)))
         # Fetch the  configuration
         config = await fetch_odk_config(db, True) # TODOS: the configaration should be loaded from the UI/dashboard , not store in db
         id_col = config.field_mapping.instance_id
@@ -696,15 +711,15 @@ FOR doc IN {collection.name}
 
 
 def ensure_task(task):
+    """
+    Helper to run a coroutine task safely.
+    If there's a running loop, schedule it.
+    If not, run it synchronously.
+    """
     try:
         # Check if an event loop is running
         loop = asyncio.get_running_loop()
+        return loop.create_task(task)
     except RuntimeError:
         # If no running loop, create a new one and run the task
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        loop.run_until_complete(task)
-        loop.close()
-    else:
-        # If a running loop is available, create a task in the existing loop
-        loop.create_task(websocket_broadcast(task))
+        return asyncio.run(task)
