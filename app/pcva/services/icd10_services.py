@@ -3,14 +3,58 @@ from arango import ArangoError
 from arango.database import StandardDatabase
 from fastapi import HTTPException
 
-from app.pcva.models.pcva_models import ICD10, ICD10Category
-from app.pcva.responses.icd10_response_classes import ICD10CategoryResponseClass, ICD10ResponseClass
+from app.pcva.models.pcva_models import ICD10, ICD10Category, ICD10CategoryType
+from app.pcva.responses.icd10_response_classes import ICD10CategoryResponseClass, ICD10CategoryTypeResponseClass, ICD10ResponseClass
 from app.shared.configs.constants import db_collections
 from app.shared.configs.models import Pager, ResponseMainModel
 from app.users.models.user import User
 from app.shared.utils.database_utilities import replace_object_values
+from app.pcva.requests.icd10_request_classes import ICD10CategoryRequestClass
 
-async def create_icd10_categories_service(categories, user, db: StandardDatabase = None):
+async def create_icd10_category_types_service(category_types, user, db: StandardDatabase = None):
+    try:
+        created_category_types = []
+        for category_type in category_types:
+            category_type = category_type.model_dump()
+            category_type['created_by']=user.get('uuid', "")
+            saved_category_type = await ICD10CategoryType(**category_type).save(db)
+            created_category_type = await ICD10CategoryTypeResponseClass.get_structured_category_type(icd10_category_type = saved_category_type, db = db)
+            created_category_types.append(created_category_type)
+        return ResponseMainModel(data=created_category_types, message="Categories types created successfully", total=len(created_category_types))
+    except ArangoError as e:
+        raise HTTPException(status_code=500, detail=f"Failed to create categories: {e}")
+
+async def get_icd10_category_types_service(paging: bool = True,  page_number: int = 1, filters: Dict= {}, limit: int = 10, include_deleted: bool = None, db: StandardDatabase = None) -> ResponseMainModel:
+    try:
+        categoryTypesData = await ICD10CategoryType.get_many(
+            paging = paging, 
+            page_number = page_number, 
+            limit = limit, 
+            filters=filters,
+            include_deleted = include_deleted,
+            db = db
+        )
+        data = [await ICD10CategoryTypeResponseClass.get_structured_category_type(icd10_category_type = icd10_category_type, db = db) for icd10_category_type in categoryTypesData]
+        count_data = await ICD10CategoryType.count(filters=filters, include_deleted=include_deleted, db=db)
+        return ResponseMainModel(data=data, total=count_data, message="ICD10 Categories Types fetched successfully", pager=Pager(page=page_number, limit=limit))
+    except ArangoError as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get codes: {e}")
+
+
+async def update_icd10_category_types_service(category_types, user, db: StandardDatabase = None) -> ResponseMainModel:
+    try:
+        updated_category_types = []
+        for category_type in category_types:
+            category_json = category_type.model_dump()
+            saved_category_types = ICD10CategoryType(**category_json).update(user['uuid'], db)
+            created_category_types = await ICD10CategoryTypeResponseClass.get_structured_category_type(icd10_category_type = saved_category_types, db = db)
+            updated_category_types.append(created_category_types)
+        return ResponseMainModel(data=updated_category_types, message="Category types updated successfully", total=len(updated_category_types))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to update categories: {e}")
+
+
+async def create_icd10_categories_service(categories: List[ICD10CategoryRequestClass], user, db: StandardDatabase = None):
     try:
         created_categories = []
         for category in categories:
@@ -52,8 +96,40 @@ async def update_icd10_categories_service(categories, user, db: StandardDatabase
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to update categories: {e}")
 
-async def get_icd10_codes(paging: bool = True,  page_number: int = 1, limit: int = 10, filters: Dict= None, include_deleted: bool = None, db: StandardDatabase = None) -> List[ICD10ResponseClass]:
+async def includeTypeFilter(type: str = None, filters: Dict = {}, db: StandardDatabase = None) -> Dict:
+    if type and type.strip():
+        typeFilters = {"in_conditions": [{"uuid": [type.strip() for type in type.split(",")]}]}
+        extracted_types = await ICD10CategoryType.get_many(filters=typeFilters, include_deleted = False, db = db)
+        if len(extracted_types) > 0:
+            categories_of_type = []
+            for type_obj in extracted_types:
+                type_obj = extracted_types[0]
+                categories_of_type.extend(await ICD10Category.get_many(filters={"type": type_obj.get("uuid", "")}, include_deleted=False, db = db))
+            
+            selected_categories = []
+            if "in_conditions" in filters:
+                for condition in filters["in_conditions"]:
+                    if "category" in condition:
+                        selected_categories = condition.pop("category")
+            
+            category_uuids = [category.get("uuid", "") for category in categories_of_type]
+            
+            for selected_category in selected_categories:
+                if selected_category not in category_uuids and selected_category is not None:
+                    category_uuids.append(selected_category)
+            if "in_conditions" in filters:
+                filters["in_conditions"].extend([{"category": category_uuids}])
+            else:
+                filters["in_conditions"] = [{"category": category_uuids}]
+    return filters
+
+
+async def get_icd10_codes(paging: bool = True,  page_number: int = 1, limit: int = 10, filters: Dict= None, include_deleted: bool = None, type: str = None, db: StandardDatabase = None) -> List[ICD10ResponseClass]:
     try:
+        if filters is None:
+            filters = {}
+        filters = await includeTypeFilter(type=type, filters=filters, db=db)
+
         data = [
             await ICD10ResponseClass.get_structured_code(icd10_code = icd10_code, db = db) 
             for icd10_code in await ICD10.get_many(
@@ -68,6 +144,41 @@ async def get_icd10_codes(paging: bool = True,  page_number: int = 1, limit: int
         return ResponseMainModel(data=data, total=count_data, message="ICD10 fetched successfully", pager=Pager(page=page_number, limit=limit) if paging else None)
     except ArangoError as e:
         raise HTTPException(status_code=500, detail=f"Failed to get codes: {e}")
+    
+async def create_or_icd10_categories_from_file(categories, user, db: StandardDatabase):
+    try:
+        created_categories = []
+        for category in categories:
+            if "type" in category:
+                filters = {"or_conditions": [{"name": category.get("type", "")}, {"uuid": category.get("type", "")}]}
+                existing_category_type = await ICD10CategoryType.get_many(filters=filters, include_deleted=False, db = db)
+                if len(existing_category_type) > 0:
+                        category_type = existing_category_type[0]
+                else:
+                    to_save_category_type  = {
+                        "name": category.get("type", ""),
+                        "created_by": user['uuid'],
+                    }
+                    category_type = await ICD10CategoryType(**to_save_category_type).save(db = db)
+
+                category["type"] = category_type.get("uuid", "")
+
+                existing_category = await ICD10Category.get_many(include_deleted=False, filters={"name": category.get("name", "")}, db = db)
+                if len(existing_category) > 0:
+                    existing_category = existing_category[0]
+                    category = replace_object_values(category, existing_category)
+                    saved_category = await ICD10Category(**category).update(updated_by=user['uuid'], db = db)
+                    created_category = await ICD10CategoryResponseClass.get_structured_category(icd10_category = saved_category, db = db)
+                else:
+                    category['created_by']=user['uuid']
+                    saved_category = await ICD10Category(**category).save(db)
+                    created_category = await ICD10CategoryResponseClass.get_structured_category(icd10_category = saved_category, db = db)
+                created_categories.append(created_category)
+            else:
+                raise HTTPException(status_code=400, detail="Missing 'type' column in your uploaded file")
+        return ResponseMainModel(data=created_categories, message="Data imported successfully", total=len(created_categories))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to import file: {e}")
 
 async def create_icd10_codes(codes, user, db: StandardDatabase = None) -> ResponseMainModel:
     try:
@@ -110,7 +221,23 @@ async def create_or_icd10_codes_from_file(codes, user, db: StandardDatabase):
     try:
         created_codes = []
         for code in codes:
-            if "category" in code:
+            category_type = None
+            print("Type of nan: ", type(code.get("type", "")), " for", code.get("type", ""))
+            if "type" in code and code.get("type", "") != None and code.get("type", "") != "":
+                filters = {"or_conditions": [{"name": code.get("type", "")}, {"uuid": code.get("type", "")}]}
+                print("Ite went through Types: ", filters)
+                existing_category_type = await ICD10CategoryType.get_many(filters=filters, include_deleted=False, db = db)
+                if len(existing_category_type) > 0:
+                        category_type = existing_category_type[0]
+                else:
+                    to_save_category_type  = {
+                        "name": code.get("type", ""),
+                        "created_by": user['uuid'],
+                    }
+                    category_type = await ICD10CategoryType(**to_save_category_type).save(db = db)
+            
+            if "category" in code and code.get("category", "") != None and code.get("category", "") != "":
+                print("Ite went through Categories")
                 filters = {"or_conditions": [{"name": code.get("category", "")}, {"uuid": code.get("category", "")}]}
                 existing_category = await ICD10Category.get_many(filters=filters, include_deleted=False, db = db)
                 if len(existing_category) > 0:
@@ -119,6 +246,7 @@ async def create_or_icd10_codes_from_file(codes, user, db: StandardDatabase):
                     to_save_category  = {
                         "name": code.get("category", ""),
                         "created_by": user['uuid'],
+                        "type": category_type.get("uuid", "") if category_type and "uuid" in category_type else None,
                     }
                     category = await ICD10Category(**to_save_category).save(db = db)
                 
