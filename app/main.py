@@ -95,7 +95,12 @@ async def lifespan(app: FastAPI):
     asyncio.create_task(run_background_initialization())
     
     # Initialize Redis
-    redis = aioredis.from_url(config('REDIS_URL', default="redis://localhost:6379"))
+    # Initialize Redis
+    redis_password = config('REDIS_PASSWORD', default=None)
+    redis = aioredis.from_url(
+        config('REDIS_URL', default="redis://localhost:6379"),
+        password=redis_password
+    )
     FastAPICache.init(RedisBackend(redis), prefix="vman_cache")
     
     try:
