@@ -19,7 +19,7 @@ from app.pcva.responses.va_response_classes import VAQuestionResponseClass
 from app.settings.services.odk_configs import fetch_odk_config, add_configs_settings
 from app.settings.models.settings import SettingsConfigData, SyncStatus
 from app.shared.configs.arangodb import (ArangoDBClient, get_arangodb_client,
-                                         remove_null_values, sanitize_document)
+                                         remove_null_values, sanitize_document, clean_document)
 from app.shared.configs.constants import db_collections
 from app.shared.configs.models import ResponseMainModel
 
@@ -298,9 +298,7 @@ async def fetch_form_questions(db: StandardDatabase):
 async def insert_data_to_arangodb(data: dict,data_source:str=None):
 
     try:
-        data=remove_null_values(data)
-        # Sanitize the document
-        data = sanitize_document(data)
+        data = clean_document(data)
         
         
 
@@ -314,15 +312,11 @@ async def insert_data_to_arangodb(data: dict,data_source:str=None):
 async def insert_many_data_to_arangodb(data: List[dict], overwrite_mode: str = 'ignore'):
 
     try:
-        data=remove_null_values(data)
-
-        # Sanitize the document
-        data = [sanitize_document(item) for item in data]
+        # Optimize: Use clean_document which does both null removal and sanitization in one pass
+        data = [clean_document(item) for item in data]
   
-
-
         db:ArangoDBClient = await get_arangodb_client()
-        # Pass sanitize=False since we already sanitized above to avoid double processing
+        # Pass sanitize=False since we already cleaned/sanitized above
         return await db.insert_many(collection_name=db_collections.VA_TABLE, documents=data, overwrite_mode=overwrite_mode, sanitize=False)
 
     except Exception as e:

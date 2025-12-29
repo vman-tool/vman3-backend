@@ -6,6 +6,9 @@ from app.shared.configs.models import ResponseMainModel
 from app.shared.configs.security import get_location_limit_values
 
 
+from app.shared.utils.cache import ttl_cache
+
+@ttl_cache(ttl=300, key_prefix="unique_regions") # Cache for 5 mins
 async def get_unique_regions(db: StandardDatabase, current_user:dict):
     config = await fetch_odk_config(db)
     region_field = config.field_mapping.location_level1

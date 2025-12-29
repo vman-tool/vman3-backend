@@ -56,13 +56,36 @@ def created_by_decorator(func):
     return wrapper
 
 async def get_current_user_privileges(current_user: User =  Depends(get_current_user), db: StandardDatabase = Depends(get_arangodb_session)):
-    user_roles_data: ResponseMainModel = await get_user_roles(current_user = current_user, db=db)
-    user_roles_data: UserRolesResponse = user_roles_data.data
+    response = await get_user_roles(current_user = current_user, db=db)
+    
+    # Handle cached response (dict) vs fresh response (Pydantic model)
+    if isinstance(response, dict):
+        data = response.get("data")
+    else:
+        data = getattr(response, "data", None)
+
+    if not data:
+        return []
+
+    # Check for list (empty case)
+    if isinstance(data, list):
+         return []
+
+    # Extract roles
+    if isinstance(data, dict):
+        roles = data.get("roles", [])
+    else:
+        roles = getattr(data, "roles", [])
+
     privileges = []
-    if type(user_roles_data) is list:
-        return privileges
-    for role in user_roles_data.roles:
-        privileges.extend(role.get("privileges", ""))
+    for role in roles:
+        # Extract privileges from role
+        if isinstance(role, dict):
+            privs = role.get("privileges", [])
+        else:
+            privs = getattr(role, "privileges", [])
+            
+        privileges.extend(privs)
     return privileges
 
 def check_privileges(required_privileges: List[str]):

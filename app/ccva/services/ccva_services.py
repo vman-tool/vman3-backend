@@ -47,7 +47,7 @@ async def get_record_to_run_ccva(current_user:dict,db: StandardDatabase,data_sou
 
         
 # The main run_ccva function that integrates everything
-async def run_ccva(db: StandardDatabase, records:ResponseMainModel, task_id: str, task_results: Dict,start_date: Optional[date] = None, end_date: Optional[date] = None, malaria_status:Optional[str]=None, hiv_status:Optional[str]=None, ccva_algorithm:Optional[str]=None):
+async def run_ccva(db: StandardDatabase, records:ResponseMainModel, task_id: str, task_results: Dict,start_date: Optional[date] = None, end_date: Optional[date] = None, malaria_status:Optional[str]=None, hiv_status:Optional[str]=None, ccva_algorithm:Optional[str]=None, user_id: str = "unknown"):
     try:
                 # Define the async callback to send progress updates
                 # Define the async callback to send progress updates
@@ -72,6 +72,22 @@ async def run_ccva(db: StandardDatabase, records:ResponseMainModel, task_id: str
                  except:
                      pass
             
+            # Ensure status exists for UI updates
+            if isinstance(progress_dict, dict):
+                if 'status' not in progress_dict:
+                    progress_dict['status'] = 'running'
+                
+                # Separation of concerns: Keep 'message' stable for UI status, move details to 'log'
+                # If InterVA5 sends a "log" field, it's likely a detail. 
+                # If 'message' looks like an error/warning (which InterVA5 does), revert 'message' to generic status.
+                if 'log' in progress_dict and progress_dict['log']:
+                    # Check if message is essentially the log (InterVA5 behavior)
+                    msg = progress_dict.get('message', '')
+                    if "Error" in msg or "WARNING" in msg or "Not Specified" in msg:
+                        progress_dict['message'] = "Running InterVA5 analysis..." 
+                
+                progress_dict['user_id'] = user_id
+                
             # Use TaskProgressService (async wrapper)
             await TaskProgressService.save_progress(db, task_id, progress_dict)
 
@@ -108,8 +124,8 @@ async def run_ccva(db: StandardDatabase, records:ResponseMainModel, task_id: str
         await update_callback(initial_progress.model_dump_json())
 
 
-        # Convert records to DataFrame directly
-        database_dataframe = pd.DataFrame.from_records( remove_null_values(records.data))
+        # Convert records to DataFrame directly - Run in thread to prevent blocking
+        database_dataframe = await asyncio.to_thread(lambda: pd.DataFrame.from_records(remove_null_values(records.data)))
 
         
 
@@ -257,7 +273,8 @@ def runCCVA(odk_raw:pd.DataFrame, id_col: str = None,date_col:str =None,start_ti
                                            start_time= start_time,
                                            total_records=total_records,  
                                            rangeDates =rangeDates, 
-                                           db=db)
+                                           db=db,
+                                           user_id=user_id)
         print("CCVA run is completed.")
         error_log_path = f"{output_folder}{file_id}_errorlogV5.txt"
         log_path = f"{output_folder}{file_id}.csv"
@@ -282,7 +299,8 @@ def compile_ccva_results(iv5out, top=10, undetermined=True,start_time:timedelta=
                          data_processed_with_results:int=0,
                          total_records:int=0, rangeDates: Dict={},
                          error_logs: Optional[any]=None,
-                         db: StandardDatabase=None):
+                         db: StandardDatabase=None,
+                         user_id: str = "unknown"):
     # Compile results for all groups
     all_results = {
         "index": csmf(iv5out, top=top, age=None, sex=None).index.tolist(),
@@ -401,7 +419,7 @@ def compile_ccva_results(iv5out, top=10, undetermined=True,start_time:timedelta=
         "total_records": total_records,
         "data_processed_with_results": data_processed_with_results,
         "elapsed_time":   f"{elapsed_time.seconds // 3600}:{(elapsed_time.seconds // 60) % 60}:{elapsed_time.seconds % 60}",
-
+        "user_id": user_id,
         "range":rangeDates,
         "all": all_results,
         "male": male_results,
@@ -617,3 +635,115 @@ def ensure_task(task):
     except RuntimeError:
         # No running loop, run it synchronously
         return asyncio.run(task)
+
+from app.ccva.services.ccva_upload import insert_all_csv_data
+from app.ccva.services.ccva_services import get_record_to_run_ccva
+import io
+
+async def process_upload_and_run_ccva(
+    file_contents: bytes,
+    unique_id: str,
+    current_user: dict,
+    start_date: Optional[date],
+    end_date: Optional[date],
+    date_type: Optional[str],
+    malaria_status: str,
+    hiv_status: str,
+    ccva_algorithm: str,
+    task_id: str,
+    task_results: dict,
+    db: StandardDatabase
+):
+    """
+    Background task to process CSV upload and then run CCVA.
+    Emits socket progress updates starting from the upload phase.
+    """
+    user_id = current_user.get('uid') or current_user.get('id') or "unknown" if isinstance(current_user, dict) else "unknown"
+    
+    # Helper for broadcasting progress
+    async def broadcast_progress(progress_val, message, status="running", error=False, data=None, log=None):
+        start_time_ref = datetime.now() # Approximate, or pass start_time if needed
+        # In a real scenario, we might want to track absolute elapsed time from when the request started.
+        # For now, we use a simple elapsed time calculation or just reuse the logic from run_ccva style if needed.
+        # But run_ccva does its own timing. For the upload phase, we can just say "0:00:xx".
+        
+        progress_data = {
+            "progress": progress_val,
+            "message": message,
+            "status": status,
+            "error": error,
+            "task_id": task_id,
+            "user_id": user_id,
+            "log": log  # Include log in progress data
+        }
+        if data:
+            progress_data.update(data)
+            
+        await websocket_broadcast(task_id, progress_data)
+        # We also save to DB for persistence if needed, but for "Reading CSV" usually socket is enough.
+        # If we want full persistence, we use TaskProgressService.
+        await TaskProgressService.save_progress(db, task_id, progress_data)
+
+    try:
+        # Phase 1: Reading CSV
+        await broadcast_progress(1, "Reading CSV file...", status="running")
+        
+        df = pd.read_csv(io.StringIO(file_contents.decode('utf-8')), low_memory=False)
+        
+        # Validations
+        if 'instanceID' in df.columns:
+            df['instanceid'] = df['instanceID']
+            df.drop(columns=['instanceID'], inplace=True)
+            
+        if 'instanceid' not in df.columns:
+            raise Exception("Instance ID (instanceid) not found in the uploaded CSV")
+            
+        if unique_id not in df.columns:
+             raise Exception("Unique ID not found in the uploaded CSV")
+
+        # Phase 2: Processing Data Frame
+        await broadcast_progress(5, "Processing CSV data...", status="running")
+        
+        df['vman_data_source'] = 'uploaded_csv'
+        df['vman_data_name'] = 't'
+        df['__id'] = df[unique_id]
+        df['version_number'] = '1.0'
+        df['trackid'] = task_id
+
+        recordsDF = df.to_dict(orient='records')
+        total_csv_records = len(recordsDF)
+
+        if total_csv_records == 0:
+             raise Exception("Uploaded CSV is empty")
+
+        # Phase 3: Inserting Data
+        await broadcast_progress(5, f"Inserting {total_csv_records} records...", status="running")
+        # await insert_all_csv_data(recordsDF)
+
+        # Phase 4: Fetching for CCVA
+        await broadcast_progress(10, "Preparing data for analysis...", status="running")
+        # records = await get_record_to_run_ccva(current_user, db, 'uploaded_csv', task_id, task_results, start_date, end_date, date_type=date_type)
+        records = ResponseMainModel(data=recordsDF, message="Data prepared from CSV")
+        print(len(records.data))
+        if not records.data:
+            raise Exception("No records found after insertion")
+
+        # Phase 5: Run CCVA
+        # run_ccva will take over progress updates (starting typically at progress=1 or similar)
+        # We can pass an initial state if run_ccva supports it, effectively it starts its own progress flow.
+        await run_ccva(
+            db, 
+            records, 
+            task_id, 
+            task_results, 
+            start_date, 
+            end_date, 
+            malaria_status, 
+            hiv_status, 
+            ccva_algorithm, 
+            user_id
+        )
+
+    except Exception as e:
+        print(f"Error in process_upload_and_run_ccva: {e}")
+        await broadcast_progress(0, str(e), status="error", error=True)

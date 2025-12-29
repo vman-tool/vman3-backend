@@ -11,8 +11,10 @@ from app.shared.configs.constants import db_collections
 from app.shared.configs.models import ResponseMainModel
 from app.shared.configs.security import get_location_limit_values
 from app.shared.middlewares.exceptions import BadRequestException
+from app.shared.utils.cache import ttl_cache
 
 
+@ttl_cache(ttl=300, key_prefix="ccva_db_graphs")
 async def fetch_db_processed_ccva_graphs(
     current_user: dict,
     ccva_id: Optional[str] = None, 
