@@ -428,19 +428,30 @@ async def delete_ccva_entry(ccva_id: str, db: StandardDatabase) -> ResponseMainM
         query = f"FOR doc IN {collection.name} FILTER doc._key == @ccva_id RETURN doc"
         
         def execute_delete_entry():
+            print(f"Executing delete for ID: {ccva_id}")
             cursor = db.aql.execute(query, bind_vars={"ccva_id": ccva_id}, cache=True)
             ccva_doc = next(cursor, None)
 
             if not ccva_doc:
+                print(f"Document with ID {ccva_id} not found")
                 raise BadRequestException(f"CCVA entry with id {ccva_id} not found")
-        
+            
+            print(f"Found document: {ccva_doc.get('_key')}, Task ID: {ccva_doc.get('task_id')}")
+
             # Delete the document
             query_delete = f"REMOVE {{ _key: @ccva_id }} IN {collection.name}"
             bind_vars = {"ccva_id": ccva_id}
             db.aql.execute(query_delete, bind_vars=bind_vars, cache=True)
-            db.collection(db_collections.CCVA_RESULTS).delete_match({
-                "task_id": ccva_doc.get("task_id")
-            })
+            print("Deleted graph result document")
+
+            task_id = ccva_doc.get("task_id")
+            if task_id:
+                print(f"Deleting associated results for task_id: {task_id}")
+                db.collection(db_collections.CCVA_RESULTS).delete_match({
+                    "task_id": task_id
+                })
+            else:
+                print("No task_id found in document, skipping results deletion")
 
         await run_in_threadpool(execute_delete_entry)
         
