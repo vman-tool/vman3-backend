@@ -182,7 +182,7 @@ async def get_ccva_progress(
 
 #@log_to_db(context="get_processed_ccva_graphs", log_args=True)    
 @ccva_router.get("", status_code=status.HTTP_200_OK)
-# @cache(namespace='ccva_graphs_get',expire=6000)
+@cache(namespace='ccva_graphs_get',expire=1000)
 async def get_processed_ccva_graphs(
     background_tasks: BackgroundTasks,
     ccva_id: Optional[str] = None,
@@ -244,7 +244,7 @@ async def get_processed_ccva_graphs(
     
 #@log_to_db(context="get_all_processed_ccva_graphs", log_args=True)        
 @ccva_router.get("/list", status_code=status.HTTP_200_OK,)
-# @cache(namespace='ccva_graphs_list_get',expire=6000)
+@cache(namespace='ccva_graphs_list_get',expire=2000)
 async def get_all_processed_ccva_graphs(
     background_tasks: BackgroundTasks,
     # oauth = Depends(oauth2_scheme), 
@@ -274,6 +274,10 @@ async def delete_ccva(
     db: StandardDatabase = Depends(get_arangodb_session),
     current_user = Depends(get_current_user)  # Add authentication
 ):
+    # delete cache ccva_graphs_list_get
+    cache_key = f"ccva_graphs_list_get"
+    
+    await cache.delete(cache_key)
     # Implement your logic here to delete the CCVA entry
     print(f"Received delete request for CCVA ID: {ccva_id}")
     try:

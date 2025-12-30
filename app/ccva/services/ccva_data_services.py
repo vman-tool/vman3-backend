@@ -310,7 +310,7 @@ async def fetch_all_processed_ccva_graphs(paging: bool = True, page_number: int 
         print(query)
 
         def execute_all_processed_query():
-            cursor = db.aql.execute(query, bind_vars=bind_vars, cache=True)
+            cursor = db.aql.execute(query, bind_vars=bind_vars)
             return [document for document in cursor]
 
         data = await run_in_threadpool(execute_all_processed_query)
@@ -425,13 +425,13 @@ async def delete_ccva_entry(ccva_id: str, db: StandardDatabase) -> ResponseMainM
         collection = db.collection(db_collections.CCVA_GRAPH_RESULTS)
 
         # Check if the document exists
-        # query = f"FOR doc IN {collection.name} FILTER doc._key == @ccva_id RETURN doc"
+        query = f"FOR doc IN {collection.name} FILTER doc._key == @ccva_id RETURN doc"
         
         def execute_delete_entry():
             print(f"Executing delete for ID: {ccva_id}")
             cursor = db.aql.execute(query, bind_vars={"ccva_id": ccva_id}, cache=True)
             ccva_doc = next(cursor, None)
-
+            print(ccva_doc)
             if not ccva_doc:
                 print(f"Document with ID {ccva_id} not found")
                 raise BadRequestException(f"CCVA entry with id {ccva_id} not found")
