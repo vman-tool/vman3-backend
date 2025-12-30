@@ -144,7 +144,7 @@ async def get_questioner_fileds(
 
 
 @settings_router.get("/get-field-unique-value", status_code=status.HTTP_200_OK, response_model=ResponseMainModel)
-@cache(namespace='get_field_unique_value',expire=6000)
+# @cache(namespace='get_field_unique_value',expire=6000)
 async def get_field_unique_value(
     field: Optional[str] = Query(None, alias="field"),
     current_user = Depends(get_current_user),
@@ -380,7 +380,7 @@ async def upload_csv(
 # Add these endpoints to your existing settings_router
 
 @settings_router.get("/sync-settings", status_code=status.HTTP_200_OK, response_model=ResponseMainModel)
-@cache(namespace='sync_settings_get',expire=6000)
+# @cache(namespace='sync_settings_get',expire=6000)
 async def get_sync_settings(
     current_user = Depends(get_current_user),
     db: StandardDatabase = Depends(get_arangodb_session)):
