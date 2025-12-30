@@ -2,6 +2,7 @@ version: "3.8"
 
 services:
   nginx:
+    container_name: nginx
     image: nginx:alpine
     ports:
       - "80:80"
@@ -22,6 +23,7 @@ services:
     restart: always
 
   backend:
+    container_name: backend
     image: ilyatuu/vman3_backend:latest
     command:
       [
@@ -52,6 +54,7 @@ services:
     restart: always
 
   arango-db:
+    container_name: arango-db
     image: arangodb/arangodb:3.12.2
     ports:
       - "8529:8529"
@@ -69,6 +72,7 @@ services:
     restart: always
 
   redis:
+    container_name: redis-vman3
     image: redis:latest
     command: redis-server --requirepass vman@1029
     ports:
