@@ -461,7 +461,7 @@ async def delete_ccva_entry(ccva_id: str, db: StandardDatabase) -> ResponseMainM
 
         await run_in_threadpool(execute_delete_entry)
         
-        await invalidate_cache_pattern("ccva_*")
+        # await invalidate_cache_pattern("ccva_*")
 
         return ResponseMainModel(
             data=None,
