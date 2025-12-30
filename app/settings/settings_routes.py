@@ -93,7 +93,7 @@ settings_router = APIRouter(
 
      
 @settings_router.get("/system_configs", status_code=status.HTTP_200_OK, response_model=ResponseMainModel)
-@cache(namespace='system_configs',expire=6000)
+@cache(namespace='system_configs',expire=1000)
 async def get_configs_settings(
     db: StandardDatabase = Depends(get_arangodb_session)):
     # Note: Removed print statement to prevent log spam
@@ -134,7 +134,7 @@ async def save_configs_settings(
 
 
 @settings_router.get("/questioner_fields", status_code=status.HTTP_200_OK, response_model=ResponseMainModel)
-@cache(namespace='questioner_fields_get',expire=6000)
+#@cache(namespace='questioner_fields_get',expire=6000)
 async def get_questioner_fileds(
     current_user = Depends(get_current_user),
     db: StandardDatabase = Depends(get_arangodb_session)):
@@ -197,7 +197,7 @@ async def upload_image(
         raise HTTPException(status_code=500, detail=str(e))
 
 @settings_router.get("/system_images/", description="Get System Images")
-@cache(namespace='system_images_get',expire=6000)
+#@cache(namespace='system_images_get',expire=6000)
 async def get_images(
     db: StandardDatabase = Depends(get_arangodb_session)
 ):

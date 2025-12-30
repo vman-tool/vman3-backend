@@ -182,7 +182,7 @@ async def get_ccva_progress(
 
 #@log_to_db(context="get_processed_ccva_graphs", log_args=True)    
 @ccva_router.get("", status_code=status.HTTP_200_OK)
-@cache(namespace='ccva_graphs_get',expire=6000)
+@cache(namespace='ccva_graphs_get',expire=1000)
 async def get_processed_ccva_graphs(
     background_tasks: BackgroundTasks,
     ccva_id: Optional[str] = None,
@@ -244,7 +244,7 @@ async def get_processed_ccva_graphs(
     
 #@log_to_db(context="get_all_processed_ccva_graphs", log_args=True)        
 @ccva_router.get("/list", status_code=status.HTTP_200_OK,)
-@cache(namespace='ccva_graphs_list_get',expire=6000)
+@cache(namespace='ccva_graphs_list_get',expire=2000)
 async def get_all_processed_ccva_graphs(
     background_tasks: BackgroundTasks,
     # oauth = Depends(oauth2_scheme), 
@@ -274,11 +274,22 @@ async def delete_ccva(
     db: StandardDatabase = Depends(get_arangodb_session),
     current_user = Depends(get_current_user)  # Add authentication
 ):
+    # delete cache ccva_graphs_list_get
+    cache_key = f"ccva_graphs_list_get"
+    
+    await cache.delete(cache_key)
     # Implement your logic here to delete the CCVA entry
-    result = await delete_ccva_entry(ccva_id, db)
-    if not result:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="CCVA not found or could not be deleted")
-    return {"message": "CCVA entry deleted successfully"}
+    print(f"Received delete request for CCVA ID: {ccva_id}")
+    try:
+        result = await delete_ccva_entry(ccva_id, db)
+        if not result:
+            print(f"Delete failed: Result is empty for ID {ccva_id}")
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="CCVA not found or could not be deleted")
+        print(f"Delete successful for ID {ccva_id}")
+        return {"message": "CCVA entry deleted successfully"}
+    except Exception as e:
+        print(f"Exception in delete_ccva route: {e}")
+        raise e
 
 
 
