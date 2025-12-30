@@ -64,7 +64,7 @@ async def fetch_odk_config(db: StandardDatabase, is_validate_configs: bool = Fal
         raise ValueError(e)
 
 
-@ttl_cache(ttl=3600, key_prefix="system_configs")
+# @ttl_cache(ttl=3600, key_prefix="system_configs")
 async def fetch_configs_settings(db: StandardDatabase = None):
     try:
         config_data= await fetch_odk_config(db)

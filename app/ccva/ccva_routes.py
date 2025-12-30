@@ -244,7 +244,7 @@ async def get_processed_ccva_graphs(
     
 #@log_to_db(context="get_all_processed_ccva_graphs", log_args=True)        
 @ccva_router.get("/list", status_code=status.HTTP_200_OK,)
-@cache(namespace='ccva_graphs_list_get',expire=2000)
+# @cache(namespace='ccva_graphs_list_get',expire=2000)
 async def get_all_processed_ccva_graphs(
     background_tasks: BackgroundTasks,
     # oauth = Depends(oauth2_scheme), 

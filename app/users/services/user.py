@@ -511,7 +511,7 @@ async def unassign_roles(data: AssignRolesRequest = None, current_user: User = N
     except Exception as e:
         raise e
     
-@ttl_cache(ttl=300, key_prefix="user_roles")
+# @ttl_cache(ttl=300, key_prefix="user_roles")
 async def get_user_roles(user_uuid: str  = None, current_user: User = None, db: StandardDatabase = None):
     try:
         if user_uuid is None:
