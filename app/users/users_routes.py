@@ -145,7 +145,7 @@ async def get_privileges(
         raise e
 
 @user_router.get("/roles", status_code=status.HTTP_200_OK, response_model=ResponseMainModel | Any)
-#@cache(namespace='roles_get', expire=6000)
+# @cache(namespace='roles_get', expire=6000)
 async def get_roles(
         paging: Optional[str] = Query(None, alias="paging"),
         page_number: Optional[int] = Query(1, alias="page_number"),

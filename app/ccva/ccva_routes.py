@@ -277,7 +277,7 @@ async def delete_ccva(
     # delete cache ccva_graphs_list_get
     cache_key = f"ccva_graphs_list_get"
     
-    await cache.delete(cache_key)
+    # await cache.delete(cache_key)
     # Implement your logic here to delete the CCVA entry
     print(f"Received delete request for CCVA ID: {ccva_id}")
     try:
