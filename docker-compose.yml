@@ -1,60 +1,91 @@
+version: "3.8"
+
 services:
-  frontend:
-    build: .
+  nginx:
+    image: nginx:alpine
     ports:
-      - '8080:8080'
+      - "80:80"
     volumes:
-      - ./app:/app
-      - ./.env:/app/.env
-    environment:
-      - PYTHONUNBUFFERED=1
-      - REDIS_URL=redis://:vman@1029@redis:6379
-    depends_on:
-      - arangodb
-      - redis
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+    networks:
+      - vman3-net
+    # deploy section ignored by Compose
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: any
+
+  frontend:
+    image: ilyatuu/vman3_frontend
+    networks:
+      - vman3-net
+    volumes:
+      - ./config.json:/usr/share/nginx/html/assets/config.json
+    ports:
+      - "4201:80"
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: any
 
   backend:
-    build: .
-    command:
-      [
-        'uvicorn',
-        'app.main:app',
-        '--host',
-        '0.0.0.0',
-        '--port',
-        '8080',
-        '--workers',
-        '1',
-      ]
-    ports:
-      - '8080:8080'
-    volumes:
-      - ./app:/app
-      - ./logs:/vman3/logs
-      - .settings.json:/vman3/settings.json
-    environment:
-      - PYTHONUNBUFFERED=1
-      - REDIS_URL=redis://:vman@1029@redis:6379
+    image: ilyatuu/vman3_backend:latest
+    command: >
+      uvicorn app.main:app --host 0.0.0.0 --port 8080 --workers 2
     env_file:
       - .env
+    environment:
+      PYTHONUNBUFFERED: "1"
+    networks:
+      - vman3-net
+    volumes:
+      - ccva_files:/app/ccva_files
+      - app_data:/app
+      - settings_json:/vman3/settings.json
+      - uploads:/vman3/app/uploads
+    deploy:
+      replicas: 3
+      restart_policy:
+        condition: any
 
-
-  arangodb:
+  arango-db:
     image: arangodb/arangodb:3.12.2
     env_file:
       - .env
+    networks:
+      - vman3-net
     volumes:
       - vman3db:/var/lib/arangodb3
-    ports:
-      - '8529:8529'
     command:
       - arangod
       - --server.endpoint=tcp://0.0.0.0:8529
-      # - --rocksdb.block-cache-size=1024MB
+      - --rocksdb.write-buffer-size=128MB
+      - --rocksdb.total-write-buffer-size=512MB
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: any
+
   redis:
     image: redis:7
     command: redis-server --requirepass vman@1029
     ports:
-      - '6370:6379'
+      - "6370:6379"
+    networks:
+      - vman3-net
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: any
+
+networks:
+  vman3-net:
+    external: true
+
+
 volumes:
   vman3db:
+  ccva_files:
+  app_data:
+  uploads:
+  settings_json:
