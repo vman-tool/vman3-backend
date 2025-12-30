@@ -29,7 +29,7 @@ services:
         "-k",
         "uvicorn.workers.UvicornWorker",
         "-w",
-        "3",
+        "2",
         "-b",
         "0.0.0.0:8080",
         "--timeout",

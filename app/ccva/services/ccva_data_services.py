@@ -425,7 +425,7 @@ async def delete_ccva_entry(ccva_id: str, db: StandardDatabase) -> ResponseMainM
         collection = db.collection(db_collections.CCVA_GRAPH_RESULTS)
 
         # Check if the document exists
-        query = f"FOR doc IN {collection.name} FILTER doc._key == @ccva_id RETURN doc"
+        # query = f"FOR doc IN {collection.name} FILTER doc._key == @ccva_id RETURN doc"
         
         def execute_delete_entry():
             print(f"Executing delete for ID: {ccva_id}")
@@ -441,15 +441,21 @@ async def delete_ccva_entry(ccva_id: str, db: StandardDatabase) -> ResponseMainM
             # Delete the document
             query_delete = f"REMOVE {{ _key: @ccva_id }} IN {collection.name}"
             bind_vars = {"ccva_id": ccva_id}
+            print(query_delete)
             db.aql.execute(query_delete, bind_vars=bind_vars, cache=True)
             print("Deleted graph result document")
 
             task_id = ccva_doc.get("task_id")
+            print(f"Task ID: {task_id}")
             if task_id:
                 print(f"Deleting associated results for task_id: {task_id}")
-                db.collection(db_collections.CCVA_RESULTS).delete_match({
-                    "task_id": task_id
-                })
+                try:
+                    db.collection(db_collections.CCVA_RESULTS).delete_match({
+                        "task_id": task_id
+                    })
+                except Exception as e:
+                    print(e)
+
             else:
                 print("No task_id found in document, skipping results deletion")
 
