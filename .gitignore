@@ -91,6 +91,6 @@ vmanenv
 .vman_env
 .vmanenv
 .venv
-
+./deployment/.env
 
 results.csv
