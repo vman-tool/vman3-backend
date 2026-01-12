@@ -9,6 +9,7 @@ from typing import Dict, Optional
 import numpy as np
 import pandas as pd
 from arango.database import StandardDatabase
+from fastapi import HTTPException
 from fastapi.concurrency import run_in_threadpool
 from app.ccva.utilits.interva.utils import csmf
 from app.ccva.utilits.pycrossva.transform import transform
@@ -24,6 +25,7 @@ from app.shared.services.task_progress_service import TaskProgressService
 from app.utilits.logger import app_logger
 
 
+
 # The websocket_broadcast function for broadcasting progress updates
 async def websocket_broadcast(task_id: str, progress_data: dict):
     from app.main import (
@@ -31,9 +33,9 @@ async def websocket_broadcast(task_id: str, progress_data: dict):
     )
     await websocket__manager.broadcast(task_id, json.dumps(progress_data))
 
-async def get_record_to_run_ccva(current_user:dict,db: StandardDatabase,data_source:Optional[str], task_id: Optional[str], task_results: Dict,start_date: Optional[date] = None, end_date: Optional[date] = None,date_type:Optional[str]=None,):
+async def get_record_to_run_ccva(current_user:dict,db: StandardDatabase,data_source:Optional[str], task_id: Optional[str], task_results: Dict,start_date: Optional[date] = None, end_date: Optional[date] = None,date_type:Optional[str]=None, top:Optional[int]=None):
     try:
-        records= await fetch_va_records_json(current_user=current_user,paging=False,data_source=data_source,task_id=task_id,  start_date=start_date, end_date=end_date,  db=db,date_type=date_type)
+        records= await fetch_va_records_json(current_user=current_user,paging=False,data_source=data_source,task_id=task_id,  start_date=start_date, end_date=end_date,  db=db,date_type=date_type,top=top)
         if records.data == []:
             raise Exception("No records found")
         
@@ -42,7 +44,7 @@ async def get_record_to_run_ccva(current_user:dict,db: StandardDatabase,data_sou
         print(e)
         # logger.error(f"Error fetching ODK data: {e}")
         # print(e)
-        raise Exception(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e))
         
 
         
@@ -148,9 +150,13 @@ async def run_ccva(db: StandardDatabase, records:ResponseMainModel, task_id: str
         task_id=task_id,
         error=False
     ).model_dump_json())
+        if(user_id is None):
+        # throw error
+            raise ValueError("User ID is required,")
+        
         
         await asyncio.to_thread(
-            runCCVA, odk_raw=database_dataframe, file_id=task_id, update_callback=update_callback,db= db, id_col=id_col,date_col=date_col,start_time=start_time, algorithm= ccva_algorithm,   malaria= malaria_status, hiv= hiv_status,
+            runCCVA, odk_raw=database_dataframe, file_id=task_id, update_callback=update_callback,db= db, id_col=id_col,date_col=date_col,start_time=start_time, algorithm= ccva_algorithm,   malaria= malaria_status, hiv= hiv_status, user_id=user_id,
             
         )
         
@@ -164,7 +170,7 @@ async def run_ccva(db: StandardDatabase, records:ResponseMainModel, task_id: str
         
 def runCCVA(odk_raw:pd.DataFrame, id_col: str = None,date_col:str =None,start_time:timedelta=None, instrument: str = '2016WHOv151', algorithm: str = 'InterVA5',
             top=10, undetermined: bool = True, malaria: str = "h", hiv: str = "h",
-            file_id: str = "unnamed_file", update_callback=None, db: StandardDatabase=None):
+            file_id: str = "unnamed_file", update_callback=None, db: StandardDatabase=None, user_id: str = None):
     
     try:
         print('pass here 0', file_id,instrument,id_col)
@@ -263,6 +269,7 @@ def runCCVA(odk_raw:pd.DataFrame, id_col: str = None,date_col:str =None,start_ti
         ## get ccva error logs to be added to the ccva_results
         error_logs = process_ccva_errorlogs(output_folder + file_id + "_", task_id=file_id)
         print("Processing error logs...")
+        print(user_id)
 
         ccva_results= compile_ccva_results(iv5out,
                                            data_processed_with_results=len(results_to_insert),
@@ -646,6 +653,7 @@ async def process_upload_and_run_ccva(
     current_user: dict,
     start_date: Optional[date],
     end_date: Optional[date],
+    top: Optional[int],
     date_type: Optional[str],
     malaria_status: str,
     hiv_status: str,
@@ -711,6 +719,9 @@ async def process_upload_and_run_ccva(
         df['trackid'] = task_id
 
         recordsDF = df.to_dict(orient='records')
+        if top:
+            recordsDF = recordsDF[:top]
+            
         total_csv_records = len(recordsDF)
 
         if total_csv_records == 0:

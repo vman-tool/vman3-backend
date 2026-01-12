@@ -653,7 +653,7 @@ async def get_discordants_va_service(
         raise HTTPException(status_code=500, detail=f"Failed to get discordants: {e}")
     
 
-@ttl_cache(ttl=300, key_prefix="form_questions")
+# @ttl_cache(ttl=300, key_prefix="form_questions")
 async def get_form_questions_service(filters: Dict = None, db: StandardDatabase = None):
     questions = await VA_Question.get_many(paging=False, filters=filters, db=db)
 

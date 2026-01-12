@@ -104,7 +104,7 @@ async def fetch_va_records(current_user:dict,paging: bool = True, page_number: i
 
 
 
-async def fetch_va_records_json(current_user:dict,paging: bool = True,data_source:Optional[str]=None, task_id:Optional[str]=None, page_number: int = 1, limit: int = 10, start_date: Optional[date] = None, end_date: Optional[date] = None, locations: Optional[List[str]] = None,date_type:Optional[str]=None, db: StandardDatabase = None) -> ResponseMainModel:
+async def fetch_va_records_json(current_user:dict,paging: bool = True,data_source:Optional[str]=None, task_id:Optional[str]=None, page_number: int = 1, limit: int = 10, start_date: Optional[date] = None, end_date: Optional[date] = None, locations: Optional[List[str]] = None,date_type:Optional[str]=None, db: StandardDatabase = None, top:Optional[int]=None) -> ResponseMainModel:
     try:
         print(data_source, task_id)
         config = await fetch_odk_config(db)
@@ -146,6 +146,7 @@ async def fetch_va_records_json(current_user:dict,paging: bool = True,data_sourc
             filters.append('doc.vman_data_source !="data_source"')
         if data_source :
             filters.append(f'doc.vman_data_source =="{data_source}"')
+        
         # if task_id:
         #     filters.append(f'doc.trackid =="{task_id}"')
             
@@ -159,9 +160,11 @@ async def fetch_va_records_json(current_user:dict,paging: bool = True,data_sourc
                 "offset": (page_number - 1) * limit,
                 "size": limit
             })
+        elif top and top > 0:
+            query += "LIMIT @size "
+            bind_vars["size"] = top
 
         query += "RETURN doc"
-        print(query)
         print(query)
         def execute_json_query():
             cursor = db.aql.execute(query, bind_vars=bind_vars, cache=True)

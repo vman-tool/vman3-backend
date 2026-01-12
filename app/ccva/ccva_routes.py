@@ -46,6 +46,7 @@ async def run_ccva_with_csv(
     hiv_status: Optional[str] = Body('h', alias="hiv_status"),
     current_user: Optional[str] = Depends(get_current_user),
     start_date: Optional[date] = Body(None, alias="start_date"),
+    top: Optional[int] = Body(None, alias="top"),
     end_date: Optional[date] = Body(None, alias="end_date"),
     date_type: Optional[str]=Query(None, alias="date_type"),
     db: StandardDatabase = Depends(get_arangodb_session)
@@ -75,6 +76,7 @@ async def run_ccva_with_csv(
             current_user=current_user,
             start_date=start_date,
             end_date=end_date,
+            top=top,
             date_type=date_type,
             malaria_status=malaria_status,
             hiv_status=hiv_status,
@@ -114,6 +116,7 @@ async def run_internal_ccva(
     current_user: Optional[str] = Depends(get_current_user),
     start_date: Optional[date] = Body(None, alias="start_date"),
     end_date: Optional[date] = Body(None, alias="end_date"),
+    top: Optional[int] = Body(None, alias="top"),
     date_type: Optional[str]=Query(None, alias="date_type"),
     db: StandardDatabase = Depends(get_arangodb_session)
 ):
@@ -127,8 +130,9 @@ async def run_internal_ccva(
 
         # Generate task ID and fetch records
         task_id = str(uuid.uuid4())
+        ## show the progress of getting data from db in web socket
         task_results = {}  # Initialize task results storage
-        records = await get_record_to_run_ccva(current_user,db,None, task_id, task_results, start_date, end_date,date_type=date_type,)
+        records = await get_record_to_run_ccva(current_user,db,None, task_id, task_results, start_date, end_date,date_type=date_type,top=top)
 
         # Handle no records scenario
         if not records:
@@ -178,7 +182,7 @@ async def get_ccva_progress(
 
 #@log_to_db(context="get_processed_ccva_graphs", log_args=True)    
 @ccva_router.get("", status_code=status.HTTP_200_OK)
-@cache(namespace='ccva_graphs_get',expire=6000)
+@cache(namespace='ccva_graphs_get',expire=1000)
 async def get_processed_ccva_graphs(
     background_tasks: BackgroundTasks,
     ccva_id: Optional[str] = None,
@@ -240,7 +244,7 @@ async def get_processed_ccva_graphs(
     
 #@log_to_db(context="get_all_processed_ccva_graphs", log_args=True)        
 @ccva_router.get("/list", status_code=status.HTTP_200_OK,)
-@cache(namespace='ccva_graphs_list_get',expire=6000)
+# @cache(namespace='ccva_graphs_list_get',expire=2000)
 async def get_all_processed_ccva_graphs(
     background_tasks: BackgroundTasks,
     # oauth = Depends(oauth2_scheme), 
@@ -270,11 +274,22 @@ async def delete_ccva(
     db: StandardDatabase = Depends(get_arangodb_session),
     current_user = Depends(get_current_user)  # Add authentication
 ):
+    # delete cache ccva_graphs_list_get
+    cache_key = f"ccva_graphs_list_get"
+    
+    # await cache.delete(cache_key)
     # Implement your logic here to delete the CCVA entry
-    result = await delete_ccva_entry(ccva_id, db)
-    if not result:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="CCVA not found or could not be deleted")
-    return {"message": "CCVA entry deleted successfully"}
+    print(f"Received delete request for CCVA ID: {ccva_id}")
+    try:
+        result = await delete_ccva_entry(ccva_id, db)
+        if not result:
+            print(f"Delete failed: Result is empty for ID {ccva_id}")
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="CCVA not found or could not be deleted")
+        print(f"Delete successful for ID {ccva_id}")
+        return {"message": "CCVA entry deleted successfully"}
+    except Exception as e:
+        print(f"Exception in delete_ccva route: {e}")
+        raise e
 
 
 

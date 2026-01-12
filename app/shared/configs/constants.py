@@ -34,8 +34,7 @@ class Special_Constants():
     UPLOAD_FOLDER: str = '/uploads'
     FILE_URL: str = '/vman/api/v1/uploads'
 
-REDIS_URL = 'redis://localhost:6370'
-   
+
     
 collections_with_indexes = {
     # db_collections.VA_TABLE: [
@@ -62,7 +61,9 @@ collections_with_indexes = {
         {"fields": ["id10007"], "unique": False, "type": "persistent", "name": "idx_interviewer"}
     ],
     db_collections.USERS: [
-         {"fields": ["is_active"], "type": "persistent", "name": "u_is_active"}
+         {"fields": ["is_active"], "type": "persistent", "name": "u_is_active"},
+         {"fields": ["id"], "type": "persistent", "name": "idx_user_id"},
+         {"fields": ["uid"], "type": "persistent", "name": "idx_user_uid"}
     ],
     db_collections.ROLES: [
         {"fields": ["is_deleted"], "type": "persistent", "name": "r_is_active"},
@@ -117,7 +118,10 @@ collections_with_indexes = {
         #   {"fields": ["ID"], "unique": True, "type": "persistent", "name": "idx_interva5_id"},
           ],
     db_collections.CCVA_GRAPH_RESULTS: [
-        
+        {"fields": ["created_at"], "type": "persistent", "name": "idx_ccva_graph_created_at"},
+        {"fields": ["range.start"], "type": "persistent", "name": "idx_ccva_graph_start"},
+        {"fields": ["range.end"], "type": "persistent", "name": "idx_ccva_graph_end"},
+        {"fields": ["isDefault"], "type": "persistent", "name": "idx_is_default"}
     ],
     db_collections.CCVA_ERRORS: [],
     db_collections.CCVA_ERRORS_CORRECTIONS: [],

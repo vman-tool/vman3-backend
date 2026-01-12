@@ -26,7 +26,7 @@ statistics_router = APIRouter(
 
 #@log_to_db(context="get_submissions_statistics", log_args=True)
 @statistics_router.get("/submissions", status_code=status.HTTP_200_OK, response_model=ResponseMainModel)
-@cache(namespace='submissions',expire=6000)
+@cache(namespace='submissions',expire=1000)
 async def get_submissions_statistics(
       current_user = Depends(get_current_user),
     paging: Optional[str] = Query(None, alias="paging"),
