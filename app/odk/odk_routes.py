@@ -3,6 +3,7 @@
 
 from datetime import datetime
 from arango.database import StandardDatabase
+from decouple import config
 from fastapi import (APIRouter, BackgroundTasks, Depends, HTTPException, Query,
                      status)
 
@@ -14,6 +15,10 @@ from app.utilits.logger import app_logger
 from app.settings.services.odk_configs import add_configs_settings
 from app.settings.models.settings import SettingsConfigData, SyncStatus
 from app.shared.configs.constants import db_collections
+
+# Celery task imports
+from app.tasks.odk_tasks import sync_odk_data_task
+
 odk_router = APIRouter(
     prefix="/odk",
     tags=["ODK"],
@@ -100,23 +105,30 @@ async def fetch_odk_data_with_async_endpoint(
             force_update=force_update
         )
 
-        # If download is needed, start the background fetch task
+        # If download is needed, dispatch the task to Celery
         if initial_response.get('download_status') is True:
-            # Create a proper background task function
-            async def background_fetch_task():
-                await data_download.fetch_odk_data_with_async(
-                    db=db,
-                    start_date=initial_response.get('start_date'),
-                    end_date=end_date,
-                    skip=skip,
-                    top=top,
-                    total_data_count=initial_response.get('total_data_count', 0)
-                )
+            total_data_count = initial_response.get('total_data_count', 0)
+            fetch_start_date = initial_response.get('start_date')
             
-            # Add the background task
-            background_tasks.add_task(background_fetch_task)
+            # Dispatch to Celery for distributed task processing
+            # WebSocket progress updates are sent via Redis Pub/Sub
             
-        return {"status": "Data fetch initiated", **initial_response}
+            # Debug: Log the Celery configuration
+            from app.celery_app import celery_app, BROKER_URL
+            app_logger.info(f"🔧 Dispatching to Celery with broker: {BROKER_URL[:30]}...")
+            app_logger.info(f"🔧 Celery app broker: {celery_app.conf.broker_url[:30] if celery_app.conf.broker_url else 'NOT SET'}...")
+            
+            sync_odk_data_task.delay(
+                total_data_count=total_data_count,
+                task_id="123",  # Default task_id for ODK sync
+                start_date=fetch_start_date,
+                end_date=end_date,
+                skip=skip,
+                top=top
+            )
+            app_logger.info("ODK sync task dispatched to Celery")
+            
+        return {"status": "Data fetch initiated", "using_celery": True, **initial_response}
 
     except Exception as e:
         print(e)
