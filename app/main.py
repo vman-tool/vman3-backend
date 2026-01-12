@@ -94,8 +94,7 @@ async def lifespan(app: FastAPI):
     # Start background initialization tasks without blocking
     asyncio.create_task(run_background_initialization())
     
-    # Initialize Redis
-    # Initialize Redis
+    # Initialize Redis for caching
     redis_password = config('REDIS_PASSWORD', default=None)
     redis = aioredis.from_url(
         config('REDIS_URL', default="redis://localhost:6370"),
@@ -103,16 +102,20 @@ async def lifespan(app: FastAPI):
     )
     FastAPICache.init(RedisBackend(redis), prefix="vman_cache")
     
+    # Start WebSocket manager with Redis Pub/Sub
+    await websocket__manager.start()
+    
     try:
         yield
     finally:
         # Application shutdown logic
         logger.info("🛑 Application shutdown")
+        
+        # Stop WebSocket manager
+        await websocket__manager.stop()
+        
         await shutdown_scheduler()
         await redis.close()
-        
-        # Determine if we should also close the loop (usually not in lifespan)
-        # scheduler.shutdown() # Removed because shutdown_scheduler() handles it.
         
         logger.info("✅ Shutdown completed")
         
@@ -131,7 +134,11 @@ def create_application():
 
 app = create_application()
 register_error_handlers(app)
-websocket__manager = websocket_manager.WebSocketManager()
+
+# Initialize WebSocket manager with Redis URL for cross-worker Pub/Sub
+websocket__manager = websocket_manager.WebSocketManager(
+    redis_url=config('REDIS_URL', default="redis://localhost:6370")
+)
 app.state.websocket__manager = websocket__manager
 
 origins = config('CORS_ALLOWED_ORIGINS', default="*").split(',')

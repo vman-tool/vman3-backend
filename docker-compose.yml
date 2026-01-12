@@ -78,6 +78,31 @@ services:
       restart_policy:
         condition: any
 
+  celery-worker:
+    image: ilyatuu/vman3_backend:latest
+    command: >
+      celery -A app.celery_app worker --loglevel=info --queues=odk,celery --concurrency=2
+    env_file:
+      - .env
+    environment:
+      PYTHONUNBUFFERED: "1"
+      # Ensure Celery can connect to Redis
+      REDIS_URL: "redis://redis:6379"
+      REDIS_PASSWORD: "vman@1029"
+    networks:
+      - vman3-net
+    volumes:
+      - ccva_files:/app/ccva_files
+      - app_data:/app
+      - uploads:/vman3/app/uploads
+    depends_on:
+      - redis
+      - arango-db
+    deploy:
+      replicas: 2  # Run 2 Celery workers for better throughput
+      restart_policy:
+        condition: any
+
 networks:
   vman3-net:
     external: true

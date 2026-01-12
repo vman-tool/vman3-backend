@@ -195,29 +195,27 @@ async def fetch_odk_data_with_async(
             async def insert_all_data(data: List[dict]):
                 nonlocal records_saved, last_progress, start_time
                 try:
-                    elapsed_time = 0  # Initialize elapsed_time to a default value
-                    for item in data:
-                        await insert_data_to_arangodb(item)
-                        records_saved += 1
+                    # Batch insert all records at once instead of one-by-one
+                    if data:
+                        await insert_many_data_to_arangodb(data, overwrite_mode='replace')
+                        records_saved += len(data)
 
                         # Cap progress at 100% to prevent overflow
                         progress = min((records_saved / total_data_count) * 100, 100.0)
-                        if int(progress) != last_progress:
-                            last_progress = int(progress)
-                            elapsed_time = time.time() - start_time  # Update elapsed_time based on current time
-                            
-                            logger.info(f"Progress: {progress:.1f}% ({records_saved}/{total_data_count} records)")
-                            
-                            if websocket__manager:
-                                # await websocket__manager.broadcast(f"Progress: {progress:.0f}%")
-                                progress_data = {
-                                    "total_records": total_data_count,
-                                    "progress": progress,
-                                    "elapsed_time": elapsed_time,
-                                    "records_processed": records_saved
-                                }
-                                await websocket__manager.broadcast("123",json.dumps(progress_data))
-                            print(f"\rDownloading: [{'=' * int(progress // 2)}{' ' * (50 - int(progress // 2))}] {progress:.0f}% - Elapsed time: {elapsed_time:.2f}s", end='', flush=True)
+                        elapsed_time = time.time() - start_time
+                        
+                        logger.info(f"Progress: {progress:.1f}% ({records_saved}/{total_data_count} records)")
+                        
+                        if websocket__manager:
+                            progress_data = {
+                                "total_records": total_data_count,
+                                "progress": progress,
+                                "elapsed_time": elapsed_time,
+                                "records_processed": records_saved
+                            }
+                            await websocket__manager.broadcast("123", json.dumps(progress_data))
+                        
+                        print(f"\rDownloading: [{'=' * int(progress // 2)}{' ' * (50 - int(progress // 2))}] {progress:.0f}% - Elapsed time: {elapsed_time:.2f}s", end='', flush=True)
                 except Exception as e:
                     raise e
 

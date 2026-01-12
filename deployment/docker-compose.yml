@@ -8,6 +8,7 @@ services:
       - "80:80"
     volumes:
       - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./.htpasswd:/etc/nginx/.htpasswd:ro  # For Flower basic auth
     networks:
       - vman3-net
     restart: always
@@ -81,6 +82,64 @@ services:
       - vman3-net
     restart: always
 
+  # Celery worker for background task processing (CCVA, ODK sync)
+  celery-worker:
+    container_name: celery-worker
+    image: ilyatuu/vman3_backend:latest
+    command:
+      [
+        "python",
+        "-m",
+        "celery",
+        "-A",
+        "app.celery_app",
+        "worker",
+        "--loglevel=info",
+        "--concurrency=2",
+        "-Q",
+        "celery,ccva,odk"
+      ]
+    volumes:
+      - ccva_files:/app/ccva_files
+      - app_data:/app
+    env_file:
+      - .env
+    environment:
+      PYTHONUNBUFFERED: "1"
+    networks:
+      - vman3-net
+    depends_on:
+      - redis
+      - arango-db
+    restart: always
+
+  # Flower - Celery monitoring UI (access via nginx with auth)
+  flower:
+    container_name: flower
+    image: ilyatuu/vman3_backend:latest
+    command:
+      [
+        "python",
+        "-m",
+        "celery",
+        "-A",
+        "app.celery_app",
+        "flower",
+        "--port=5555",
+        "--url_prefix=flower"
+      ]
+    # Port not exposed directly - access via nginx with auth
+    # ports:
+    #   - "5555:5555"
+    env_file:
+      - .env
+    networks:
+      - vman3-net
+    depends_on:
+      - redis
+      - celery-worker
+    restart: always
+
 networks:
   vman3-net:
     driver: bridge
@@ -91,3 +150,4 @@ volumes:
   app_data:
   uploads:
   settings_json:
+
