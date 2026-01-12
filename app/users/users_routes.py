@@ -100,7 +100,7 @@ async def reset_password(data: ResetRequest, session = Depends(get_arangodb_sess
     return JSONResponse({"message": "Your password has been updated."})
 
 @auth_router.get("/me", status_code=status.HTTP_200_OK, response_model=UserResponse)
-@cache(namespace='me', expire=6000)
+# @cache(namespace='me', expire=2000)
 async def fetch_user(user = Depends(get_current_user)):
     return user
 
@@ -110,7 +110,7 @@ async def get_user_info(uuid, session = Depends(get_arangodb_session)):
     return await user.fetch_user_detail(uuid, session)
 
 @auth_router.get("", status_code=status.HTTP_200_OK, response_model=ResponseMainModel)
-@cache(namespace='user_get', expire=60)
+#@cache(namespace='user_get', expire=60)
 async def get_users(
         paging: Optional[str] = Query(None, alias="paging"),
         page_number: Optional[int] = Query(1, alias="page_number"),
@@ -130,7 +130,7 @@ async def get_users(
     )
 
 @user_router.get("/privileges", status_code=status.HTTP_200_OK, response_model=ResponseMainModel | Any)
-@cache(namespace='privileges_get', expire=6000)
+# @cache(namespace='privileges_get', expire=6000)
 async def get_privileges(
         privilege: Optional[str] = Query(None, alias="privilege"),
         exact: Optional[bool] = Query(False, alias="exact"),
@@ -145,7 +145,7 @@ async def get_privileges(
         raise e
 
 @user_router.get("/roles", status_code=status.HTTP_200_OK, response_model=ResponseMainModel | Any)
-@cache(namespace='roles_get', expire=6000)
+# @cache(namespace='roles_get', expire=6000)
 async def get_roles(
         paging: Optional[str] = Query(None, alias="paging"),
         page_number: Optional[int] = Query(1, alias="page_number"),
@@ -217,7 +217,7 @@ async def unassign_roles(
         raise e
 
 @user_router.get("/user-roles", status_code=status.HTTP_200_OK, response_model=ResponseMainModel | Any, description="provide user uuid if you wish to get specific user roles otherwise, current user is used by default")
-@cache(namespace='user-roles_get', expire=6000)
+#@cache(namespace='user-roles_get', expire=6000)
 async def get_users_roles(
         user_uuid: Union[str, None] = None,
         current_user = Depends(get_current_user), 

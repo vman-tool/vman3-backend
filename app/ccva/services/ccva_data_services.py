@@ -286,6 +286,12 @@ async def fetch_all_processed_ccva_graphs(paging: bool = True, page_number: int 
             })
 
         query += """
+        LET user = (
+            FOR u IN @@users_collection
+            FILTER u._key == doc.user_id OR u.id == doc.user_id OR u.uid == doc.user_id
+            LIMIT 1
+            RETURN u
+        )[0]
         RETURN {
             
             "id": doc._key,
@@ -295,12 +301,16 @@ async def fetch_all_processed_ccva_graphs(paging: bool = True, page_number: int 
             "elapsed_time": doc.elapsed_time,
             "start": doc.range.start,
             "end": doc.range.end,
-            "isDefault": doc.isDefault
+            "isDefault": doc.isDefault,
+            "run_by_name": user ? user.name : "Unknown"
+
         }
         """
+        bind_vars["@users_collection"] = db_collections.USERS
+        print(query)
 
         def execute_all_processed_query():
-            cursor = db.aql.execute(query, bind_vars=bind_vars, cache=True)
+            cursor = db.aql.execute(query, bind_vars=bind_vars)
             return [document for document in cursor]
 
         data = await run_in_threadpool(execute_all_processed_query)
@@ -418,23 +428,40 @@ async def delete_ccva_entry(ccva_id: str, db: StandardDatabase) -> ResponseMainM
         query = f"FOR doc IN {collection.name} FILTER doc._key == @ccva_id RETURN doc"
         
         def execute_delete_entry():
+            print(f"Executing delete for ID: {ccva_id}")
             cursor = db.aql.execute(query, bind_vars={"ccva_id": ccva_id}, cache=True)
             ccva_doc = next(cursor, None)
-
+            print(ccva_doc)
             if not ccva_doc:
+                print(f"Document with ID {ccva_id} not found")
                 raise BadRequestException(f"CCVA entry with id {ccva_id} not found")
-        
+            
+            print(f"Found document: {ccva_doc.get('_key')}, Task ID: {ccva_doc.get('task_id')}")
+
             # Delete the document
             query_delete = f"REMOVE {{ _key: @ccva_id }} IN {collection.name}"
             bind_vars = {"ccva_id": ccva_id}
+            print(query_delete)
             db.aql.execute(query_delete, bind_vars=bind_vars, cache=True)
-            db.collection(db_collections.CCVA_RESULTS).delete_match({
-                "task_id": ccva_doc.get("task_id")
-            })
+            print("Deleted graph result document")
+
+            task_id = ccva_doc.get("task_id")
+            print(f"Task ID: {task_id}")
+            if task_id:
+                print(f"Deleting associated results for task_id: {task_id}")
+                try:
+                    db.collection(db_collections.CCVA_RESULTS).delete_match({
+                        "task_id": task_id
+                    })
+                except Exception as e:
+                    print(e)
+
+            else:
+                print("No task_id found in document, skipping results deletion")
 
         await run_in_threadpool(execute_delete_entry)
         
-        await invalidate_cache_pattern("ccva_*")
+        # await invalidate_cache_pattern("ccva_*")
 
         return ResponseMainModel(
             data=None,
