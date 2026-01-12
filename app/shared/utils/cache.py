@@ -30,13 +30,20 @@ async def invalidate_cache(key: str):
     Invalidates a specific cache key using FastAPICache backend.
     Dynamically gets prefix and client from initialized FastAPICache.
     """
-    backend = FastAPICache.get_backend()
-    prefix = FastAPICache.get_prefix() or ""
-    
-    if hasattr(backend, "redis"):
-        redis = backend.redis
-        full_key = f"{prefix}:{key}" if prefix else key
-        await redis.delete(full_key)
+
+    try:
+
+        backend = FastAPICache.get_backend()
+        prefix = FastAPICache.get_prefix() or ""
+
+        
+        if hasattr(backend, "redis"):
+            redis = backend.redis
+            full_key = f"{prefix}:{key}" if prefix else key
+            await redis.delete(full_key)
+    except Exception as e:
+        print("COULDN'T INVALIDATE CACHE FOR KEY: ", key, " ERROR: ", e)
+        pass
 
 async def invalidate_cache_pattern(pattern: str):
     """
