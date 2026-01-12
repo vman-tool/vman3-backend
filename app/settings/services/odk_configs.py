@@ -161,7 +161,7 @@ async def add_configs_settings(configData: SettingsConfigData, db: StandardDatab
 
         # db.collection(db_collections.SYSTEM_CONFIGS).insert(data, overwrite=False)
         results = await save_system_settings(data = data, db = db)
-        
+
         # Invalidate Configs Cache
         await invalidate_cache("system_configs")
 
@@ -183,10 +183,10 @@ async def add_configs_settings(configData: SettingsConfigData, db: StandardDatab
 async def save_system_settings(data, db: StandardDatabase = None):
     try:
         aql_query = """
-        UPSERT { _key: @key }
-        INSERT @document
-        UPDATE @document IN @@collection
-        OPTIONS { exclusive: true }
+            UPSERT { _key: @key }
+            INSERT @document
+            UPDATE @document IN @@collection
+            OPTIONS { exclusive: true }
         """
         bind_vars = {
             '@collection': db_collections.SYSTEM_CONFIGS,
@@ -195,7 +195,8 @@ async def save_system_settings(data, db: StandardDatabase = None):
         }
         def execute_save_settings():
             cursor = db.aql.execute(aql_query, bind_vars=bind_vars)
-            return [doc for doc in cursor]
+            return cursor
+
             
         return await run_in_threadpool(execute_save_settings)
     except Exception as e:

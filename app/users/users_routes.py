@@ -100,7 +100,7 @@ async def reset_password(data: ResetRequest, session = Depends(get_arangodb_sess
     return JSONResponse({"message": "Your password has been updated."})
 
 @auth_router.get("/me", status_code=status.HTTP_200_OK, response_model=UserResponse)
-@cache(namespace='me', expire=2000)
+# @cache(namespace='me', expire=2000)
 async def fetch_user(user = Depends(get_current_user)):
     return user
 

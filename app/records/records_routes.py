@@ -83,6 +83,6 @@ async def get_fetch_va_map_records(
 
 #@log_to_db(context="fetch_unique_regions", log_args=True)      
 @data_router.get("/unique-regions", response_model=ResponseMainModel)
-@cache( namespace='unique_regions',expire=6000)
+@cache( namespace='unique_regions',expire=100)
 async def fetch_unique_regions(db: StandardDatabase = Depends(get_arangodb_session), current_user = Depends(get_current_user),):
     return await get_unique_regions(db,current_user)
