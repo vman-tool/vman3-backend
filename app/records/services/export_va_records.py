@@ -81,7 +81,7 @@ async def export_merged_va_records(
         bind_vars['results_filter'] = results_filter
         
         # Only apply limit for non-"both" filters (both filter naturally has fewer results)
-        limit_clause = "LIMIT 5000" if results_filter == "both" else "LIMIT 1000"
+        limit_clause = "LIMIT 300" if results_filter == "both" else "LIMIT 300"
         
         # AQL query to merge VA records with CCVA and PCVA results
         query = f"""
