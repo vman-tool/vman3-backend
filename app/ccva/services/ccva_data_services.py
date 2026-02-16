@@ -94,7 +94,7 @@ async def fetch_ccva_records(paging: bool = True, page_number: int = 1, limit: i
     
     
 # @ttl_cache(ttl=300, key_prefix="ccva_processed_graphs")
-@cache(expire=6000, namespace="ccva_processed_graphs")
+# @cache(expire=6000, namespace="ccva_processed_graphs")
 async def fetch_processed_ccva_graphs(
     ccva_id: Optional[str] = None, 
     is_default: Optional[bool] = None, 

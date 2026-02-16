@@ -93,7 +93,7 @@ settings_router = APIRouter(
 
      
 @settings_router.get("/system_configs", status_code=status.HTTP_200_OK, response_model=ResponseMainModel)
-@cache(namespace='system_configs',expire=1000)
+# @cache(namespace='system_configs',expire=1000)
 async def get_configs_settings(
     db: StandardDatabase = Depends(get_arangodb_session)):
     # Note: Removed print statement to prevent log spam
@@ -418,7 +418,7 @@ async def get_sync_settings(
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
 
 @settings_router.get("/cron", status_code=status.HTTP_200_OK, response_model=ResponseMainModel)
-@cache(namespace='cron_settings_get',expire=6000)
+# @cache(namespace='cron_settings_get',expire=6000)
 async def get_cron_settings(
     current_user = Depends(get_current_user),
     db: StandardDatabase = Depends(get_arangodb_session)):
@@ -477,7 +477,7 @@ async def save_api_cron_settings(
     
 #@log_to_db(context="get_backup_settings", log_args=True)
 @settings_router.get("/backup", status_code=status.HTTP_200_OK, response_model=ResponseMainModel)
-@cache(namespace='backup_settings_get',expire=6000)
+# @cache(namespace='backup_settings_get',expire=6000)
 async def get_backup_settings(
     current_user = Depends(get_current_user),
     db: StandardDatabase = Depends(get_arangodb_session)):
