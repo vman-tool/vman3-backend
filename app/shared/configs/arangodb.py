@@ -190,7 +190,19 @@ async def get_arangodb_session() -> AsyncGenerator[StandardDatabase, None]:
         yield client.db
     finally:
         pass  # No explicit closing needed        pass  # No explicit closing needed
-    
+
+
+def get_arangodb_client_sync() -> StandardDatabase:
+    """
+    Synchronous version of get_arangodb_client for use in Celery workers.
+    Celery tasks run in a sync context, so we need a sync DB connection.
+    """
+    client = ArangoDBClient()
+    client._connect_sync()
+    client._create_collections_sync()
+    return client.db
+
+
 def null_convert_data(data):
     """
     Recursively converts any NaN values to None and ensures the data is suitable for inserting into databases.

@@ -57,6 +57,9 @@ collections_with_indexes = {
         {"fields": ["id10005d", "today"], "unique": False, "type": "persistent", "name": "idx_district_submission"},
         {"fields": ["id10005r", "id10005d"], "unique": False, "type": "persistent", "name": "idx_region_district"},
         
+        # Export optimization - join with CCVA/PCVA by instanceid
+        {"fields": ["instanceid"], "unique": False, "type": "persistent", "name": "idx_instanceid"},
+        
         # {"fields": ["age_group"], "unique": False, "type": "persistent", "name": "idx_age_group"},
         {"fields": ["id10007"], "unique": False, "type": "persistent", "name": "idx_interviewer"}
     ],
@@ -90,14 +93,21 @@ collections_with_indexes = {
         {"fields": ["type"], "unique": False, "type": "persistent", "name": "category_type"}
     ],
     db_collections.ICD10: [
-        {"fields": ["is_deleted"], "type": "persistent", "name": "i_is_active"}
+        {"fields": ["is_deleted"], "type": "persistent", "name": "i_is_active"},
+        # Export optimization - join by uuid for cause code resolution
+        {"fields": ["uuid"], "unique": True, "type": "persistent", "name": "idx_icd10_uuid"}
     ],
     db_collections.ASSIGNED_VA: [
         {"fields": ["is_deleted"], "type": "persistent", "name": "av_is_active"}
     ],
     db_collections.PCVA_RESULTS: [
         {"fields": ["is_deleted"], "type": "persistent", "name": "cv_is_active"},
-        {"fields": ["va"], "unique": False, "type": "persistent", "name": "va_record"}
+        {"fields": ["va"], "unique": False, "type": "persistent", "name": "va_record"},
+        # Export optimization - join by assigned_va
+        {"fields": ["assigned_va"], "unique": False, "type": "persistent", "name": "idx_assigned_va"},
+        {"fields": ["datetime"], "unique": False, "type": "persistent", "name": "idx_pcva_datetime"},
+        # Compound index for getting latest PCVA result per VA (optimal for export query)
+        {"fields": ["assigned_va", "datetime"], "unique": False, "type": "persistent", "name": "idx_assigned_va_datetime"}
     ],
     db_collections.PCVA_MESSAGES: [
         {"fields": ["created_by"], "type": "persistent", "name": "message_sender"},

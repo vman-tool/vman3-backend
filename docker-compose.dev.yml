@@ -1,0 +1,81 @@
+version: "3.8"
+
+services:
+  redis:
+    container_name: redis-vman3-dev
+    image: redis:latest
+    command: redis-server --requirepass vman@1029
+    ports:
+      - "6370:6379"
+    restart: always
+
+  celery-worker:
+    container_name: celery-worker-dev
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command:
+      [
+        "python3",
+        "-m",
+        "celery",
+        "-A",
+        "app.celery_app",
+        "worker",
+        "--loglevel=info",
+        "--concurrency=2",
+        "-Q",
+        "celery,ccva,odk"
+      ]
+    volumes:
+      - ./app:/vman3/app  # Mount local app directory for hot reload
+    environment:
+      PYTHONUNBUFFERED: "1"
+      # Redis - point to Docker container, NOT localhost
+      REDIS_URL: "redis://redis:6379"
+      REDIS_PASSWORD: "vman@1029"
+      # ArangoDB - from your .env file
+      DB_URL: "http://64.227.70.122:8529"
+      DB_NAME: "vman3"
+      DB_PASSWORD: "password"
+      DB_ROOT_USER: "root"
+      ARANGO_ROOT_USER: "root"
+      ARANGO_ROOT_PASSWORD: "password"
+      ARANGODB_URL: "http://64.227.70.122:8529/"
+      # ODK credentials - from your .env file
+      DEFAULT_PROJECT_ID: "2"
+      ODK_API_URL: "https://central.iact.co.tz"
+      ODK_API_VERSION: "v1"
+      ODK_USERNAME: "admin@vman.net"
+      ODK_PASSWORD: "welcome2vman"
+    depends_on:
+      - redis
+    restart: always
+
+  flower:
+    container_name: flower-dev
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command:
+      [
+        "python3",
+        "-m",
+        "celery",
+        "-A",
+        "app.celery_app",
+        "flower",
+        "--port=5555"
+      ]
+    ports:
+      - "5555:5555"  # Access Flower at http://localhost:5555
+    environment:
+      PYTHONUNBUFFERED: "1"
+      REDIS_URL: "redis://redis:6379"
+      REDIS_PASSWORD: "vman@1029"
+    depends_on:
+      - redis
+      - celery-worker
+    restart: always
+
+

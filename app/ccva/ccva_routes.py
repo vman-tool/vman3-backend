@@ -6,6 +6,7 @@ from typing import Optional
 
 import pandas as pd
 from arango.database import StandardDatabase
+from decouple import config
 from fastapi import (APIRouter, BackgroundTasks, Body, Depends, File,
                      HTTPException, Query, Response, UploadFile, status)
 
@@ -17,12 +18,18 @@ from app.ccva.services.ccva_graph_services import \
 from app.ccva.services.ccva_services import (fetch_ccva_results_and_errors,
                                              get_record_to_run_ccva, run_ccva, process_upload_and_run_ccva)
 from app.ccva.services.ccva_upload import insert_all_csv_data
-from app.shared.configs.arangodb import get_arangodb_session
+from app.shared.configs.arangodb import get_arangodb_session, remove_null_values
 from app.shared.configs.models import ResponseMainModel
 from app.shared.services.task_progress_service import TaskProgressService
 from app.users.decorators.user import get_current_user, oauth2_scheme
 from app.utilits.db_logger import  log_to_db
 from app.shared.utils.cache import cache
+
+# Celery task imports - for background task processing
+from app.tasks.ccva_tasks import run_ccva_task
+
+# Configuration: Set to True to use Celery for CCVA tasks (recommended for production)
+USE_CELERY = config('USE_CELERY', default=False, cast=bool)
 
 ccva_router = APIRouter(
     prefix="/ccva",
@@ -142,9 +149,27 @@ async def run_internal_ccva(
         # Prepare extra info for progress tracking
         user_id = current_user.get('uid') or current_user.get('id') or "unknown"
 
-        # Add the CCVA task to background
-        background_tasks.add_task(run_ccva, db, records, task_id, task_results, start_date, end_date, malaria_status, hiv_status, ccva_algorithm, user_id)
-        print('after background task')
+        # Dispatch CCVA task to Celery or FastAPI BackgroundTasks
+        if USE_CELERY:
+            # Use Celery for distributed task processing (recommended for production)
+            # Convert records to serializable format for Celery
+            records_data = remove_null_values(records.data)
+            run_ccva_task.delay(
+                records_data=records_data,
+                task_id=task_id,
+                start_date=str(start_date) if start_date else None,
+                end_date=str(end_date) if end_date else None,
+                malaria_status=malaria_status,
+                hiv_status=hiv_status,
+                ccva_algorithm=ccva_algorithm,
+                user_id=user_id
+            )
+            print('CCVA task dispatched to Celery')
+        else:
+            # Use FastAPI BackgroundTasks (single-worker mode)
+            background_tasks.add_task(run_ccva, db, records, task_id, task_results, start_date, end_date, malaria_status, hiv_status, ccva_algorithm, user_id)
+            print('CCVA task dispatched to BackgroundTasks')
+        
         # Constructing response
         datas = {
             "progress": 1,
@@ -154,7 +179,8 @@ async def run_internal_ccva(
             "elapsed_time": f"{(datetime.now() - start_time).seconds // 3600}:{(datetime.now() - start_time).seconds // 60 % 60}:{(datetime.now() - start_time).seconds % 60}",
             "task_id": task_id,
             "error": False,
-            "user_id": user_id
+            "user_id": user_id,
+            "using_celery": USE_CELERY
         }
 
 
