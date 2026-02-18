@@ -208,7 +208,7 @@ async def get_ccva_progress(
 
 #@log_to_db(context="get_processed_ccva_graphs", log_args=True)    
 @ccva_router.get("", status_code=status.HTTP_200_OK)
-@cache(namespace='ccva_graphs_get',expire=1000)
+# @cache(namespace='ccva_graphs_get',expire=1000)
 async def get_processed_ccva_graphs(
     background_tasks: BackgroundTasks,
     ccva_id: Optional[str] = None,

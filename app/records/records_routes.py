@@ -29,7 +29,7 @@ data_router = APIRouter(
 
 #@log_to_db(context="get_va_records", log_args=True)        
 @data_router.get("", status_code=status.HTTP_200_OK, response_model=ResponseMainModel)
-@cache(namespace='records',expire=6000)
+# @cache(namespace='records',expire=6000)
 async def get_va_records(
       current_user = Depends(get_current_user),
     paging: Optional[str] = Query(None, alias="paging"),
