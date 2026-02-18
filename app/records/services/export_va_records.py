@@ -11,6 +11,22 @@ from fastapi.responses import StreamingResponse
 from app.settings.services.odk_configs import fetch_odk_config
 from app.shared.configs.constants import db_collections
 from app.shared.configs.models import VManBaseModel
+from arango.database import StandardDatabase as _ArangoDB
+from fastapi.concurrency import run_in_threadpool
+
+
+async def _run_export_query(query: str, bind_vars: dict, db) -> list:
+    """Execute an AQL query with streaming batch_size and a generous max_runtime."""
+    def _exec():
+        cursor = db.aql.execute(
+            query=query,
+            bind_vars=bind_vars,
+            batch_size=5000,   # stream 5k rows at a time instead of all at once
+            max_runtime=300,   # 5-minute ceiling (default is 60s)
+            count=False,
+        )
+        return list(cursor)    # exhaust the cursor
+    return await run_in_threadpool(_exec)
 
 
 async def export_merged_va_records(
@@ -78,10 +94,8 @@ async def export_merged_va_records(
                     interviewer_name: va.{interviewer_f}
                 }}
         """
-        va_cursor = await VManBaseModel.run_custom_query(
-            query=va_query, bind_vars=bind_vars, db=db
-        )
-        va_records = list(va_cursor)
+        va_cursor = await _run_export_query(query=va_query, bind_vars=bind_vars, db=db)
+        va_records = va_cursor
 
         if not va_records:
             raise HTTPException(status_code=404, detail="No records found matching the specified filters")
@@ -95,6 +109,7 @@ async def export_merged_va_records(
         ccva_query = f"""
             FOR ccva IN {db_collections.CCVA_RESULTS}
                 FILTER ccva.ID IN @va_ids OR ccva.uid IN @va_ids
+                FILTER ccva.CAUSE1 != ""
                 COLLECT va_id = (ccva.ID != null ? ccva.ID : ccva.uid)
                 AGGREGATE
                     ccva_top_cause  = MAX(ccva.CAUSE1),
@@ -138,17 +153,15 @@ async def export_merged_va_records(
         """
 
         # Fire all three queries at the same time
-        ccva_cursor, pcva_cursor, icd10_cursor = await asyncio.gather(
-            VManBaseModel.run_custom_query(query=ccva_query, bind_vars={'va_ids': va_ids}, db=db),
-            VManBaseModel.run_custom_query(query=pcva_query, bind_vars={'va_ids': va_ids}, db=db),
-            VManBaseModel.run_custom_query(query=icd10_query, bind_vars={}, db=db),
+        ccva_records, pcva_records, icd10_raw = await asyncio.gather(
+            _run_export_query(query=ccva_query, bind_vars={'va_ids': va_ids}, db=db),
+            _run_export_query(query=pcva_query, bind_vars={'va_ids': va_ids}, db=db),
+            _run_export_query(query=icd10_query, bind_vars={}, db=db),
         )
 
-        ccva_records = list(ccva_cursor)
-        pcva_records = list(pcva_cursor)
         icd10_lookup: dict = {
             r['uuid']: f"({r['code']}) {r['name']}"
-            for r in icd10_cursor
+            for r in icd10_raw
             if r.get('uuid')
         }
 
