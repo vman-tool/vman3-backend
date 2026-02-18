@@ -14,6 +14,8 @@ from app.shared.configs.models import ResponseMainModel
 from app.users.decorators.user import get_current_user
 from app.utilits.db_logger import db_logger, log_to_db
 from app.shared.utils.cache import cache
+from app.users.decorators.user import get_export_user
+from app.shared.configs.security import create_export_token
 
 # from sqlalchemy.orm import Session
 
@@ -90,9 +92,20 @@ async def fetch_unique_regions(db: StandardDatabase = Depends(get_arangodb_sessi
 
 
 #@log_to_db(context="export_va_records", log_args=True)
+@data_router.post("/export-token", status_code=status.HTTP_200_OK)
+async def get_export_token(
+    current_user = Depends(get_current_user)
+):
+    """
+    Generate a short-lived token for export operations.
+    """
+    token = create_export_token(current_user["id"])
+    return {"token": token}
+
+
 @data_router.get("/export", status_code=status.HTTP_200_OK)
 async def export_va_records_endpoint(
-    current_user = Depends(get_current_user),
+    current_user = Depends(get_export_user),
     start_date: Optional[date] = Query(None, alias="start_date"),
     end_date: Optional[date] = Query(None, alias="end_date"),
     date_type: Optional[str] = Query(None, alias="date_type"),
