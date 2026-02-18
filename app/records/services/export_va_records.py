@@ -1,3 +1,4 @@
+import asyncio
 from datetime import date
 from io import BytesIO
 from typing import List, Optional
@@ -90,7 +91,7 @@ async def export_merged_va_records(
 
         print(f"Fetched {len(va_records)} VA records. Fetching CCVA/PCVA/ICD10 in parallel...")
 
-        # ── 4. Query CCVA results ────────────────────────────────────────────
+        # ── 4-6. Run CCVA, PCVA, ICD10 queries concurrently (asyncio.gather = Promise.all) ──
         ccva_query = f"""
             FOR ccva IN {db_collections.CCVA_RESULTS}
                 FILTER ccva.ID IN @va_ids OR ccva.uid IN @va_ids
@@ -103,21 +104,16 @@ async def export_merged_va_records(
                     ccva_age_group  = MAX(ccva.age_group),
                     ccva_gender     = MAX(ccva.gender)
                 RETURN {{
-                    va_id:          va_id,
-                    ccva_top_cause: ccva_top_cause,
-                    ccva_cause2:    ccva_cause2,
-                    ccva_cause3:    ccva_cause3,
+                    va_id:           va_id,
+                    ccva_top_cause:  ccva_top_cause,
+                    ccva_cause2:     ccva_cause2,
+                    ccva_cause3:     ccva_cause3,
                     ccva_likelihood: ccva_likelihood,
-                    ccva_age_group: ccva_age_group,
-                    ccva_gender:    ccva_gender
+                    ccva_age_group:  ccva_age_group,
+                    ccva_gender:     ccva_gender
                 }}
         """
-        ccva_cursor = await VManBaseModel.run_custom_query(
-            query=ccva_query, bind_vars={'va_ids': va_ids}, db=db
-        )
-        ccva_records = list(ccva_cursor)
 
-        # ── 5. Query PCVA results (raw UUIDs, no nested ICD10 joins) ─────────
         pcva_query = f"""
             FOR pcva IN {db_collections.PCVA_RESULTS}
                 FILTER pcva.assigned_va IN @va_ids
@@ -125,29 +121,31 @@ async def export_merged_va_records(
                 COLLECT va_id = pcva.assigned_va INTO grouped = pcva
                 LET latest = FIRST(grouped)
                 RETURN {{
-                    va_id:          va_id,
-                    pcva_coder:     latest.created_by,
-                    pcva_cause_a:   latest.frameA.a,
-                    pcva_cause_b:   latest.frameA.b,
-                    pcva_cause_c:   latest.frameA.c,
-                    pcva_cause_d:   latest.frameA.d,
+                    va_id:               va_id,
+                    pcva_coder:          latest.created_by,
+                    pcva_cause_a:        latest.frameA.a,
+                    pcva_cause_b:        latest.frameA.b,
+                    pcva_cause_c:        latest.frameA.c,
+                    pcva_cause_d:        latest.frameA.d,
                     pcva_contributories: latest.frameA.contributories,
-                    pcva_coded_at:  latest.datetime
+                    pcva_coded_at:       latest.datetime
                 }}
         """
-        pcva_cursor = await VManBaseModel.run_custom_query(
-            query=pcva_query, bind_vars={'va_ids': va_ids}, db=db
-        )
-        pcva_records = list(pcva_cursor)
 
-        # ── 6. Query ICD10 codes (full table, small) ─────────────────────────
         icd10_query = f"""
             FOR code IN {db_collections.ICD10}
                 RETURN {{ uuid: code.uuid, code: code.code, name: code.name }}
         """
-        icd10_cursor = await VManBaseModel.run_custom_query(
-            query=icd10_query, bind_vars={}, db=db
+
+        # Fire all three queries at the same time
+        ccva_cursor, pcva_cursor, icd10_cursor = await asyncio.gather(
+            VManBaseModel.run_custom_query(query=ccva_query, bind_vars={'va_ids': va_ids}, db=db),
+            VManBaseModel.run_custom_query(query=pcva_query, bind_vars={'va_ids': va_ids}, db=db),
+            VManBaseModel.run_custom_query(query=icd10_query, bind_vars={}, db=db),
         )
+
+        ccva_records = list(ccva_cursor)
+        pcva_records = list(pcva_cursor)
         icd10_lookup: dict = {
             r['uuid']: f"({r['code']}) {r['name']}"
             for r in icd10_cursor
