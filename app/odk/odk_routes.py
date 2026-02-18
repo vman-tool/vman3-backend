@@ -19,6 +19,10 @@ from app.shared.configs.constants import db_collections
 # Celery task imports
 from app.tasks.odk_tasks import sync_odk_data_task
 
+from app.users.decorators.user import check_privileges
+from app.shared.configs.constants import AccessPrivileges
+from typing import List
+
 odk_router = APIRouter(
     prefix="/odk",
     tags=["ODK"],
@@ -34,6 +38,7 @@ async def fetch_and_store_data(
     end_date: str = None,
     skip: int = 0,
     top: int = 100,
+    required_privs: List[str] = Depends(check_privileges([AccessPrivileges.ODK_DATA_SYNC]))
 ):
 
     res= await data_download.fetch_odk_datas(
@@ -89,6 +94,7 @@ async def fetch_odk_data_with_async_endpoint(
     skip: int = 0,
     top: int = 3000,
     force_update: bool = Query(default=False),
+    required_privs: List[str] = Depends(check_privileges([AccessPrivileges.ODK_DATA_SYNC])),
     db: StandardDatabase = Depends(get_arangodb_session)
 ):
     app_logger.info(f"Fetching ODK data with async: {datetime.now().isoformat()}")
@@ -138,7 +144,8 @@ async def fetch_odk_data_with_async_endpoint(
 #@log_to_db(context="get_form_questions", log_args=True)
 @odk_router.post("/fetch_form_questions", status_code=status.HTTP_200_OK)
 async def get_form_questions(
-    db: StandardDatabase = Depends(get_arangodb_session)
+    db: StandardDatabase = Depends(get_arangodb_session),
+    required_privs: List[str] = Depends(check_privileges([AccessPrivileges.ODK_QUESTIONS_SYNC]))
 ) -> ResponseMainModel:
     try:
         return await data_download.fetch_form_questions(db=db)
