@@ -54,6 +54,8 @@ services:
       - .env
     networks:
       - vman3-net
+    ports:
+      - 8529:8529
     volumes:
       - vman3db:/var/lib/arangodb3
     command:
