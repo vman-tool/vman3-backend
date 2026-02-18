@@ -68,7 +68,20 @@ def get_token_payload(token: str, secret: str, algo: str):
 def generate_token(payload: dict, secret: str, algo: str, expiry: timedelta):
     expire = datetime.now() + expiry
     payload.update({"exp": expire})
+    payload.update({"exp": expire})
     return jwt.encode(payload, secret, algorithm=algo)
+
+
+def create_export_token(user_id: str):
+    """
+    Creates a short-lived token (1 minute) for export operations.
+    """
+    payload = {
+        "sub": user_id,
+        "type": "export_token"
+    }
+    # 1 minute expiry
+    return generate_token(payload, settings.JWT_SECRET, settings.JWT_ALGORITHM, timedelta(minutes=1))
 
 
 async def get_token_user(token: str, db:StandardDatabase ):
