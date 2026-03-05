@@ -3,7 +3,7 @@
 from functools import wraps
 from typing import List
 
-from fastapi import Depends, HTTPException, WebSocket, status
+from fastapi import Depends, HTTPException, WebSocket, status, Query
 from fastapi.security import OAuth2PasswordBearer
 from arango.database import StandardDatabase
 
@@ -13,7 +13,10 @@ from app.shared.configs.security import get_token_user
 from app.users.models.user import User
 from app.users.responses.user import UserRolesResponse
 from app.users.schemas.user import RegisterUserRequest
+from app.users.schemas.user import RegisterUserRequest
 from app.users.services.user import get_user_roles
+from app.shared.configs.security import get_token_payload, settings, load_user
+from app.users.models.user import User # Ensure User is imported for type hinting if needed, though load_user returns dict/obj
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login")
 
@@ -40,8 +43,47 @@ async def get_current_user_ws(websocket: WebSocket, db = Depends(get_arangodb_se
         user = await get_current_user(token, db=db)
         
         return user
+
     except Exception as e:
         raise HTTPException(status_code=401, detail="Failed to authorize")
+
+
+async def get_export_user(
+    token: str = Query(..., alias="token"),
+    db = Depends(get_arangodb_session)
+):
+    """
+    Validates a short-lived export token from query parameter.
+    """
+    try:
+        # Decode token
+        payload = get_token_payload(token, settings.JWT_SECRET, settings.JWT_ALGORITHM)
+        
+        if not payload:
+            raise HTTPException(status_code=401, detail="Invalid token")
+            
+        # Verify type is export_token
+        if payload.get("type") != "export_token":
+            raise HTTPException(status_code=401, detail="Invalid token type")
+            
+        # Get user
+        user_id = payload.get("sub")
+        if not user_id:
+            raise HTTPException(status_code=401, detail="Invalid token subject")
+            
+        # Find user by ID (using a direct query since load_user uses email)
+        # Or we can reuse get_current_user logic if we had user_id lookup
+        # For now, let's fetch the user directly
+        user_cursor = await User.get(user_id, db=db)
+        
+        if not user_cursor:
+             raise HTTPException(status_code=401, detail="User not found")
+             
+        return user_cursor
+
+    except Exception as e:
+        print(f"Export token validation error: {e}")
+        raise HTTPException(status_code=401, detail="Invalid or expired export token")
 
 
 def created_by_decorator(func):
