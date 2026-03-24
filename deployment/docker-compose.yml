@@ -115,6 +115,7 @@ services:
     depends_on:
       - redis
       - arango-db
+    restart: always
 
   # Flower - Celery monitoring UI (dedicated image, much lighter)
   flower:

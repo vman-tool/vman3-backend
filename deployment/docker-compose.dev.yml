@@ -48,3 +48,4 @@ services:
       ]
     environment:
       DEBUG: "True"
+    restart: always
