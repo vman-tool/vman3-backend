@@ -165,10 +165,8 @@ async def fetch_processed_ccva_graphs(
         )
     
     except ArangoError as e:
-        print(e)
         raise BadRequestException("Failed to fetch records", str(e))
     except Exception as e:
-        print(e)
         raise BadRequestException(f"Failed to fetch records: {str(e)}", str(e))   
     
     
@@ -245,10 +243,8 @@ async def fetch_processed_individual_ccva_graphs(
         )
     
     except ArangoError as e:
-        print(e)
         raise BadRequestException("Failed to fetch records", str(e))
     except Exception as e:
-        print(e)
         raise BadRequestException(f"Failed to fetch records: {str(e)}", str(e))   
   
        
@@ -321,10 +317,8 @@ async def fetch_all_processed_ccva_graphs(paging: bool = True, page_number: int 
             total=None
         )
     except ArangoError as e:
-        print(e)
         raise BadRequestException("Failed to fetched records",str(e))
     except Exception as e:
-        print(e)
         raise BadRequestException(f"Failed to fetch records: {str(e)}",str(e))
         
         
@@ -364,10 +358,8 @@ async def update_ccva_entry(ccva_id: str, update_data: dict, db: StandardDatabas
             total=None
         )
     except ArangoError as e:
-        print(e)
         raise BadRequestException("Failed to update record", str(e))
     except Exception as e:
-        print(e)
         raise BadRequestException(f"Failed to update record: {str(e)}", str(e))        
 async def set_ccva_as_default(ccva_id: str, db: StandardDatabase) -> ResponseMainModel:
     try:
@@ -409,7 +401,6 @@ async def set_ccva_as_default(ccva_id: str, db: StandardDatabase) -> ResponseMai
         )
 
     except ArangoError as e:
-        print(e)
         raise BadRequestException("Failed to set CCVA as default", str(e))
     except Exception as e:
         app_logger.error(f"Failed to set CCVA as default: {e}")
@@ -452,8 +443,6 @@ async def delete_ccva_entry(ccva_id: str, db: StandardDatabase) -> ResponseMainM
             total=None
         )
     except ArangoError as e:
-        print(e)
         raise BadRequestException("Failed to delete record", str(e))
     except Exception as e:
-        print(e)
         raise BadRequestException(f"Failed to delete record: {str(e)}", str(e))

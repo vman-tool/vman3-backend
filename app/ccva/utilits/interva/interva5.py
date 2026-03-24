@@ -284,7 +284,6 @@ class InterVA5:
         pb_for_datacheck = pb_for_datacheck.to_numpy(dtype=str)
 
         self.probbaseV5Version = probbaseV5[0, 2]
-        print(f"Using Probbase version: {self.probbaseV5Version}")
         causetextV5_horizontal = DataFrame(CAUSETEXTV5)
         self.causetextV5 = causetextV5_horizontal.transpose()
         if self.groupcode:
@@ -313,9 +312,6 @@ class InterVA5:
             self.va_input = read_csv(self.va_input)
         if "i183o" in self.va_input.columns:
             self.va_input.rename(columns={"i183o": "i183a"}, inplace=True)
-            print(
-                "Due to the inconsistent names in the early version of "
-                "InterVA5, the indicator 'i183o' has been renamed as 'i183a'.")
 
         va_data = self.va_input.copy()
         va_input_names = va_data.columns
@@ -426,15 +422,10 @@ class InterVA5:
                 raise RuntimeError
             k = i + 1
             if k % nd == 0:
-                print(".", end="")
-            if k % np == 0:
-                progress = round(k / N * 100)
-                print(f"{progress}% completed -x")
                 if self.update_callback:
                    call_update_callback(self.update_callback, {"progress": progress,"message": "InterVA5 analysis in progress...","log": f"Running InterVA5 analysis... Processing record {k}/{N} ({progress}% completed)","elapsed_time": elapsed_time,"error": False, "total_records":self.va_input.shape[0]})
 
             if k == N:
-                print("100% completed -----")
                 if self.update_callback:
                     call_update_callback(self.update_callback, {"progress": 90,"message": "InterVA5 analysis completed","log": f"Running InterVA5 analysis... Completed processing all {N} records (100%)","elapsed_time": elapsed_time,"total_records":self.va_input.shape[0], "error": False})
 
@@ -686,13 +677,11 @@ class InterVA5:
     def get_hiv(self) -> str:
         """Get HIV parameter."""
 
-        print(f"HIV parameter is {self.hiv}")
         return self.hiv
 
     def get_malaria(self) -> str:
         """Get malaria parameter."""
 
-        print(f"Malaria parameter is {self.malaria}")
         return self.malaria
 
     def set_hiv(self, hiv_level: str) -> str:
@@ -701,9 +690,6 @@ class InterVA5:
         hiv_lvl = hiv_level.lower()
         if hiv_lvl in ["h", "l", "v"]:
             self.hiv = hiv_lvl
-            print(f"HIV parameter is {self.hiv}")
-        else:
-            print(f"The provided HIV level '{hiv_level}' is invalid.")
         return self.hiv
 
     def set_malaria(self, malaria_level: str) -> str:
@@ -712,9 +698,6 @@ class InterVA5:
         malaria_lvl = malaria_level.lower()
         if malaria_lvl in ["h", "l", "v"]:
             self.malaria = malaria_lvl
-            print(f"Malaria parameter is {self.malaria}")
-        else:
-            print(f"The provided malaria level '{malaria_level}' is invalid.")
         return self.malaria
 
     def get_ids(self) -> Series:
@@ -743,11 +726,8 @@ class InterVA5:
         """
 
         if len(self.results) == 0:
-            print("No results.  Use run() method to assign causes.")
             return None
         if self.results["VA5"] is None:
-            print("No results found.  Check error log.  It is likely that "
-                  "all records failed the data consistency checks.")
             return None
         va = self.results["VA5"]
         set_option("display.max_rows", None)
@@ -804,7 +784,6 @@ class InterVA5:
 
         # Check if there is a valid va object
         if len(va) < 1:
-            print("No va5 object found")
             return None
         # Initialize the population distribution
         dist = None
@@ -1052,15 +1031,12 @@ async def websocket_broadcast(progress_data):
     
 def get_data(package: str, filename: str) -> bytes:
     current_dir = Path(__file__).resolve().parent
-    print(f"Original current_dir: {current_dir}")
 
     if package and current_dir.name != package:
         # Replace the last part of the path with `package`
         current_dir = current_dir.parent / package
-        print(f"Adjusted current_dir to match package: {current_dir}")
 
     pathname = current_dir / "data" / filename
-    print(f"Final path to file: {pathname}")
 
     with open(pathname, "rb") as file:
         return file.read()

@@ -50,6 +50,14 @@ async def get_record_to_run_ccva(current_user:dict,db: StandardDatabase,data_sou
         app_logger.error(f"Error fetching ODK data: {e}")
         raise HTTPException(status_code=500, detail=str(e))
         
+async def get_ccva_record_count(current_user:dict, db: StandardDatabase, start_date: Optional[date] = None, end_date: Optional[date] = None, date_type:Optional[str]=None, top:Optional[int]=None):
+    try:
+        from app.records.services.list_data import fetch_va_records_count
+        count = await fetch_va_records_count(current_user=current_user, start_date=start_date, end_date=end_date, db=db, date_type=date_type, top=top)
+        return count
+    except Exception as e:
+        app_logger.error(f"Error fetching record count: {e}")
+        return 0
 
         
 # The main run_ccva function that integrates everything

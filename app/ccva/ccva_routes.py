@@ -16,7 +16,7 @@ from app.ccva.services.ccva_data_services import (
 from app.ccva.services.ccva_graph_services import \
     fetch_db_processed_ccva_graphs
 from app.ccva.services.ccva_services import (fetch_ccva_results_and_errors,
-                                             get_record_to_run_ccva, run_ccva, process_upload_and_run_ccva)
+                                             get_record_to_run_ccva, run_ccva, process_upload_and_run_ccva, get_ccva_record_count)
 from app.ccva.services.ccva_upload import insert_all_csv_data
 from app.shared.configs.arangodb import get_arangodb_session, remove_null_values
 from app.shared.configs.models import ResponseMainModel
@@ -132,55 +132,59 @@ async def run_internal_ccva(
     try:
         # Validate ccva_algorithm
         if ccva_algorithm is not None and ccva_algorithm not in ["InterVA5"]:
-            print(ccva_algorithm)
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid CCVA algorithm, or algorithm not yet supported.")
 
         # Generate task ID and fetch records
         task_id = str(uuid.uuid4())
         ## show the progress of getting data from db in web socket
         task_results = {}  # Initialize task results storage
-        records = await get_record_to_run_ccva(current_user,db,None, task_id, task_results, start_date, end_date,date_type=date_type,top=top)
-
-        # Handle no records scenario
-        if not records:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No records found to run CCVA")
-        print('before background task')
         
         # Prepare extra info for progress tracking
-        user_id = current_user.get('uid') or current_user.get('id') or "unknown"
+        user_id = current_user.get('uid') or current_user.get('id') or "unknown" if isinstance(current_user, dict) else "unknown"
 
         # Dispatch CCVA task to Celery or FastAPI BackgroundTasks
         if USE_CELERY:
             # Use Celery for distributed task processing (recommended for production)
-            # Convert records to serializable format for Celery
-            records_data = remove_null_values(records.data)
+            # Memory Optimization: Don't fetch all records here. Just get the count for the initial response.
+            total_records = await get_ccva_record_count(current_user, db, start_date, end_date, date_type, top)
+            if total_records == 0:
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No records found to run CCVA")
+
             try:
+                # Pass filtering parameters to Celery worker instead of full dataset
+                access_limit = current_user.get('access_limit') if isinstance(current_user, dict) else None
+                
                 run_ccva_task.delay(
-                    records_data=records_data,
+                    records_data=None, # Worker will fetch data internally
                     task_id=task_id,
                     start_date=str(start_date) if start_date else None,
                     end_date=str(end_date) if end_date else None,
                     malaria_status=malaria_status,
                     hiv_status=hiv_status,
                     ccva_algorithm=ccva_algorithm,
-                    user_id=user_id
+                    user_id=user_id,
+                    date_type=date_type,
+                    top=top,
+                    access_limit=access_limit
                 )
-                print('CCVA task dispatched to Celery')
             except Exception as dispatch_err:
-                print(f"❌ Failed to dispatch CCVA task to Celery: {dispatch_err}")
                 raise HTTPException(
                     status_code=status.HTTP_503_SERVICE_UNAVAILABLE, 
                     detail="Background task service (Redis/Celery) is currently unavailable. Please check the backend services."
                 )
         else:
-            # Use FastAPI BackgroundTasks (single-worker mode)
+            # Use FastAPI BackgroundTasks (single-worker mode) - fetch all records immediately
+            records = await get_record_to_run_ccva(current_user, db, None, task_id, task_results, start_date, end_date, date_type=date_type, top=top)
+            if not records:
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No records found to run CCVA")
+            
+            total_records = len(records.data)
             background_tasks.add_task(run_ccva, db, records, task_id, task_results, start_date, end_date, malaria_status, hiv_status, ccva_algorithm, user_id)
-            print('CCVA task dispatched to BackgroundTasks')
         
         # Constructing response
         datas = {
             "progress": 1,
-            "total_records": len(records.data),
+            "total_records": total_records,
             "message": "Collecting data.",
             "status": 'init',
             "elapsed_time": f"{(datetime.now() - start_time).seconds // 3600}:{(datetime.now() - start_time).seconds // 60 % 60}:{(datetime.now() - start_time).seconds % 60}",
@@ -191,10 +195,9 @@ async def run_internal_ccva(
         }
 
 
-        return ResponseMainModel(data={"task_id": task_id, "total_records": len(records.data), **datas}, message="CCVA is running...")
+        return ResponseMainModel(data={"task_id": task_id, "total_records": total_records, **datas}, message="CCVA is running...")
     
     except Exception as e:
-        print(e)
         # Raising the error so FastAPI can handle it
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
 
@@ -258,7 +261,6 @@ async def get_processed_ccva_graphs(
 
     try:
         # Fetch processed CCVA data
-        print(ccva_graph_db_source)
         if ccva_graph_db_source:
 
             response =  await fetch_db_processed_ccva_graphs (
@@ -291,7 +293,6 @@ async def get_processed_ccva_graphs(
  
         return response
     except Exception as e:
-        print(f"Error: {str(e)}")
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to fetch processed CCVA graphs.")
     
 #@log_to_db(context="get_all_processed_ccva_graphs", log_args=True)        
@@ -331,16 +332,12 @@ async def delete_ccva(
     
     # await cache.delete(cache_key)
     # Implement your logic here to delete the CCVA entry
-    print(f"Received delete request for CCVA ID: {ccva_id}")
     try:
         result = await delete_ccva_entry(ccva_id, db)
         if not result:
-            print(f"Delete failed: Result is empty for ID {ccva_id}")
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="CCVA not found or could not be deleted")
-        print(f"Delete successful for ID {ccva_id}")
         return {"message": "CCVA entry deleted successfully"}
     except Exception as e:
-        print(f"Exception in delete_ccva route: {e}")
         raise e
 
 
