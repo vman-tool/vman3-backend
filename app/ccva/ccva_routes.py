@@ -26,6 +26,7 @@ from app.utilits.db_logger import  log_to_db
 from app.shared.utils.cache import cache
 
 # Celery task imports - for background task processing
+from celery.result import AsyncResult
 from app.tasks.ccva_tasks import run_ccva_task
 
 # Configuration: Set to True to use Celery for CCVA tasks (recommended for production)
@@ -212,9 +213,26 @@ async def get_ccva_progress(
     """
     progress = await TaskProgressService.get_progress(db, task_id)
     if not progress:
+        # Fallback: check Celery directly if not found in DB progress
+        if USE_CELERY:
+             res = AsyncResult(task_id)
+             if res.state == 'FAILURE':
+                 return ResponseMainModel(data={"status": "failed", "message": f"Task failed: {res.result}", "error": True, "task_id": task_id}, message="Progress fetched (Celery Failure)", error=False)
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task progress not found.")
     
-    # Check for orphaned/stale tasks (e.g. if worker crashed with SIGKILL)
+    # 1. Check Celery native state as first layer of truth
+    if USE_CELERY:
+        try:
+            res = AsyncResult(task_id)
+            if res.state == 'FAILURE':
+                progress['status'] = 'failed'
+                progress['message'] = f"Celery reported failure: {res.result}"
+                progress['error'] = True
+                return ResponseMainModel(data=progress, message="Progress fetched (Celery Failure)", error=False)
+        except Exception:
+            pass
+
+    # 2. Check for orphaned/stale tasks (fallback for SIGKILL where Celery state might still be 'PENDING')
     status_val = progress.get('status')
     if status_val in ['running', 'init']:
         last_update_str = progress.get('timestamp')
@@ -228,7 +246,7 @@ async def get_ccva_progress(
                 # UTC comparison
                 if (datetime.utcnow() - last_update).total_seconds() > 600:  # 10 minutes timeout
                     progress['status'] = 'failed'
-                    progress['message'] = "Task appears to have stalled or the worker crashed (SIGKILL). Please retry."
+                    progress['message'] = "Task stalled or worker crashed (detected by API staleness check). Please retry."
                     progress['error'] = True
             except Exception:
                 pass # Fallback to original progress if parsing fails
