@@ -48,8 +48,6 @@ async def fetch_ccva_records(paging: bool = True, page_number: int = 1, limit: i
             })
 
         query += "RETURN doc"
-        # print(query)
-        # print(query)
         def execute_query():
             cursor = db.aql.execute(query, bind_vars=bind_vars, cache=True)
             return [document for document in cursor]
@@ -81,7 +79,6 @@ async def fetch_ccva_records(paging: bool = True, page_number: int = 1, limit: i
     # )
         raise BadRequestException("Failed to fetched records",str(e))
     except Exception as e:
-        print(e)
         await db_logger.log(
             message="Failed to fetched records " + str(e),
             level=db_logger.LogLevel.ERROR,
@@ -168,10 +165,8 @@ async def fetch_processed_ccva_graphs(
         )
     
     except ArangoError as e:
-        print(e)
         raise BadRequestException("Failed to fetch records", str(e))
     except Exception as e:
-        print(e)
         raise BadRequestException(f"Failed to fetch records: {str(e)}", str(e))   
     
     
@@ -248,10 +243,8 @@ async def fetch_processed_individual_ccva_graphs(
         )
     
     except ArangoError as e:
-        print(e)
         raise BadRequestException("Failed to fetch records", str(e))
     except Exception as e:
-        print(e)
         raise BadRequestException(f"Failed to fetch records: {str(e)}", str(e))   
   
        
@@ -307,7 +300,6 @@ async def fetch_all_processed_ccva_graphs(paging: bool = True, page_number: int 
         }
         """
         bind_vars["@users_collection"] = db_collections.USERS
-        print(query)
 
         def execute_all_processed_query():
             cursor = db.aql.execute(query, bind_vars=bind_vars)
@@ -325,10 +317,8 @@ async def fetch_all_processed_ccva_graphs(paging: bool = True, page_number: int 
             total=None
         )
     except ArangoError as e:
-        print(e)
         raise BadRequestException("Failed to fetched records",str(e))
     except Exception as e:
-        print(e)
         raise BadRequestException(f"Failed to fetch records: {str(e)}",str(e))
         
         
@@ -368,10 +358,8 @@ async def update_ccva_entry(ccva_id: str, update_data: dict, db: StandardDatabas
             total=None
         )
     except ArangoError as e:
-        print(e)
         raise BadRequestException("Failed to update record", str(e))
     except Exception as e:
-        print(e)
         raise BadRequestException(f"Failed to update record: {str(e)}", str(e))        
 async def set_ccva_as_default(ccva_id: str, db: StandardDatabase) -> ResponseMainModel:
     try:
@@ -413,11 +401,9 @@ async def set_ccva_as_default(ccva_id: str, db: StandardDatabase) -> ResponseMai
         )
 
     except ArangoError as e:
-        print(e)
         raise BadRequestException("Failed to set CCVA as default", str(e))
     except Exception as e:
-        print(e)
-        raise BadRequestException(f"Failed to set CCVA as default: {str(e)}", str(e))
+        app_logger.error(f"Failed to set CCVA as default: {e}")
           
 async def delete_ccva_entry(ccva_id: str, db: StandardDatabase) -> ResponseMainModel:
     try:
@@ -428,36 +414,24 @@ async def delete_ccva_entry(ccva_id: str, db: StandardDatabase) -> ResponseMainM
         query = f"FOR doc IN {collection.name} FILTER doc._key == @ccva_id RETURN doc"
         
         def execute_delete_entry():
-            print(f"Executing delete for ID: {ccva_id}")
             cursor = db.aql.execute(query, bind_vars={"ccva_id": ccva_id}, cache=True)
             ccva_doc = next(cursor, None)
-            print(ccva_doc)
             if not ccva_doc:
-                print(f"Document with ID {ccva_id} not found")
                 raise BadRequestException(f"CCVA entry with id {ccva_id} not found")
             
-            print(f"Found document: {ccva_doc.get('_key')}, Task ID: {ccva_doc.get('task_id')}")
-
             # Delete the document
             query_delete = f"REMOVE {{ _key: @ccva_id }} IN {collection.name}"
             bind_vars = {"ccva_id": ccva_id}
-            print(query_delete)
             db.aql.execute(query_delete, bind_vars=bind_vars, cache=True)
-            print("Deleted graph result document")
 
             task_id = ccva_doc.get("task_id")
-            print(f"Task ID: {task_id}")
             if task_id:
-                print(f"Deleting associated results for task_id: {task_id}")
                 try:
                     db.collection(db_collections.CCVA_RESULTS).delete_match({
                         "task_id": task_id
                     })
-                except Exception as e:
-                    print(e)
-
-            else:
-                print("No task_id found in document, skipping results deletion")
+                except Exception:
+                    pass
 
         await run_in_threadpool(execute_delete_entry)
         
@@ -469,8 +443,6 @@ async def delete_ccva_entry(ccva_id: str, db: StandardDatabase) -> ResponseMainM
             total=None
         )
     except ArangoError as e:
-        print(e)
         raise BadRequestException("Failed to delete record", str(e))
     except Exception as e:
-        print(e)
         raise BadRequestException(f"Failed to delete record: {str(e)}", str(e))

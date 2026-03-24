@@ -13,6 +13,8 @@ import json
 from pathlib import Path
 from typing import TYPE_CHECKING, Callable, Optional, Union
 
+from app.shared.utils.async_utils import call_update_callback
+
 if TYPE_CHECKING:
     import PyQt5
 
@@ -282,7 +284,6 @@ class InterVA5:
         pb_for_datacheck = pb_for_datacheck.to_numpy(dtype=str)
 
         self.probbaseV5Version = probbaseV5[0, 2]
-        print(f"Using Probbase version: {self.probbaseV5Version}")
         causetextV5_horizontal = DataFrame(CAUSETEXTV5)
         self.causetextV5 = causetextV5_horizontal.transpose()
         if self.groupcode:
@@ -306,14 +307,11 @@ class InterVA5:
             logger.addHandler(file_handler)
             logger.info(f"Error & warning log built for InterVA5 {now}\n")
         if self.update_callback:
-                asyncio.run(self.update_callback({"progress": 0,"message": "Error & warning log built for InterVA5","log": f"Error & warning log built for InterVA5 {now}","elapsed_time": elapsed_time,"error": False, "total_records":self.va_input.shape[0]}))
+                call_update_callback(self.update_callback, {"progress": 0,"message": "Error & warning log built for InterVA5","log": f"Error & warning log built for InterVA5 {now}","elapsed_time": elapsed_time,"error": False, "total_records":self.va_input.shape[0]})
         if isinstance(self.va_input, str) and self.va_input[-4:] == ".csv":
             self.va_input = read_csv(self.va_input)
         if "i183o" in self.va_input.columns:
             self.va_input.rename(columns={"i183o": "i183a"}, inplace=True)
-            print(
-                "Due to the inconsistent names in the early version of "
-                "InterVA5, the indicator 'i183o' has been renamed as 'i183a'.")
 
         va_data = self.va_input.copy()
         va_input_names = va_data.columns
@@ -407,7 +405,7 @@ class InterVA5:
             logger.info("\nThe following records are incomplete and "
                         "excluded from further processing:\n")
             if self.update_callback:
-                asyncio.run(self.update_callback({"progress": 0,"message": "The following records are incomplete and excluded from further processing:","log": "The following records are incomplete and excluded from further processing:","elapsed_time": elapsed_time,"error": False, "total_records":self.va_input.shape[0]}))
+                call_update_callback(self.update_callback, {"progress": 0,"message": "The following records are incomplete and excluded from further processing:","log": "The following records are incomplete and excluded from further processing:","elapsed_time": elapsed_time,"error": False, "total_records":self.va_input.shape[0]})
 
         first_pass = []
         second_pass = []
@@ -416,7 +414,7 @@ class InterVA5:
 
         # Log start of analysis
         if self.update_callback:
-            asyncio.run(self.update_callback({"progress": 0,"message": "    InterVA5 analysis in progress...","log": "InterVA5 analysis in progress...","elapsed_time": elapsed_time,"error": False, "total_records":self.va_input.shape[0]}))
+            call_update_callback(self.update_callback, {"progress": 0,"message": "    InterVA5 analysis in progress...","log": "InterVA5 analysis in progress...","elapsed_time": elapsed_time,"error": False, "total_records":self.va_input.shape[0]})
 
         for i in range(N):
             # elapsed_time =f"{(datetime.datetime.now() - self.start_time).seconds // 3600}:{(datetime.datetime.now() - self.start_time).seconds // 60 % 60}:{(datetime.datetime.now() - self.start_time).seconds % 60}"
@@ -424,17 +422,12 @@ class InterVA5:
                 raise RuntimeError
             k = i + 1
             if k % nd == 0:
-                print(".", end="")
-            if k % np == 0:
-                progress = round(k / N * 100)
-                print(f"{progress}% completed -x")
                 if self.update_callback:
-                   asyncio.run(self.update_callback({"progress": progress,"message": "InterVA5 analysis in progress...","log": f"Running InterVA5 analysis... Processing record {k}/{N} ({progress}% completed)","elapsed_time": elapsed_time,"error": False, "total_records":self.va_input.shape[0]}))
+                   call_update_callback(self.update_callback, {"progress": progress,"message": "InterVA5 analysis in progress...","log": f"Running InterVA5 analysis... Processing record {k}/{N} ({progress}% completed)","elapsed_time": elapsed_time,"error": False, "total_records":self.va_input.shape[0]})
 
             if k == N:
-                print("100% completed -----")
                 if self.update_callback:
-                    asyncio.run(self.update_callback({"progress": 90,"message": "InterVA5 analysis completed","log": f"Running InterVA5 analysis... Completed processing all {N} records (100%)","elapsed_time": elapsed_time,"total_records":self.va_input.shape[0], "error": False}))
+                    call_update_callback(self.update_callback, {"progress": 90,"message": "InterVA5 analysis completed","log": f"Running InterVA5 analysis... Completed processing all {N} records (100%)","elapsed_time": elapsed_time,"total_records":self.va_input.shape[0], "error": False})
 
  
 
@@ -455,7 +448,7 @@ class InterVA5:
             if nansum(input_current[5:12]) < 1:
                 if self.write:
                     if self.update_callback:
-                        asyncio.run(self.update_callback({"progress": progress,"message": "Running InterVA5 analysis...","log": f"WARNING: Record {index_current} - Error in age indicator: Not Specified","elapsed_time": elapsed_time,"error": False, "total_records":self.va_input.shape[0]}))
+                        call_update_callback(self.update_callback, {"progress": progress,"message": "Running InterVA5 analysis...","log": f"WARNING: Record {index_current} - Error in age indicator: Not Specified","elapsed_time": elapsed_time,"error": False, "total_records":self.va_input.shape[0]})
 
                         logger.info(index_current +
                                     " Error in age indicator: Not Specified")
@@ -466,7 +459,7 @@ class InterVA5:
             if nansum(input_current[3:5]) < 1:
                 if self.write:
                     if self.update_callback:
-                        asyncio.run(self.update_callback({"progress": progress,"message": "Running InterVA5 analysis...","log": f"WARNING: Record {index_current} - Error in sex indicator: Not Specified","elapsed_time": elapsed_time,"error": False, "total_records":self.va_input.shape[0]}))
+                        call_update_callback(self.update_callback, {"progress": progress,"message": "Running InterVA5 analysis...","log": f"WARNING: Record {index_current} - Error in sex indicator: Not Specified","elapsed_time": elapsed_time,"error": False, "total_records":self.va_input.shape[0]})
                     logger.info(index_current +
                                 " Error in sex indicator: Not Specified")
                 if self.openva_app:
@@ -476,7 +469,7 @@ class InterVA5:
             if nansum(input_current[20:328]) < 1:
                 if self.write:
                     if self.update_callback:
-                        asyncio.run(self.update_callback({"progress": progress,"message": "Running InterVA5 analysis...","log": f"WARNING: Record {index_current} - Error in indicators: No symptoms specified","elapsed_time": elapsed_time,"error": False, "total_records":self.va_input.shape[0]}))
+                        call_update_callback(self.update_callback, {"progress": progress,"message": "Running InterVA5 analysis...","log": f"WARNING: Record {index_current} - Error in indicators: No symptoms specified","elapsed_time": elapsed_time,"error": False, "total_records":self.va_input.shape[0]})
                     logger.info(index_current +
                                 " Error in indicators: No symptoms specified")
                 if self.openva_app:
@@ -630,7 +623,7 @@ class InterVA5:
             if self.update_callback:
                 
                 if len(first_pass)>0 or len(second_pass)>0:
-                    asyncio.run(self.update_callback({"progress": progress,"message": "The following data discrepancies were identified and handled:","log": "The following data discrepancies were identified and handled:","elapsed_time": elapsed_time,"error": False, "total_records":self.va_input.shape[0]}))
+                    call_update_callback(self.update_callback, {"progress": progress,"message": "The following data discrepancies were identified and handled:","log": "The following data discrepancies were identified and handled:","elapsed_time": elapsed_time,"error": False, "total_records":self.va_input.shape[0]})
             logger.info("\nThe following data discrepancies were identified "
                         "and handled:\n")
             for j in range(len(first_pass)):
@@ -684,13 +677,11 @@ class InterVA5:
     def get_hiv(self) -> str:
         """Get HIV parameter."""
 
-        print(f"HIV parameter is {self.hiv}")
         return self.hiv
 
     def get_malaria(self) -> str:
         """Get malaria parameter."""
 
-        print(f"Malaria parameter is {self.malaria}")
         return self.malaria
 
     def set_hiv(self, hiv_level: str) -> str:
@@ -699,9 +690,6 @@ class InterVA5:
         hiv_lvl = hiv_level.lower()
         if hiv_lvl in ["h", "l", "v"]:
             self.hiv = hiv_lvl
-            print(f"HIV parameter is {self.hiv}")
-        else:
-            print(f"The provided HIV level '{hiv_level}' is invalid.")
         return self.hiv
 
     def set_malaria(self, malaria_level: str) -> str:
@@ -710,9 +698,6 @@ class InterVA5:
         malaria_lvl = malaria_level.lower()
         if malaria_lvl in ["h", "l", "v"]:
             self.malaria = malaria_lvl
-            print(f"Malaria parameter is {self.malaria}")
-        else:
-            print(f"The provided malaria level '{malaria_level}' is invalid.")
         return self.malaria
 
     def get_ids(self) -> Series:
@@ -741,11 +726,8 @@ class InterVA5:
         """
 
         if len(self.results) == 0:
-            print("No results.  Use run() method to assign causes.")
             return None
         if self.results["VA5"] is None:
-            print("No results found.  Check error log.  It is likely that "
-                  "all records failed the data consistency checks.")
             return None
         va = self.results["VA5"]
         set_option("display.max_rows", None)
@@ -802,7 +784,6 @@ class InterVA5:
 
         # Check if there is a valid va object
         if len(va) < 1:
-            print("No va5 object found")
             return None
         # Initialize the population distribution
         dist = None
@@ -1050,15 +1031,12 @@ async def websocket_broadcast(progress_data):
     
 def get_data(package: str, filename: str) -> bytes:
     current_dir = Path(__file__).resolve().parent
-    print(f"Original current_dir: {current_dir}")
 
     if package and current_dir.name != package:
         # Replace the last part of the path with `package`
         current_dir = current_dir.parent / package
-        print(f"Adjusted current_dir to match package: {current_dir}")
 
     pathname = current_dir / "data" / filename
-    print(f"Final path to file: {pathname}")
 
     with open(pathname, "rb") as file:
         return file.read()

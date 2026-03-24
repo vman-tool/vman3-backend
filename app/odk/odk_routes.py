@@ -62,7 +62,6 @@ async def get_form_submission_status(
 ):
     try:
         records_margins= await data_download. get_margin_dates_and_records_count(db)
-        print(records_margins)
         if records_margins is not None:
             earliest_date = records_margins.get('earliest_date', None)
             latest_date = records_margins.get('latest_date', None)
@@ -82,7 +81,6 @@ async def get_form_submission_status(
                 }
            
     except Exception as e:
-        print(e)
         raise HTTPException(status_code=500, detail=str(e))
 
 #@log_to_db(context="sync_odk_data_with_async", log_args=True)
@@ -137,7 +135,6 @@ async def fetch_odk_data_with_async_endpoint(
         return {"status": "Data fetch initiated", "using_celery": True, **initial_response}
 
     except Exception as e:
-        print(e)
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -224,7 +221,7 @@ async def get_sync_status(
             )
         
     except Exception as e:
-        print(f"Error getting sync status: {e}")
+        app_logger.error(f"Error getting sync status: {e}")
         # Return default sync status instead of raising an error
         try:
             from app.odk.services.data_download import get_margin_dates_and_records_count

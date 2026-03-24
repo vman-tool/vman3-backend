@@ -11,6 +11,7 @@ from app.shared.configs.constants import db_collections
 from app.shared.configs.models import ResponseMainModel
 from app.shared.configs.security import get_location_limit_values
 from app.shared.middlewares.exceptions import BadRequestException
+from app.utilits.logger import app_logger
 
 
 async def fetch_va_records(current_user:dict,paging: bool = True, page_number: int = 1, limit: int = 10, start_date: Optional[date] = None, end_date: Optional[date] = None, locations: Optional[List[str]] = None,  date_type:Optional[str]=None,  db: StandardDatabase = None) -> ResponseMainModel:
@@ -68,8 +69,6 @@ async def fetch_va_records(current_user:dict,paging: bool = True, page_number: i
             })
 
         query += "RETURN doc"
-        # print(query)
-        # print(query)
         def execute_query():
             cursor = db.aql.execute(query, bind_vars=bind_vars, cache=True)
             return [map_to_data_response(config, document) for document in cursor]
@@ -106,7 +105,6 @@ async def fetch_va_records(current_user:dict,paging: bool = True, page_number: i
 
 async def fetch_va_records_json(current_user:dict,paging: bool = True,data_source:Optional[str]=None, task_id:Optional[str]=None, page_number: int = 1, limit: int = 10, start_date: Optional[date] = None, end_date: Optional[date] = None, locations: Optional[List[str]] = None,date_type:Optional[str]=None, db: StandardDatabase = None, top:Optional[int]=None) -> ResponseMainModel:
     try:
-        print(data_source, task_id)
         config = await fetch_odk_config(db)
         region_field = config.field_mapping.location_level1
         # locationKey, locationLimitValues = get_location_limit_values(current_user)
@@ -165,7 +163,6 @@ async def fetch_va_records_json(current_user:dict,paging: bool = True,data_sourc
             bind_vars["size"] = top
 
         query += "RETURN doc"
-        print(query)
         def execute_json_query():
             cursor = db.aql.execute(query, bind_vars=bind_vars, cache=True)
             return [document for document in cursor]
@@ -193,4 +190,68 @@ async def fetch_va_records_json(current_user:dict,paging: bool = True,data_sourc
         print(e)
         raise BadRequestException(f"Failed to fetch records: {str(e)}",str(e))
     
-    
+async def fetch_va_records_count(current_user:dict, start_date: Optional[date] = None, end_date: Optional[date] = None, locations: Optional[List[str]] = None,date_type:Optional[str]=None, db: StandardDatabase = None, top:Optional[int]=None, data_source:Optional[str]=None) -> int:
+    try:
+        config = await fetch_odk_config(db)
+        region_field = config.field_mapping.location_level1
+        
+        if date_type is not None:
+            if date_type == 'submission_date':
+                today_field = 'submissiondate'
+            elif date_type == 'death_date':
+                today_field = 'id10023'
+            elif date_type == 'interview_date':
+                today_field = 'id10012'
+            else:
+                today_field = config.field_mapping.date 
+        else:
+            today_field = config.field_mapping.date 
+            
+        collection = db.collection(db_collections.VA_TABLE)
+        
+        # Build count query with same filters
+        query = f"FOR doc IN {collection.name} "
+        bind_vars = {}
+        filters = []
+        
+        if start_date:
+            filters.append(f"doc.{today_field} >= @start_date")
+            bind_vars["start_date"] = str(start_date)
+        
+        if end_date:
+            filters.append(f"doc.{today_field} <= @end_date")
+            bind_vars["end_date"] = str(end_date)
+
+        if locations:
+            filters.append(f"doc.{region_field} IN @locations")
+            bind_vars["locations"] = locations
+            
+        if data_source is None: 
+            filters.append('doc.vman_data_source !="data_source"')
+        if data_source:
+            filters.append(f'doc.vman_data_source =="{data_source}"')
+            
+        if filters:
+            query += "FILTER " + " AND ".join(filters) + " "
+            
+        if top and top > 0:
+            query += "LIMIT @size "
+            bind_vars["size"] = top
+            
+        query += "RETURN 1"
+        
+        count_query = f"RETURN LENGTH({query})"
+        
+        def execute_count():
+            cursor = db.aql.execute(query, bind_vars=bind_vars, cache=True)
+            # Length of RETURN 1 is the count
+            count = 0
+            for _ in cursor:
+                count += 1
+            return count
+
+        return await run_in_threadpool(execute_count)
+        
+    except Exception as e:
+        print(f"Error in fetch_va_records_count: {e}")
+        return 0

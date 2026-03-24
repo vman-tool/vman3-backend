@@ -255,7 +255,6 @@ def _csmf_without_interva_rule(
 
     # Check if there is a valid va object
     if va.shape[0] < 1:
-        print("No va5 object found")
         return None
 
     # Initialize the population distribution
@@ -269,7 +268,6 @@ def _csmf_without_interva_rule(
     undetermined = 0
 
     if dist is None:
-        print("No va probability found in input")
         return None
 
     # Pick not simply the top # causes,
@@ -345,7 +343,6 @@ def _csmf_with_interva_rule(va5: DataFrame) -> Series:
 
     # Check if there is a valid va object
     if va.shape[0] < 1:
-        print("No va5 object found")
         return None
     # Initialize the population distribution
     dist = None
