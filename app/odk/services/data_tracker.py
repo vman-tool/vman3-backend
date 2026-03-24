@@ -45,7 +45,6 @@
 #     }}  , upsert=True )
 
 # async def log_chunk_remove( chunk_id):
-   
 #     await process_tracker_collection.delete_one({  '_id': chunk_id,})
 
 # # Function to update the status of a chunk download
@@ -100,7 +99,6 @@ async def get_last_processed_timestamp(db: StandardDatabase):
             return None
         
         return doc['timestamp']
-    except Exception as e:
         print(f"get_last_processed_timestamp :Error executing AQL: {str(e)}")
         raise e
         return None
@@ -145,7 +143,6 @@ async def log_chunk_start(db: StandardDatabase, chunk_id, total_data_count, star
         
         def execute_chunk_start():
             collection.insert({
-                '_key': chunk_id,
                 'total_data_count': total_data_count,
                 'start_date': start_date,
                 'end_date': end_date,
@@ -185,7 +182,6 @@ async def log_chunk_update(db: StandardDatabase, chunk_id, status='finished', er
 # Function to remove a chunk record
 async def log_chunk_remove(db: StandardDatabase, chunk_id):
     try:
-        
         collection = db.collection(db_collections.DOWNLOAD_PROCESS_TRACKER)
         
         def execute_chunk_remove():

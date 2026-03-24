@@ -18,6 +18,7 @@ from app.ccva.utilits.interva.interva5 import InterVA5
 from app.settings.services.odk_configs import fetch_odk_config
 from app.shared.configs.arangodb import null_convert_data, remove_null_values
 from app.shared.configs.constants import db_collections
+from app.shared.utils.async_utils import call_update_callback
 # from app.shared.configs.models import ResponseMainModel
 
 # def transform_data(va_data:str|pd.DataFrame, id_col: str = 'instanceID')->pd.DataFrame:
@@ -51,11 +52,15 @@ from app.shared.configs.constants import db_collections
 # The websocket_broadcast function for broadcasting progress updates
 async def websocket_broadcast(task_id: str, progress_data: dict):
     try:
-    
-        from app.main import (
-            websocket__manager,  # Ensure this points to your actual WebSocket manager instance
-        )
-        await websocket__manager.broadcast(task_id, json.dumps(progress_data))
+        from app.main import websocket__manager
+        
+        # Ensure progress_data is a dict (handles Pydantic models)
+        if hasattr(progress_data, 'model_dump'):
+            progress_data = progress_data.model_dump()
+        elif hasattr(progress_data, 'dict'):
+            progress_data = progress_data.dict()
+            
+        await websocket__manager.broadcast(task_id, json.dumps(progress_data, default=str))
     except Exception as e:
         raise e
 
@@ -101,7 +106,7 @@ async def run_ccva_public(db: StandardDatabase, records:any, task_id: str, task_
 
 
         # Convert records to DataFrame directly - Run in thread to prevent blocking
-        database_dataframe = await asyncio.to_thread(lambda: pd.DataFrame.from_records(remove_null_values(records)))
+        database_dataframe = await asyncio.to_thread(lambda: pd.DataFrame.from_records(records))
         # Fetch the  configuration
         config = await fetch_odk_config(db, True) # TODOS: the configaration should be loaded from the UI/dashboard , not store in db
         id_col = config.field_mapping.instance_id
@@ -126,7 +131,7 @@ async def run_ccva_public(db: StandardDatabase, records:any, task_id: str, task_
     except Exception as e:
         print(e)
         error_message = {"progress": 0, "message": str(e), "status":'error',"elapsed_time": f"{(datetime.now() - start_time).seconds // 3600}:{(datetime.now() - start_time).seconds // 60 % 60}:{(datetime.now() - start_time).seconds % 60}", "task_id": task_id, "error": True}
-        await update_callback(error_message)
+        call_update_callback(update_callback, error_message)
         task_results[task_id] = error_message
         
       
@@ -151,15 +156,15 @@ def runCCVA(odk_raw:pd.DataFrame, id_col: str = None,date_col:str =None,start_ti
         # Create an InterVA5 instance with the async callback
         iv5out = InterVA5(input_data,task_id=file_id, hiv=hiv, malaria=malaria, write=True, directory=output_folder, filename=file_id,start_time=start_time, update_callback=update_callback, return_checked_data=True)
 
-        asyncio.run(update_callback(InterVA5Progress(
-        progress=7,
-        message="Running InterVA5 analysis...",
-        status="running",
-        total_records=len(input_data),
-        elapsed_time=f"{(datetime.now() - start_time).seconds // 3600}:{(datetime.now() - start_time).seconds // 60 % 60}:{(datetime.now() - start_time).seconds % 60}",
-        task_id=file_id,
-        error=False
-    ).model_dump_json()))
+        call_update_callback(update_callback, InterVA5Progress(
+            progress=7,
+            message="Running InterVA5 analysis...",
+            status="running",
+            total_records=len(input_data),
+            elapsed_time=f"{(datetime.now() - start_time).seconds // 3600}:{(datetime.now() - start_time).seconds // 60 % 60}:{(datetime.now() - start_time).seconds % 60}",
+            task_id=file_id,
+            error=False
+        ).model_dump_json())
         
         # Run the InterVA5 analysis, with progress updates via the async callback
         iv5out.run()
@@ -192,7 +197,7 @@ def runCCVA(odk_raw:pd.DataFrame, id_col: str = None,date_col:str =None,start_ti
         print(len(rcd))
         # print(rcd)
         if rcd == [] or rcd is None:
-            ensure_task(update_callback({"progress": 0, "message": "No records found", "status": 'error',"elapsed_time": f"{(datetime.now() - start_time).seconds // 3600}:{(datetime.now() - start_time).seconds // 60 % 60}:{(datetime.now() - start_time).seconds % 60}", "task_id": file_id, "error": True}))
+            call_update_callback(update_callback, {"progress": 0, "message": "No records found", "status": 'error',"elapsed_time": f"{(datetime.now() - start_time).seconds // 3600}:{(datetime.now() - start_time).seconds // 60 % 60}:{(datetime.now() - start_time).seconds % 60}", "task_id": file_id, "error": True})
             raise Exception("No records found")
             return
         # Iterate over each dictionary and add the 'task_id' field
@@ -203,10 +208,11 @@ def runCCVA(odk_raw:pd.DataFrame, id_col: str = None,date_col:str =None,start_ti
       
         
        # get the ccva form data (individual ones, eg, locations, gender, age_group) from the database and merge with the results
+        # Use run_in_threadpool instead of asyncio.run for calling async functions from sync runCCVA
         results_to_insert = asyncio.run(getVADataAndMergeWithResults(db, null_convert_data(rcd)))
         if results_to_insert is None:
             print("No records found")
-            ensure_task(update_callback({"progress": 0, "message": "No records found", "status": 'error',"elapsed_time": f"{(datetime.now() - start_time).seconds // 3600}:{(datetime.now() - start_time).seconds // 60 % 60}:{(datetime.now() - start_time).seconds % 60}", "task_id": file_id, "error": True}))
+            call_update_callback(update_callback, {"progress": 0, "message": "No records found", "status": 'error',"elapsed_time": f"{(datetime.now() - start_time).seconds // 3600}:{(datetime.now() - start_time).seconds // 60 % 60}:{(datetime.now() - start_time).seconds % 60}", "task_id": file_id, "error": True})
             return
         print("InterVA5 analysis completed.",len(results_to_insert))
         # NOTE: Public CCVA data is NOT saved to CCVA_RESULTS collection
@@ -247,7 +253,7 @@ def runCCVA(odk_raw:pd.DataFrame, id_col: str = None,date_col:str =None,start_ti
 
     except Exception as e:
         print(f"Error during CCVA analysis: {e}")
-        ensure_task(update_callback({"progress": 0, "message": f"Error during CCVA analysis: {e}", "status": 'error',"elapsed_time": f"{(datetime.now() - start_time).seconds // 3600}:{(datetime.now() - start_time).seconds // 60 % 60}:{(datetime.now() - start_time).seconds % 60}", "task_id": file_id, "error": True}))
+        call_update_callback(update_callback, {"progress": 0, "message": f"Error during CCVA analysis: {e}", "status": 'error',"elapsed_time": f"{(datetime.now() - start_time).seconds // 3600}:{(datetime.now() - start_time).seconds // 60 % 60}:{(datetime.now() - start_time).seconds % 60}", "task_id": file_id, "error": True})
         raise e
 
         
@@ -411,7 +417,7 @@ def compile_ccva_results(iv5out, top=10, undetermined=True,start_time:timedelta=
     #         task_id=task_id,
     #         error=False
     #     ).model_dump_json()))
-    ensure_task(  websocket_broadcast(task_id,{"progress": 100,"data":{
+    call_update_callback(lambda p: websocket_broadcast(task_id, p), {"progress": 100,"data":{
         "task_id": task_id,
         "created_at": datetime.now().isoformat(),
         "total_records": total_records,
@@ -431,7 +437,7 @@ def compile_ccva_results(iv5out, top=10, undetermined=True,start_time:timedelta=
         "processed_data": processed_data if processed_data else [],
         "error_logs": error_logs if error_logs else [],
         # "merged": merged_results
-    }, "message": "Finish CCVA analysis...", "status": 'completed',"elapsed_time": f"{(datetime.now() - start_time).seconds // 3600}:{(datetime.now() - start_time).seconds // 60 % 60}:{(datetime.now() - start_time).seconds % 60}", "task_id": task_id, "error": False}))
+    }, "message": "Finish CCVA analysis...", "status": 'completed',"elapsed_time": f"{(datetime.now() - start_time).seconds // 3600}:{(datetime.now() - start_time).seconds // 60 % 60}:{(datetime.now() - start_time).seconds % 60}", "task_id": task_id, "error": False})
 
     return ccva_public_result
 
@@ -708,18 +714,3 @@ FOR doc IN {collection.name}
 
 
     return updated_results
-
-
-def ensure_task(task):
-    """
-    Helper to run a coroutine task safely.
-    If there's a running loop, schedule it.
-    If not, run it synchronously.
-    """
-    try:
-        # Check if an event loop is running
-        loop = asyncio.get_running_loop()
-        return loop.create_task(task)
-    except RuntimeError:
-        # If no running loop, create a new one and run the task
-        return asyncio.run(task)
