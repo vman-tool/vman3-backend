@@ -180,6 +180,7 @@ async def get_field_value_from_va_records(field: str, db: StandardDatabase = Non
     try:
 
         query = f"""
+                FOR doc IN {db_collections.VA_TABLE}
                 FILTER doc.{field} != null
                 COLLECT unique = doc.{field}
                 RETURN unique
@@ -187,7 +188,7 @@ async def get_field_value_from_va_records(field: str, db: StandardDatabase = Non
 
         def execute_field_query():
             cursor = db.aql.execute(query)
-            return [document for document in cursor]
+            return [document for document in cursor]        
 
         data = await run_in_threadpool(execute_field_query)
 
