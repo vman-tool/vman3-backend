@@ -1,4 +1,3 @@
-version: "3.8"
 
 services:
   nginx:
@@ -102,43 +101,36 @@ services:
     volumes:
       - ccva_files:/app/ccva_files
       - app_data:/app
+      - uploads:/vman3/app/uploads
     env_file:
       - .env
     environment:
       PYTHONUNBUFFERED: "1"
-      # Override Redis URL to use Docker network service name
-      REDIS_URL: "redis://redis:6379"
+      # Redis URLs for Celery broker/backend - use Docker service name
+      REDIS_URL: "redis://redis-vman3:6379"
+      REDIS_CELERY_URL: "redis://redis-vman3:6379"
+      REDIS_PASSWORD: "vman@1029"
     networks:
       - vman3-net
     depends_on:
       - redis
       - arango-db
-    restart: always
 
-  # Flower - Celery monitoring UI (access via nginx with auth)
+  # Flower - Celery monitoring UI (dedicated image, much lighter)
   flower:
     container_name: flower
-    image: ilyatuu/vman3_backend:latest
+    image: mher/flower:2.0
     command:
       [
-        "python",
-        "-m",
         "celery",
-        "-A",
-        "app.celery_app",
+        "--broker=redis://:vman@1029@redis-vman3:6379/0",
         "flower",
         "--port=5555",
-        "--url_prefix=flower"
+        "--url-prefix=flower"
       ]
-    # Port not exposed directly - access via nginx with auth
+    # Accessible via nginx at /flower (basic auth protected)
     # ports:
     #   - "5555:5555"
-    env_file:
-      - .env
-    environment:
-      PYTHONUNBUFFERED: "1"
-      # Override Redis URL to use Docker network service name
-      REDIS_URL: "redis://redis:6379"
     networks:
       - vman3-net
     depends_on:
@@ -146,9 +138,10 @@ services:
       - celery-worker
     restart: always
 
+
 networks:
   vman3-net:
-    driver: bridge
+    external: true
 
 volumes:
   vman3db:
