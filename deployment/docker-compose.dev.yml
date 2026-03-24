@@ -1,0 +1,50 @@
+# docker-compose.dev.yml
+# Use this for development with hot-reload enabled.
+# Run with: docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d
+
+services:
+  frontend:
+    # Use a node image for development to run ng serve
+    image: node:22-alpine
+    working_dir: /app
+    ports:
+      - "4200:4200"
+    volumes:
+      - ../../vman3-frontend:/app
+    # Note: node_modules should ideally be present on host or in a volume
+    command: sh -c "npm install --legacy-peer-deps && npm start -- --host 0.0.0.0 --poll 2000"
+    networks:
+      - vman3-net
+
+  backend:
+    command:
+      [
+        "uvicorn",
+        "app.main:app",
+        "--host",
+        "0.0.0.0",
+        "--port",
+        "8080",
+        "--reload",
+        "--reload-dir",
+        "/vman3/app"
+      ]
+    environment:
+      DEBUG: "True"
+      PYTHONUNBUFFERED: "1"
+
+  celery-worker:
+    command:
+      [
+        "celery",
+        "-A",
+        "app.celery_app",
+        "worker",
+        "--loglevel=info",
+        "-Q",
+        "ccva,odk,celery",
+        "-c",
+        "1"
+      ]
+    environment:
+      DEBUG: "True"
