@@ -1,6 +1,6 @@
 import asyncio
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import List, Dict, Any
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
@@ -151,6 +151,51 @@ async def ccva_cleanup_job(db=None):
     except Exception as e:
         logger.error(f"Error executing CCVA cleanup job: {str(e)}")
 
+async def ccva_stale_task_check_job(db=None):
+    """
+    Check for CCVA tasks that are stuck in 'running' or 'init' state
+    and haven't been updated in 10 minutes.
+    """
+    try:
+        if db is None:
+            # Re-get the session if it's lost
+            async for session in get_arangodb_session():
+                db = session
+                break
+        
+        if db is None:
+            return
+
+        # Query for stale tasks
+        ten_minutes_ago = (datetime.utcnow() - timedelta(minutes=10)).isoformat()
+        
+        aql = f"""
+        FOR task IN {db_collections.TASK_PROGRESS}
+        FILTER task.status IN ['running', 'init']
+        FILTER task.timestamp < @ten_minutes_ago
+        UPDATE task WITH {{ 
+            status: 'failed', 
+            message: 'Task stalled or worker crashed (detected by background monitor).',
+            error: true,
+            timestamp: @now
+        }} IN {db_collections.TASK_PROGRESS}
+        RETURN NEW
+        """
+        
+        bind_vars = {
+            "ten_minutes_ago": ten_minutes_ago,
+            "now": datetime.utcnow().isoformat()
+        }
+        
+        cursor = db.aql.execute(aql, bind_vars=bind_vars)
+        updated = [doc for doc in cursor]
+        
+        if updated:
+            logger.info(f"Stale task monitor: Flagged {len(updated)} orphaned task(s) as failed.")
+            
+    except Exception as e:
+        logger.error(f"Error in stale task monitor: {e}")
+
 async def start_scheduler():
     db = None
     async for session in get_arangodb_session():
@@ -187,6 +232,18 @@ async def start_scheduler():
             kwargs={'db': db}
         )
         logger.info("Scheduled CCVA cleanup job to run every 6 hours (privacy-first backup)")
+
+    # Schedule stale task monitoring job to run every minute
+    if not scheduler.get_job('ccva_stale_task_check_job'):
+        scheduler.add_job(
+            ccva_stale_task_check_job,
+            'interval',
+            minutes=1,
+            id='ccva_stale_task_check_job',
+            replace_existing=True,
+            kwargs={'db': db}
+        )
+        logger.info("Scheduled stale task monitor job (running every 1 minute)")
 
 async def shutdown_scheduler():
     """Shutdown the scheduler"""
