@@ -15,11 +15,15 @@ from decouple import config
 REDIS_URL = config('REDIS_CELERY_URL', default='redis://redis:6379')
 REDIS_PASSWORD = config('REDIS_PASSWORD', default='vman@1029')
 
+import urllib.parse
+
 # Build broker URL with password
 if REDIS_PASSWORD:
+    # URL-encode password to handle special characters like '@'
+    encoded_password = urllib.parse.quote(REDIS_PASSWORD, safe='')
     if '://' in REDIS_URL:
         protocol, rest = REDIS_URL.split('://', 1)
-        BROKER_URL = f"{protocol}://:{REDIS_PASSWORD}@{rest}"
+        BROKER_URL = f"{protocol}://:{encoded_password}@{rest}"
     else:
         BROKER_URL = REDIS_URL
 else:

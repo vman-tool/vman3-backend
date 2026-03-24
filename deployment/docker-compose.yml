@@ -42,7 +42,7 @@ services:
       - "8080:8080"
     volumes:
       - ccva_files:/app/ccva_files
-      - app_data:/app
+      - ../app:/vman3/app
       - settings_json:/vman3/settings.json
       - uploads:/vman3/app/uploads
     env_file:
@@ -100,7 +100,7 @@ services:
       ]
     volumes:
       - ccva_files:/app/ccva_files
-      - app_data:/app
+      - ../app:/vman3/app
       - uploads:/vman3/app/uploads
     env_file:
       - .env
@@ -123,7 +123,7 @@ services:
     command:
       [
         "celery",
-        "--broker=redis://:vman@1029@redis-vman3:6379/0",
+        "--broker=redis://:vman%401029@redis-vman3:6379/0",
         "flower",
         "--port=5555",
         "--url-prefix=flower"
@@ -146,7 +146,6 @@ networks:
 volumes:
   vman3db:
   ccva_files:
-  app_data:
   uploads:
   settings_json:
 

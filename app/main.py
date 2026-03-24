@@ -22,6 +22,7 @@ from app.utilits.schedeular import shutdown_scheduler, start_scheduler
 from redis import asyncio as aioredis
 from fastapi_cache import FastAPICache
 from fastapi_cache.backends.redis import RedisBackend
+from app.celery_app import celery_app
 
 
 logger.add("./logs/app.log", rotation="500 MB")
