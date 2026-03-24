@@ -44,7 +44,7 @@ services:
         "-Q",
         "ccva,odk,celery",
         "-c",
-        "1"
+        "4"
       ]
     environment:
       DEBUG: "True"

@@ -94,7 +94,7 @@ services:
         "app.celery_app",
         "worker",
         "--loglevel=info",
-        "--concurrency=2",
+        "--concurrency=4",
         "-Q",
         "celery,ccva,odk"
       ]
@@ -120,7 +120,7 @@ services:
   # Flower - Celery monitoring UI (dedicated image, much lighter)
   flower:
     container_name: flower
-    image: mher/flower:2.0
+    image: mher/flower:master
     command:
       [
         "celery",

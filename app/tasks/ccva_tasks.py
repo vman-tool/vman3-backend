@@ -65,30 +65,39 @@ def publish_progress(task_id: str, progress_data: dict):
 )
 def run_ccva_task(
     self,
-    records_data: List[Dict],
-    task_id: str,
+    records_data: Optional[List[Dict]] = None,
+    task_id: str = "unknown",
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
     malaria_status: Optional[str] = None,
     hiv_status: Optional[str] = None,
     ccva_algorithm: Optional[str] = None,
-    user_id: str = "unknown"
+    user_id: str = "unknown",
+    date_type: Optional[str] = None,
+    top: Optional[int] = None,
+    access_limit: Optional[Dict] = None
 ):
     """
     Celery task to run CCVA analysis.
     
     This is a wrapper that runs the async CCVA function in a sync context
     and publishes progress updates to Redis Pub/Sub for WebSocket broadcasting.
+    
+    Optimization: If records_data is None, the task will fetch records from the 
+    database internally to avoid memory pressure during task dispatch.
     """
-    logger.info(f"Starting CCVA task {task_id} with {len(records_data)} records")
+    logger.info(f"Starting CCVA task {task_id}")
     
     start_time = datetime.now()
+    
+    # Check if we need to fetch data
+    is_fetch_mode = records_data is None
     
     # Publish initial progress
     publish_progress(task_id, {
         "progress": 1,
-        "total_records": len(records_data),
-        "message": "Starting CCVA analysis...",
+        "total_records": len(records_data) if records_data else 0,
+        "message": "Starting CCVA analysis..." if not is_fetch_mode else "Initializing CCVA worker...",
         "status": "running",
         "task_id": task_id,
         "error": False,
@@ -98,7 +107,7 @@ def run_ccva_task(
     try:
         # Import here to avoid circular imports
         from app.shared.configs.arangodb import get_arangodb_client_sync
-        from app.ccva.services.ccva_services import runCCVA
+        from app.ccva.services.ccva_services import runCCVA, get_record_to_run_ccva
         from app.settings.services.odk_configs import fetch_odk_config
         from app.shared.configs.models import ResponseMainModel
         
@@ -107,6 +116,45 @@ def run_ccva_task(
         
         # Get database connection (sync version for Celery)
         db = get_arangodb_client_sync()
+
+        # Step 1: Fetch data if optimized mode is used
+        if is_fetch_mode:
+            publish_progress(task_id, {
+                "progress": 2,
+                "message": "Fetching records from database...",
+                "status": "running",
+                "task_id": task_id,
+                "error": False
+            })
+            
+            # Construct mock current_user for fetch_va_records_json context
+            mock_user = {"uid": user_id, "access_limit": access_limit}
+            
+            # Run async fetch in sync worker
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            try:
+                records_response = loop.run_until_complete(
+                    get_record_to_run_ccva(
+                        current_user=mock_user,
+                        db=db,
+                        data_source=None,
+                        task_id=task_id,
+                        task_results={},
+                        start_date=start_date,
+                        end_date=end_date,
+                        date_type=date_type,
+                        top=top
+                    )
+                )
+                records_data = records_response.data
+            finally:
+                loop.close()
+            
+            if not records_data:
+                raise Exception("No records found in database for these filters.")
+            
+            logger.info(f"Worker fetched {len(records_data)} records from database")
         
         # Convert to DataFrame
         publish_progress(task_id, {
@@ -114,10 +162,12 @@ def run_ccva_task(
             "message": "Preparing data...",
             "status": "running",
             "task_id": task_id,
+            "total_records": len(records_data),
             "error": False
         })
         
         database_dataframe = pd.DataFrame.from_records(records_data)
+        del records_data # Free up memory as soon as possible
         
         # Get ODK config synchronously
         loop = asyncio.new_event_loop()

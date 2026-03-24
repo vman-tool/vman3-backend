@@ -285,7 +285,6 @@ async def fetch_form_questions(db: StandardDatabase):
             
             return ResponseMainModel(data=questions, message="Questions fetched successfully", total=count)
     except Exception as e:
-        print(e)
         raise e
 
 async def insert_data_to_arangodb(data: dict,data_source:str=None):
@@ -298,7 +297,6 @@ async def insert_data_to_arangodb(data: dict,data_source:str=None):
         db:ArangoDBClient = await get_arangodb_client()
         await db.replace_one(collection_name=db_collections.VA_TABLE, document=data)
     except Exception as e:
-        print(e)
         raise e
     
     
@@ -313,7 +311,6 @@ async def insert_many_data_to_arangodb(data: List[dict], overwrite_mode: str = '
         return await db.insert_many(collection_name=db_collections.VA_TABLE, documents=data, overwrite_mode=overwrite_mode, sanitize=False)
 
     except Exception as e:
-        print(e)
         raise e
     
 async def get_margin_dates_and_records_count(db: StandardDatabase = None):

@@ -81,7 +81,6 @@ async def get_form_submission_status(
                 }
            
     except Exception as e:
-        print(e)
         raise HTTPException(status_code=500, detail=str(e))
 
 #@log_to_db(context="sync_odk_data_with_async", log_args=True)
@@ -136,7 +135,6 @@ async def fetch_odk_data_with_async_endpoint(
         return {"status": "Data fetch initiated", "using_celery": True, **initial_response}
 
     except Exception as e:
-        print(e)
         raise HTTPException(status_code=500, detail=str(e))
 
 
