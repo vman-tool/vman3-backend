@@ -154,17 +154,24 @@ async def run_internal_ccva(
             # Use Celery for distributed task processing (recommended for production)
             # Convert records to serializable format for Celery
             records_data = remove_null_values(records.data)
-            run_ccva_task.delay(
-                records_data=records_data,
-                task_id=task_id,
-                start_date=str(start_date) if start_date else None,
-                end_date=str(end_date) if end_date else None,
-                malaria_status=malaria_status,
-                hiv_status=hiv_status,
-                ccva_algorithm=ccva_algorithm,
-                user_id=user_id
-            )
-            print('CCVA task dispatched to Celery')
+            try:
+                run_ccva_task.delay(
+                    records_data=records_data,
+                    task_id=task_id,
+                    start_date=str(start_date) if start_date else None,
+                    end_date=str(end_date) if end_date else None,
+                    malaria_status=malaria_status,
+                    hiv_status=hiv_status,
+                    ccva_algorithm=ccva_algorithm,
+                    user_id=user_id
+                )
+                print('CCVA task dispatched to Celery')
+            except Exception as dispatch_err:
+                print(f"❌ Failed to dispatch CCVA task to Celery: {dispatch_err}")
+                raise HTTPException(
+                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE, 
+                    detail="Background task service (Redis/Celery) is currently unavailable. Please check the backend services."
+                )
         else:
             # Use FastAPI BackgroundTasks (single-worker mode)
             background_tasks.add_task(run_ccva, db, records, task_id, task_results, start_date, end_date, malaria_status, hiv_status, ccva_algorithm, user_id)
@@ -203,6 +210,25 @@ async def get_ccva_progress(
     progress = await TaskProgressService.get_progress(db, task_id)
     if not progress:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task progress not found.")
+    
+    # Check for orphaned/stale tasks (e.g. if worker crashed with SIGKILL)
+    status_val = progress.get('status')
+    if status_val in ['running', 'init']:
+        last_update_str = progress.get('timestamp')
+        if last_update_str:
+            try:
+                # Remove 'Z' if present for fromisoformat
+                if last_update_str.endswith('Z'):
+                    last_update_str = last_update_str[:-1]
+                
+                last_update = datetime.fromisoformat(last_update_str)
+                # UTC comparison
+                if (datetime.utcnow() - last_update).total_seconds() > 600:  # 10 minutes timeout
+                    progress['status'] = 'failed'
+                    progress['message'] = "Task appears to have stalled or the worker crashed (SIGKILL). Please retry."
+                    progress['error'] = True
+            except Exception:
+                pass # Fallback to original progress if parsing fails
     
     return ResponseMainModel(data=progress, message="Progress fetched", error=False)
 

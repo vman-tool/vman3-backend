@@ -117,7 +117,7 @@ def run_ccva_task(
             "error": False
         })
         
-        database_dataframe = pd.DataFrame.from_records(remove_null_values(records_data))
+        database_dataframe = pd.DataFrame.from_records(records_data)
         
         # Get ODK config synchronously
         loop = asyncio.new_event_loop()

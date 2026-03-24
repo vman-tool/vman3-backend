@@ -106,7 +106,7 @@ async def run_ccva_public(db: StandardDatabase, records:any, task_id: str, task_
 
 
         # Convert records to DataFrame directly - Run in thread to prevent blocking
-        database_dataframe = await asyncio.to_thread(lambda: pd.DataFrame.from_records(remove_null_values(records)))
+        database_dataframe = await asyncio.to_thread(lambda: pd.DataFrame.from_records(records))
         # Fetch the  configuration
         config = await fetch_odk_config(db, True) # TODOS: the configaration should be loaded from the UI/dashboard , not store in db
         id_col = config.field_mapping.instance_id
