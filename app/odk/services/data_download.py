@@ -27,7 +27,7 @@ from app.shared.configs.models import ResponseMainModel
 async def update_sync_status_internal(db: StandardDatabase, last_sync_data_count: int, total_synced_data: int):
     """Internal function to update sync status in the database"""
     try:
-        print("Updating sync status internally")
+        logger.info("Updating sync status internally")
         # Ensure the system_configs collection exists
         if not db.has_collection(db_collections.SYSTEM_CONFIGS):
             db.create_collection(db_collections.SYSTEM_CONFIGS)
@@ -93,7 +93,6 @@ async def fetch_odk_data_initial(
                 total_data_count = data_for_count["@odata.count"]
                 server_latest_submisson_date = data_for_count['value'][0]['__system']['submissionDate']
             except Exception as e:
-                print(e)
                 raise e
 
             if total_data_count == available_data_count and start_date == server_latest_submisson_date:
@@ -130,7 +129,6 @@ async def fetch_odk_data_initial(
             
     except Exception as e:
         logger.error(f"Error fetching ODK data: {e}")
-        # print(e)
         raise HTTPException(status_code=500, detail=str(e))
         
 
@@ -214,8 +212,6 @@ async def fetch_odk_data_with_async(
                                 "records_processed": records_saved
                             }
                             await websocket__manager.broadcast("123", json.dumps(progress_data))
-                        
-                        print(f"\rDownloading: [{'=' * int(progress // 2)}{' ' * (50 - int(progress // 2))}] {progress:.0f}% - Elapsed time: {elapsed_time:.2f}s", end='', flush=True)
                 except Exception as e:
                     raise e
 
@@ -238,7 +234,6 @@ async def fetch_odk_data_with_async(
             # Get current total data count from database after sync
             current_records_info = await get_margin_dates_and_records_count(db)
             current_total_data = current_records_info.get('total_records', 0) if current_records_info else 0
-            print(f"Current total data: {current_total_data}")
             # Update sync status automatically after sync completion
             await update_sync_status_internal(db, records_saved, current_total_data)
 
