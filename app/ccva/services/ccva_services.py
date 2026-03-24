@@ -133,7 +133,7 @@ async def run_ccva(db: StandardDatabase, records:ResponseMainModel, task_id: str
 
 
         # Convert records to DataFrame directly - Run in thread to prevent blocking
-        database_dataframe = await asyncio.to_thread(lambda: pd.DataFrame.from_records(remove_null_values(records.data)))
+        database_dataframe = await asyncio.to_thread(lambda: pd.DataFrame.from_records(records.data))
 
         
 
