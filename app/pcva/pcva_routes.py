@@ -1,9 +1,9 @@
 from io import BytesIO
 import json
-from typing import Any, Dict, List, Optional, Union
+from typing import Dict, List, Optional
 
 from arango.database import StandardDatabase
-from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, WebSocket, WebSocketDisconnect, status, Request
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
 import pandas as pd
 import numpy as np
 
@@ -17,14 +17,8 @@ from app.pcva.requests.icd10_request_classes import (
 )
 from app.pcva.requests.va_request_classes import (
     AssignVARequestClass,
-    CodeAssignedVARequestClass,
     PCVAResultsRequestClass,
 )
-from app.pcva.responses.icd10_response_classes import (
-    ICD10CategoryResponseClass,
-    ICD10ResponseClass,
-)
-from app.pcva.responses.va_response_classes import CodedVAResponseClass
 from app.pcva.services.icd10_services import (
     create_icd10_categories_service,
     create_icd10_category_types_service,
@@ -56,16 +50,15 @@ from app.pcva.services.va_records_services import (
     get_uncoded_assignment_service,
     read_discordants_message,
     save_configurations_service,
-    save_discordant_message_service,
     unassign_va_service,
 )
 from app.shared.configs.arangodb import get_arangodb_session
 from app.shared.configs.models import ResponseMainModel
-from app.users.decorators.user import get_current_user, get_current_user_ws, oauth2_scheme
+from app.users.decorators.user import get_current_user, oauth2_scheme
 from app.users.models.user import User
 from app.shared.services.va_records import shared_fetch_va_records
 from app.pcva.requests.configurations_request_classes import PCVAConfigurationsRequest
-from app.utilits.db_logger import db_logger, log_to_db
+from app.utilits.db_logger import log_to_db
 
 pcva_router = APIRouter(
     prefix="/pcva",
@@ -392,7 +385,7 @@ async def update_icd10(
 
 #@log_to_db(context="get_assigned_va", log_args=True) 
 @pcva_router.get("/coders", status_code=status.HTTP_200_OK)
-async def get_assigned_va(
+async def get_coders_route(
     paging: Optional[bool] = Query(False, alias="paging"),
     page_number: Optional[int] = Query(1, alias="page_number"),
     limit: Optional[int] = Query(10, alias="limit"),
@@ -415,7 +408,7 @@ async def get_assigned_va(
 
 #@log_to_db(context="va-assignments", log_args=True) 
 @pcva_router.get("/va-assignments", status_code=status.HTTP_200_OK)
-async def get_assigned_va(
+async def get_va_assignments(
     paging: Optional[bool] = Query(None, alias="paging"),
     page_number: Optional[int] = Query(1, alias="page_number"),
     limit: Optional[int] = Query(10, alias="limit"),

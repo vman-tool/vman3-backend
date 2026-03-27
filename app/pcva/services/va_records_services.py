@@ -984,13 +984,20 @@ async def get_discordant_messages_service(va_id: str, coder: str, db: StandardDa
             raise HTTPException(status_code=400, detail="Coder ID is required.")
             
         query = f"""
-            LET discordant = (
+            LET coded = (
                 FOR doc in {db_collections.PCVA_RESULTS}
                 FILTER doc.assigned_va == @va AND doc.created_by == @coder
                 SORT doc.datetime DESC
                 COLLECT created_by = doc.created_by, assigned_va = doc.assigned_va
                 INTO latest_records = doc
                 RETURN FIRST(latest_records)
+            )
+            
+            LET discordants = (
+                FOR doc in {db_collections.PCVA_RESULTS}
+                FILTER doc.assigned_va == @va AND doc.created_by != @coder
+                SORT doc.datetime DESC
+                RETURN doc
             )
 
             LET messages = (
@@ -1016,11 +1023,13 @@ async def get_discordant_messages_service(va_id: str, coder: str, db: StandardDa
 
 
             RETURN {{
-                discordant: discordant,
+                coded: coded,
+                discordants: discordants,
                 messages: messages,
                 coders: coders
             }}
         """
+        
         bind_vars = {
             "va": va_id,
             "coder": coder
@@ -1029,7 +1038,11 @@ async def get_discordant_messages_service(va_id: str, coder: str, db: StandardDa
         discordant_messages_cursor = await PCVAMessages.run_custom_query(query=query, bind_vars=bind_vars, db = db)
         discordant_messages = discordant_messages_cursor.next()
 
-        discordant_messages['discordant'] = [await PCVAResultsResponseClass.get_structured_codedVA(pcva_result = discordant_messages['discordant'][0], db = db)]
+        discordant_messages['coded'] = [await PCVAResultsResponseClass.get_structured_codedVA(pcva_result = discordant_messages['coded'][0], db = db)]
+        discordant_messages['discordants'] = [
+            await PCVAResultsResponseClass.get_structured_codedVA(pcva_result=discordant, db=db)
+            for discordant in discordant_messages["discordants"]
+        ]
         return ResponseMainModel(data=discordant_messages, message="Discordant message fetched successfully!")
     
     except Exception as e:
