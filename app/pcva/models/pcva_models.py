@@ -130,6 +130,7 @@ class PCVAConfigurations(VManBaseModel):
     useICD11: bool
     vaAssignmentLimit: int
     concordanceLevel: int
+    showOtherCodersWork: bool
 
     @classmethod
     def get_collection_name(cls) -> str:
