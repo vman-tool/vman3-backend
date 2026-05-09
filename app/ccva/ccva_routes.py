@@ -52,6 +52,7 @@ async def run_ccva_with_csv(
     malaria_status = Body('h', alias="malaria_status"),
     ccva_algorithm: Optional[str] = Body(None, alias="ccva_algorithm"),
     hiv_status: Optional[str] = Body('h', alias="hiv_status"),
+    covid_status: Optional[str] = Body('v', alias="covid_status"),
     current_user: Optional[str] = Depends(get_current_user),
     start_date: Optional[date] = Body(None, alias="start_date"),
     top: Optional[int] = Body(None, alias="top"),
@@ -63,7 +64,7 @@ async def run_ccva_with_csv(
 
     try:
         # Validate ccva_algorithm
-        if ccva_algorithm is not None and ccva_algorithm not in ["InterVA5"]:
+        if ccva_algorithm is not None and ccva_algorithm not in ["InterVA5", "InterVA6"]:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid CCVA algorithm, or algorithm not yet supported.")
 
         # Generate task ID
@@ -91,7 +92,8 @@ async def run_ccva_with_csv(
             ccva_algorithm=ccva_algorithm,
             task_id=task_id,
             task_results=task_results,
-            db=db
+            db=db,
+            covid_status=covid_status
         )
 
         # Constructing initial response
@@ -117,10 +119,11 @@ async def run_ccva_with_csv(
 @ccva_router.post("", status_code=status.HTTP_200_OK,)
 async def run_internal_ccva(
     background_tasks: BackgroundTasks,
-    oauth = Depends(oauth2_scheme), 
+    oauth = Depends(oauth2_scheme),
     malaria_status = Body('h', alias="malaria_status"),
     ccva_algorithm: Optional[str] = Body(None, alias="ccva_algorithm"),
     hiv_status: Optional[str] = Body('h', alias="hiv_status"),
+    covid_status: Optional[str] = Body('v', alias="covid_status"),
     current_user: Optional[str] = Depends(get_current_user),
     start_date: Optional[date] = Body(None, alias="start_date"),
     end_date: Optional[date] = Body(None, alias="end_date"),
@@ -132,7 +135,7 @@ async def run_internal_ccva(
 
     try:
         # Validate ccva_algorithm
-        if ccva_algorithm is not None and ccva_algorithm not in ["InterVA5"]:
+        if ccva_algorithm is not None and ccva_algorithm not in ["InterVA5", "InterVA6"]:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid CCVA algorithm, or algorithm not yet supported.")
 
         # Generate task ID and fetch records
@@ -162,6 +165,7 @@ async def run_internal_ccva(
                     end_date=str(end_date) if end_date else None,
                     malaria_status=malaria_status,
                     hiv_status=hiv_status,
+                    covid_status=covid_status,
                     ccva_algorithm=ccva_algorithm,
                     user_id=user_id,
                     date_type=date_type,
@@ -180,7 +184,7 @@ async def run_internal_ccva(
                 raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No records found to run CCVA")
             
             total_records = len(records.data)
-            background_tasks.add_task(run_ccva, db, records, task_id, task_results, start_date, end_date, malaria_status, hiv_status, ccva_algorithm, user_id)
+            background_tasks.add_task(run_ccva, db, records, task_id, task_results, start_date, end_date, malaria_status, hiv_status, ccva_algorithm, user_id, covid_status)
         
         # Constructing response
         datas = {

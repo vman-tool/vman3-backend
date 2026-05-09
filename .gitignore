@@ -52,7 +52,7 @@ coverage.xml
 .hypothesis/
 .pytest_cache/
 cover/
-/*.csv
+*.csv
 /ccva_files/*
 !/ccva_files/.gitkeep
 # Jupyter Notebook
@@ -92,5 +92,8 @@ vmanenv
 .vmanenv
 .venv
 ./deployment/.env
+vman_backend
 
 results.csv
+shuku_readme.md
+/bin

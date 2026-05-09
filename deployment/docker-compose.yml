@@ -7,7 +7,7 @@ services:
       - "80:80"
     volumes:
       - ./nginx.conf:/etc/nginx/nginx.conf:ro
-      - ./.htpasswd:/etc/nginx/.htpasswd:ro  # For Flower basic auth
+      # - ./.htpasswd:/etc/nginx/.htpasswd:ro  # For Flower basic auth
     networks:
       - vman3-net
     restart: always
@@ -118,26 +118,26 @@ services:
     restart: always
 
   # Flower - Celery monitoring UI (dedicated image, much lighter)
-  flower:
-    container_name: flower
-    image: mher/flower:master
-    command:
-      [
-        "celery",
-        "--broker=redis://:vman%401029@redis-vman3:6379/0",
-        "flower",
-        "--port=5555",
-        "--url-prefix=flower"
-      ]
-    # Accessible via nginx at /flower (basic auth protected)
-    # ports:
-    #   - "5555:5555"
-    networks:
-      - vman3-net
-    depends_on:
-      - redis
-      - celery-worker
-    restart: always
+  # flower:
+  #   container_name: flower
+  #   image: mher/flower:master
+  #   command:
+  #     [
+  #       "celery",
+  #       "--broker=redis://:vman%401029@redis-vman3:6379/0",
+  #       "flower",
+  #       "--port=5555",
+  #       "--url-prefix=flower"
+  #     ]
+  #   # Accessible via nginx at /flower (basic auth protected)
+  #   # ports:
+  #   #   - "5555:5555"
+  #   networks:
+  #     - vman3-net
+  #   depends_on:
+  #     - redis
+  #     - celery-worker
+  #   restart: always
 
 
 networks:
