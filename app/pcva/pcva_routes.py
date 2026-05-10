@@ -32,6 +32,11 @@ from app.pcva.services.icd10_services import (
     update_icd10_category_types_service,
     update_icd10_codes,
 )
+from app.pcva.services.imports_va_records_service import (
+    get_import_details,
+    get_imports_va_by_import_detail,
+    import_va_records_from_file,
+)
 from app.pcva.services.va_records_services import (
     assign_va_service,
     code_assigned_va_service,
@@ -620,5 +625,49 @@ async def get_configurations(
 ) -> ResponseMainModel:
     try:
         return await get_configurations_service(db=db)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@pcva_router.post("/import-va-records", status_code=status.HTTP_200_OK)
+async def import_va_records(
+    file: UploadFile = File(...),
+    current_user: User = Depends(get_current_user),
+    db: StandardDatabase = Depends(get_arangodb_session)
+) -> ResponseMainModel:
+    try:
+        return await import_va_records_from_file(file=file, current_user = current_user, db=db)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@pcva_router.get("/import-va-details", status_code=status.HTTP_200_OK)
+async def list_import_details(
+    paging: bool = Query(True, alias="paging"),
+    page_number: int = Query(1, alias="page_number"),
+    limit: int = Query(10, alias="limit"),
+    current_user: User = Depends(get_current_user),
+    db: StandardDatabase = Depends(get_arangodb_session)
+) -> ResponseMainModel:
+    try:
+        return await get_import_details(paging=paging, page_number=page_number, limit=limit, db=db)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@pcva_router.get("/import-details/{import_detail_uuid}/va-records", status_code=status.HTTP_200_OK)
+async def get_import_detail_records(
+    import_detail_uuid: str,
+    paging: bool = Query(True, alias="paging"),
+    page_number: int = Query(1, alias="page_number"),
+    limit: int = Query(10, alias="limit"),
+    current_user: User = Depends(get_current_user),
+    db: StandardDatabase = Depends(get_arangodb_session)
+) -> ResponseMainModel:
+    try:
+        return await get_imports_va_by_import_detail(
+            import_detail_uuid=import_detail_uuid,
+            paging=paging,
+            page_number=page_number,
+            limit=limit,
+            db=db
+        )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

@@ -130,7 +130,7 @@ async def get_uncoded_assignment_service(paging: bool = True, page_number: int =
 
         query = f"""
             LET result = (
-                FOR doc IN form_submissions
+                FOR doc IN {db_collections.VA_TABLE}
                     LET coders_ids = (
                         FOR va IN {db_collections.ASSIGNED_VA}
                         FILTER va.vaId == doc.{config.field_mapping.instance_id} AND va.coder != @coder
