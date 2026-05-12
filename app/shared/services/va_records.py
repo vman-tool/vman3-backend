@@ -105,7 +105,7 @@ async def shared_fetch_va_records(paging: bool = True,  page_number: int = 1, li
                 query += f"""LIMIT @offset, @size RETURN {records_name})"""
             
             else:
-                query += f"RETURN {records_name}"
+                query += f"RETURN {records_name})"
                 
             query += f"""
                 // Step 2: Get the va IDs for the paginated results
