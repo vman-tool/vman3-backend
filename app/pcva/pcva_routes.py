@@ -78,7 +78,7 @@ pcva_socket_router = APIRouter(
 async def get_va_records(
     paging: Optional[bool] = Query(None, alias="paging"),
     page_number: Optional[int] = Query(1, alias="page_number"),
-    limit: Optional[int] = Query(10, alias="limit"),
+    limit: Optional[int] = Query(None, alias="limit"),
     include_assignment: Optional[str] = Query(None, alias="include_assignment"),
     format_records: Optional[bool] = Query(True, alias="format_records"),
     va_id: Optional[str] = Query(None, alias="va_id"),
@@ -101,7 +101,7 @@ async def get_va_records(
 async def get_unassigned_va_records(
     paging: Optional[bool] = Query(None, alias="paging"),
     page_number: Optional[int] = Query(1, alias="page_number"),
-    limit: Optional[int] = Query(10, alias="limit"),
+    limit: Optional[int] = Query(None, alias="limit"),
     coder: Optional[str] = Query(None, alias="coder"),
     db: StandardDatabase = Depends(get_arangodb_session)) -> ResponseMainModel:
 
@@ -119,7 +119,7 @@ async def get_unassigned_va_records(
 async def get_va_for_unnassignment(
     paging: Optional[bool] = Query(None, alias="paging"),
     page_number: Optional[int] = Query(1, alias="page_number"),
-    limit: Optional[int] = Query(10, alias="limit"),
+    limit: Optional[int] = Query(None, alias="limit"),
     coder: Optional[str] = Query(None, alias="coder"),
     db: StandardDatabase = Depends(get_arangodb_session)) -> ResponseMainModel:
 
