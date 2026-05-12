@@ -273,7 +273,7 @@ async def upload_categories_file(
         else:
             raise HTTPException(status_code=400, detail="Invalid file type")
         df = df.replace({np.nan: None})
-        data_dictionary = df.head().to_dict(orient="records")
+        data_dictionary = df.to_dict(orient="records")
         return await create_or_icd10_categories_from_file(data_dictionary, user, db)
     except Exception as e:
         raise e
@@ -306,7 +306,7 @@ async def upload_file(
         else:
             raise HTTPException(status_code=400, detail="Invalid file type")
         df = df.replace({np.nan: None})
-        data_dictionary = df.head().to_dict(orient="records")
+        data_dictionary = df.to_dict(orient="records")
         return await create_or_icd10_codes_from_file(data_dictionary, user, db)
     except Exception as e:
         raise e
@@ -323,7 +323,7 @@ async def upload_file(
 async def get_icd10(
     paging: Optional[bool] = Query(None, alias="paging"),
     page_number: Optional[int] = Query(1, alias="page_number"),
-    limit: Optional[int] = Query(10, alias="limit"),
+    limit: Optional[int] = Query(None, alias="limit"),
     include_deleted: Optional[str] = Query(None, alias="include_deleted"),
     search_term: Optional[str] = Query(None, alias="search_term"),
     categories: Optional[str] = Query(None, alias="categories"),
@@ -332,6 +332,9 @@ async def get_icd10(
 
     try:
         allowPaging = paging if paging is not None else True
+        if allowPaging and limit is None:
+            limit = 10
+
         include_deleted = False if include_deleted is not None and include_deleted.lower() == 'false' else True
         filters = {}
         if search_term and search_term.strip():
