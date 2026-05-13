@@ -2,29 +2,26 @@ from datetime import datetime
 from io import BytesIO
 import json
 from typing import Dict
-from arango import ArangoError
 from arango.database import StandardDatabase
 from fastapi import HTTPException
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.responses import StreamingResponse
 
-from app.pcva.models.pcva_models import ICD10, AssignedVA, CodedVA, PCVAConfigurations, PCVAMessages, PCVAResults
-from app.pcva.requests.va_request_classes import AssignVARequestClass, CodeAssignedVARequestClass, PCVAResultsRequestClass
-from app.pcva.responses.va_response_classes import AssignVAResponseClass, CodedVAResponseClass, CoderResponseClass, PCVAResultsResponseClass, VAQuestionResponseClass
+from app.pcva.models.pcva_models import ICD10, AssignedVA, PCVAConfigurations, PCVAMessages, PCVAResults
+from app.pcva.requests.va_request_classes import AssignVARequestClass, PCVAResultsRequestClass
+from app.pcva.responses.va_response_classes import AssignVAResponseClass, CoderResponseClass, PCVAResultsResponseClass, VAQuestionResponseClass
 from app.shared.configs.constants import AccessPrivileges, db_collections
-from app.shared.utils.database_utilities import add_query_filters, record_exists, replace_object_values
+from app.shared.utils.database_utilities import record_exists, replace_object_values
 from app.users.models.user import User
 from app.pcva.utilities.va_records_utils import format_va_record, get_categorised_pcva_results
 from app.shared.configs.models import Pager, ResponseMainModel, VManBaseModel
 from app.odk.models.questions_models import VA_Question
 from app.settings.services.odk_configs import fetch_odk_config
-from app.users.models.role import Role, UserRole
 
 import pandas as pd
 
 from app.pcva.requests.configurations_request_classes import PCVAConfigurationsRequest
 from app.pcva.utilities.pcva_utils import fetch_pcva_settings
 from app.shared.utils.response import populate_user_fields
-from app.shared.utils.cache import ttl_cache
    
 
 
@@ -114,10 +111,9 @@ async def get_uncoded_assignment_service(paging: bool = True, page_number: int =
         offset = (page_number - 1) * limit if paging else 0
 
         query = ""
-        paginator = ""
         bind_vars = {}
         if paging:
-            paginator = f"LIMIT @offset, @limit"
+            
             bind_vars.update({
                 "offset": offset,
                 "limit": limit
@@ -165,7 +161,6 @@ async def get_uncoded_assignment_service(paging: bool = True, page_number: int =
                         FILTER coderCount <= @maximum_assignment
                         RETURN vaId
                     )
-                    //{paginator}
                     RETURN MERGE(doc, {{assignments: assignmentCount , coders: coders}})
                 )
 
