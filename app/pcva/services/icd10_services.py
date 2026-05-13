@@ -1,4 +1,4 @@
-from typing import Dict, List
+from typing import Dict, List, Optional
 from arango import ArangoError
 from arango.database import StandardDatabase
 from fastapi import HTTPException
@@ -24,7 +24,7 @@ async def create_icd10_category_types_service(category_types, user, db: Standard
     except ArangoError as e:
         raise HTTPException(status_code=500, detail=f"Failed to create categories: {e}")
 
-async def get_icd10_category_types_service(paging: bool = True,  page_number: int = 1, filters: Dict= {}, limit: int = 10, include_deleted: bool = None, db: StandardDatabase = None) -> ResponseMainModel:
+async def get_icd10_category_types_service(paging: bool = True,  page_number: int = 1, filters: Dict= {}, limit: Optional[int] = None, include_deleted: bool = None, db: StandardDatabase = None) -> ResponseMainModel:
     try:
         categoryTypesData = await ICD10CategoryType.get_many(
             paging = paging, 
@@ -67,7 +67,7 @@ async def create_icd10_categories_service(categories: List[ICD10CategoryRequestC
     except ArangoError as e:
         raise HTTPException(status_code=500, detail=f"Failed to create categories: {e}")
 
-async def get_icd10_categories_service(paging: bool = True,  page_number: int = 1, filters: Dict= {}, limit: int = 10, include_deleted: bool = None, db: StandardDatabase = None) -> ResponseMainModel:
+async def get_icd10_categories_service(paging: bool = True,  page_number: int = 1, filters: Dict= {}, limit: Optional[int] = None, include_deleted: bool = None, db: StandardDatabase = None) -> ResponseMainModel:
     try:
         categoriesData = await ICD10Category.get_many(
             paging = paging, 
@@ -124,7 +124,7 @@ async def includeTypeFilter(type: str = None, filters: Dict = {}, db: StandardDa
     return filters
 
 
-async def get_icd10_codes(paging: bool = True,  page_number: int = 1, limit: int = 10, filters: Dict= None, include_deleted: bool = None, type: str = None, db: StandardDatabase = None) -> List[ICD10ResponseClass]:
+async def get_icd10_codes(paging: bool = True,  page_number: int = 1, limit: Optional[int] = None, filters: Dict= None, include_deleted: bool = None, type: str = None, db: StandardDatabase = None) -> List[ICD10ResponseClass]:
     try:
         if filters is None:
             filters = {}

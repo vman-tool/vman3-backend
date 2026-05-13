@@ -82,11 +82,9 @@ async def get_unassigned_va_service(paging: bool = True, page_number: int = 0, l
                         FILTER coderCount <= @maximum_assignment
                         RETURN vaId
                     )
-                    {paginator}
                     RETURN MERGE(doc, {{assignments: assignmentCount , coders: coders}})
                 )
             LET data = {'SLICE(result, @offset, @limit)' if paging else 'result'} 
-                
 
             RETURN {{
                 total: LENGTH(result),
