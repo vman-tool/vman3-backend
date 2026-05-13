@@ -1,6 +1,24 @@
-version: "3.8"
 
 services:
+  arango-db:
+    image: arangodb/arangodb:3.12.2
+    env_file:
+      - .env
+    networks:
+      - vman3-net
+    ports:
+      - 8529:8529
+    volumes:
+      - vman3db:/var/lib/arangodb3
+    command:
+      - arangod
+      - --server.endpoint=tcp://0.0.0.0:8529
+      - --rocksdb.write-buffer-size=128MB
+      - --rocksdb.total-write-buffer-size=512MB
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: any
   redis:
     container_name: redis-vman3-dev
     image: redis:latest
@@ -32,7 +50,7 @@ services:
     environment:
       PYTHONUNBUFFERED: "1"
       # Redis - point to Docker container, NOT localhost
-      REDIS_URL: "redis://redis:6379"
+      REDIS_URL: "redis://redis:6379/0"
       REDIS_PASSWORD: "vman@1029"
       # ArangoDB - from your .env file
       DB_URL: "http://64.227.70.122:8529"
@@ -71,11 +89,21 @@ services:
       - "5555:5555"  # Access Flower at http://localhost:5555
     environment:
       PYTHONUNBUFFERED: "1"
-      REDIS_URL: "redis://redis:6379"
+      REDIS_URL: "redis://redis:6379/0"
       REDIS_PASSWORD: "vman@1029"
     depends_on:
       - redis
       - celery-worker
     restart: always
 
+networks:
+  vman3-net:
+    external: true
 
+
+volumes:
+  vman3db:
+  ccva_files:
+  app_data:
+  uploads:
+  settings_json:
