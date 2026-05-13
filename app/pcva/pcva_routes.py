@@ -321,9 +321,9 @@ async def upload_file(
         description="Get ICD10 as saved in our database"
 )
 async def get_icd10(
-    paging: Optional[bool] = Query(None, alias="paging"),
-    page_number: Optional[int] = Query(1, alias="page_number"),
-    limit: Optional[int] = Query(None, alias="limit"),
+    paging: bool = Query(None, alias="paging"),
+    page_number: int = Query(1, alias="page_number"),
+    limit: int = Query(10, alias="limit"),
     include_deleted: Optional[str] = Query(None, alias="include_deleted"),
     search_term: Optional[str] = Query(None, alias="search_term"),
     categories: Optional[str] = Query(None, alias="categories"),
@@ -332,8 +332,6 @@ async def get_icd10(
 
     try:
         allowPaging = paging if paging is not None else True
-        if allowPaging and limit is None:
-            limit = 10
 
         include_deleted = False if include_deleted is not None and include_deleted.lower() == 'false' else True
         filters = {}
