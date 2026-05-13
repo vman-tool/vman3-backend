@@ -111,7 +111,7 @@ async def get_configs_settings(
 
 @settings_router.get("/version", status_code=status.HTTP_200_OK)
 async def get_version():
-    return '3.1.0'
+    return '3.1.1'
 
 @settings_router.post("/system_configs", status_code=status.HTTP_200_OK, response_model=ResponseMainModel)
 async def save_configs_settings(
