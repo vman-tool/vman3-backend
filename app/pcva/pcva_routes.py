@@ -101,7 +101,7 @@ async def get_va_records(
 async def get_unassigned_va_records(
     paging: Optional[bool] = Query(None, alias="paging"),
     page_number: Optional[int] = Query(1, alias="page_number"),
-    limit: Optional[int] = Query(None, alias="limit"),
+    limit: Optional[int] = Query(10, alias="limit"),
     coder: Optional[str] = Query(None, alias="coder"),
     db: StandardDatabase = Depends(get_arangodb_session)) -> ResponseMainModel:
 
@@ -117,9 +117,9 @@ async def get_unassigned_va_records(
 #@log_to_db(context="get_va_for_unnassignment", log_args=True)    
 @pcva_router.get("/get-uncoded-assigned-va", status_code=status.HTTP_200_OK)
 async def get_va_for_unnassignment(
-    paging: Optional[bool] = Query(None, alias="paging"),
-    page_number: Optional[int] = Query(1, alias="page_number"),
-    limit: Optional[int] = Query(None, alias="limit"),
+    paging: bool = Query(None, alias="paging"),
+    page_number: int = Query(1, alias="page_number"),
+    limit: int = Query(10, alias="limit"),
     coder: Optional[str] = Query(None, alias="coder"),
     db: StandardDatabase = Depends(get_arangodb_session)) -> ResponseMainModel:
 
