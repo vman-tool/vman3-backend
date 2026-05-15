@@ -323,7 +323,7 @@ async def upload_file(
 async def get_icd10(
     paging: bool = Query(None, alias="paging"),
     page_number: int = Query(1, alias="page_number"),
-    limit: int = Query(10, alias="limit"),
+    limit: int = Query(None, alias="limit"),
     include_deleted: Optional[str] = Query(None, alias="include_deleted"),
     search_term: Optional[str] = Query(None, alias="search_term"),
     categories: Optional[str] = Query(None, alias="categories"),

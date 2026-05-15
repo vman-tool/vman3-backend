@@ -66,7 +66,8 @@ collections_with_indexes = {
     db_collections.USERS: [
          {"fields": ["is_active"], "type": "persistent", "name": "u_is_active"},
          {"fields": ["id"], "type": "persistent", "name": "idx_user_id"},
-         {"fields": ["uid"], "type": "persistent", "name": "idx_user_uid"}
+         {"fields": ["uid"], "type": "persistent", "name": "idx_user_uid"},
+         {"fields": ["uuid"], "type": "persistent", "name": "idx_uuid"},
     ],
     db_collections.ROLES: [
         {"fields": ["is_deleted"], "type": "persistent", "name": "r_is_active"},
@@ -98,7 +99,9 @@ collections_with_indexes = {
         {"fields": ["uuid"], "unique": True, "type": "persistent", "name": "idx_icd10_uuid"}
     ],
     db_collections.ASSIGNED_VA: [
-        {"fields": ["is_deleted"], "type": "persistent", "name": "av_is_active"}
+        {"fields": ["is_deleted"], "type": "persistent", "name": "av_is_active"},
+        {"fields": ["coder", "vaId", "is_deleted"], "type": "persistent", "name": "idx_coder_deleted_vaId"}
+        
     ],
     db_collections.PCVA_RESULTS: [
         {"fields": ["is_deleted"], "type": "persistent", "name": "cv_is_active"},
