@@ -41,6 +41,8 @@ async def get_va_records(
     end_date: Optional[date] = Query(None, alias="end_date"),
     date_type: Optional[str]=Query(None, alias="date_type"),
     locations: Optional[str] = Query(None, alias="locations"),
+    search_by: Optional[str] = Query(None, alias="search_by"),
+    search_value: Optional[str] = Query(None, alias="search_value"),
     db: StandardDatabase = Depends(get_arangodb_session)):
 
     allow_paging = False if paging is not None and paging.lower() == 'false' else True
@@ -48,11 +50,13 @@ async def get_va_records(
         current_user=current_user,
         paging=allow_paging,
         page_number=page_number,
-        limit=limit,   
+        limit=limit,
         start_date=start_date,
         end_date=end_date,
-       locations=locations.split(",") if locations else None,
+        locations=locations.split(",") if locations else None,
         date_type=date_type,
+        search_by=search_by,
+        search_value=search_value,
         db=db)
     return response
 #@log_to_db(context="get_fetch_va_map_records", log_args=True)      

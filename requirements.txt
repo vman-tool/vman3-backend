@@ -34,7 +34,7 @@ idna==3.7
 importlib_metadata==8.0.0
 # interva==1.0.0
 ipykernel==6.29.5
-ipython==8.27.0
+ipython==8.18.1
 jedi==0.19.1
 Jinja2==3.1.4
 jupyter_client==8.6.2

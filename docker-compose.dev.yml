@@ -19,12 +19,11 @@ services:
       replicas: 1
       restart_policy:
         condition: any
-version: "3.8"
 
-services:
   redis:
     container_name: redis-vman3-dev
     image: redis:latest
+    platform: linux/amd64
     command: redis-server --requirepass vman@1029
     ports:
       - "6370:6379"
@@ -35,6 +34,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+    platform: linux/amd64
     command:
       [
         "python3",
