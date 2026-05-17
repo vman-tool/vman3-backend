@@ -14,10 +14,13 @@ from app.shared.middlewares.exceptions import BadRequestException
 from app.utilits.logger import app_logger
 
 
-async def fetch_va_records(current_user:dict,paging: bool = True, page_number: int = 1, limit: int = 10, start_date: Optional[date] = None, end_date: Optional[date] = None, locations: Optional[List[str]] = None,  date_type:Optional[str]=None,  db: StandardDatabase = None) -> ResponseMainModel:
+async def fetch_va_records(current_user:dict,paging: bool = True, page_number: int = 1, limit: int = 10, start_date: Optional[date] = None, end_date: Optional[date] = None, locations: Optional[List[str]] = None, date_type:Optional[str]=None, search_by: Optional[str] = None, search_value: Optional[str] = None, db: StandardDatabase = None) -> ResponseMainModel:
     try:
         config = await fetch_odk_config(db)
         region_field = config.field_mapping.location_level1
+        district_field = config.field_mapping.location_level2
+        va_id_field = config.field_mapping.va_id
+        interviewer_field = config.field_mapping.interviewer_name
         locationKey, locationLimitValues = get_location_limit_values(current_user)
 
 
@@ -58,6 +61,22 @@ async def fetch_va_records(current_user:dict,paging: bool = True, page_number: i
             filters.append(f"doc.{region_field} IN @locations")
             bind_vars["locations"] = locations
 
+        if search_by and search_value:
+            search_field_map = {
+                'vaId': va_id_field,
+                'region': region_field,
+                'district': district_field,
+                'location_level1': region_field,
+                'location_level2': district_field,
+                'interviewer_name': interviewer_field,
+                'interviewerName': interviewer_field,
+                'interviewDay': today_field,
+            }
+            field_name = search_field_map.get(search_by)
+            if field_name:
+                filters.append(f"LIKE(LOWER(TO_STRING(doc.{field_name})), @search_value_pattern, true)")
+                bind_vars["search_value_pattern"] = f"%{search_value.lower()}%"
+
         if filters:
             query += "FILTER " + " AND ".join(filters) + " "
 
@@ -75,11 +94,16 @@ async def fetch_va_records(current_user:dict,paging: bool = True, page_number: i
 
         data = await run_in_threadpool(execute_query)
 
-        # Fetch total count of documents
-        count_query = f"RETURN LENGTH({collection.name})"
+        # Fetch total count of documents matching the same filters
+        count_query = f"RETURN LENGTH(FOR doc IN {collection.name} "
+        if filters:
+            count_query += "FILTER " + " AND ".join(filters) + " "
+        count_query += "RETURN 1)"
         
         def execute_count_query():
-            total_records_cursor = db.aql.execute(count_query, cache=True)
+            # Avoid passing pagination bind vars (offset/size) to the count query
+            count_bind_vars = {k: v for k, v in bind_vars.items() if k not in ("offset", "size")}
+            total_records_cursor = db.aql.execute(count_query, bind_vars=count_bind_vars, cache=True)
             return total_records_cursor.next()
 
         total_records = await run_in_threadpool(execute_count_query)
