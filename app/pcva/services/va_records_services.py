@@ -46,48 +46,53 @@ async def get_unassigned_va_service(paging: bool = True, page_number: int = 0, l
         # TODO: Every instanceid field used has to come from settings since it's the unique VA ID identified in the VA Data records
 
         query = f"""
+            LET assigned_agg = (
+                FOR va IN {db_collections.ASSIGNED_VA}
+                    FILTER va.is_deleted == false
+                    COLLECT vaId = va.vaId, coder = va.coder WITH COUNT INTO count
+                    RETURN {{ vaId, coder, assignmentCount: count }}
+            )
+
+            LET va_map = (
+                FOR a IN assigned_agg
+                    COLLECT vaId = a.vaId INTO groups
+                    RETURN {{
+                        [vaId]: {{
+                            assignmentCount: SUM(groups[*].assignmentCount),
+                            coders: UNIQUE(groups[*].coder)
+                        }}
+                    }}
+            )[0]
+
+            LET under_assigned = (
+                FOR a IN assigned_agg
+                    FILTER a.coder == @coder AND a.assignmentCount <= @maximum_assignment
+                    RETURN a.vaId
+            )
+
             LET result = (
                 FOR doc IN {db_collections.VA_TABLE}
-                    LET coders_ids = (
-                        FOR va IN {db_collections.ASSIGNED_VA}
-                        FILTER va.vaId == doc.{config.field_mapping.instance_id} 
-                        AND va.is_deleted == false
-                        RETURN va.coder
-                    )
-
+                    LET vaId = doc.{config.field_mapping.instance_id}
+                    LET agg = va_map[vaId]
+                    
+                    FILTER vaId NOT IN under_assigned
+                    
                     LET coders = (
                         FOR user IN {db_collections.USERS}
-                        FILTER user.uuid IN coders_ids
-                        RETURN {{
-                            uuid: user.uuid,
-                            name: user.name
-                        }}
+                            FILTER user.uuid IN (agg ? agg.coders : [])
+                            RETURN {{ uuid: user.uuid, name: user.name }}
                     )
                     
-                    LET assignmentCount = (
-                        FOR va IN {db_collections.ASSIGNED_VA}
-                        FILTER va.vaId == doc.{config.field_mapping.instance_id} 
-                        AND va.is_deleted == false
-                        COLLECT WITH COUNT INTO count
-                        RETURN count
-                    )[0]
+                    RETURN MERGE(doc, {{
+                        assignments: agg ? agg.assignmentCount : 0,
+                        coders: coders
+                    }})
+            )
 
-                    FILTER doc.instanceid NOT IN (
-                        FOR va IN {db_collections.ASSIGNED_VA}
-                        FILTER { 'va.coder == @coder AND' if coder else ''} va.is_deleted == false
-                        COLLECT vaId = va.vaId WITH COUNT INTO coderCount
-                        FILTER coderCount <= @maximum_assignment
-                        RETURN vaId
-                    )
-                    RETURN MERGE(doc, {{assignments: assignmentCount , coders: coders}})
-                )
-            LET data = {'SLICE(result, @offset, @limit)' if paging else 'result'} 
+            LET data = {'SLICE(result, @offset, @limit)' if paging else 'result'}
 
-            RETURN {{
-                total: LENGTH(result),
-                data: data
-            }}
-        """
+            RETURN {{ total: LENGTH(result), data: data }}
+            """
 
         if coder:
             bind_vars.update({
