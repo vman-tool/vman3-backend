@@ -92,5 +92,9 @@ vmanenv
 .vmanenv
 .venv
 ./deployment/.env
-
+vman_backend
+shuku_readme.md
 results.csv
+app/ccva/utilits/interva/data/causetext2022.csv
+app/ccva/utilits/interva/data/probbase2022.csv
+app/ccva/utilits/pycrossva/resources/mapping_configuration_files/2022WHOv0101_to_InterVA_2022.csv

@@ -29,6 +29,8 @@ class db_collections():
     CCVA_ERRORS_CORRECTIONS:str = 'ccva_errors_corrections'
     CCVA_PUBLIC_RESULTS: str = 'ccva_public_results'  # Single collection for all public CCVA data (temporary with TTL)
     TASK_PROGRESS: str = 'task_progress'
+    DATA_DICT_2022: str = 'data_dictionary_2022'
+    DATA_DICT_2016: str = 'data_dictionary_2016'
 
 class Special_Constants():
     UPLOAD_FOLDER: str = '/uploads'
@@ -141,6 +143,16 @@ collections_with_indexes = {
     ],
     db_collections.TASK_PROGRESS: [
         {"fields": ["expires_at"], "type": "persistent", "name": "idx_expires_at", "expireAfter": 0}
+    ],
+    db_collections.DATA_DICT_2022: [
+        {"fields": ["name"], "unique": True, "type": "persistent", "name": "idx_name"},
+        {"fields": ["type"], "unique": False, "type": "persistent", "name": "idx_type"},
+        {"fields": ["order"], "unique": False, "type": "persistent", "name": "idx_order"}
+    ],
+    db_collections.DATA_DICT_2016: [
+        {"fields": ["name"], "unique": True, "type": "persistent", "name": "idx_name"},
+        {"fields": ["type"], "unique": False, "type": "persistent", "name": "idx_type"},
+        {"fields": ["order"], "unique": False, "type": "persistent", "name": "idx_order"}
     ]
 }
 

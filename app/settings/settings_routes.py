@@ -38,6 +38,14 @@ from app.utilits.db_logger import db_logger, log_to_db
 from app.utilits.helpers import delete_file, save_file
 from app.utilits.schedeular import schedule_odk_fetch_job
 from app.shared.utils.cache import cache
+from app.settings.services.data_dictionary import (
+    parse_who_questionnaire,
+    upload_and_merge,
+    get_questions,
+    save_all_questions,
+    add_question,
+    update_question,
+)
 # from sqlalchemy.orm import Session
 
 async def get_current_total_data_count(db: StandardDatabase):
@@ -524,11 +532,124 @@ async def save_data_backup_settings(
         
         # Save the settings
         response = await add_configs_settings(config_data, db=db)
-        
+
         return ResponseMainModel(
             data=settings.model_dump(),
             message="Backup settings saved successfully"
         )
     except Exception as e:
         print(e)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+
+
+@settings_router.post("/data-dictionary/parse", status_code=status.HTTP_200_OK, response_model=ResponseMainModel)
+async def parse_data_dictionary(
+    file: UploadFile = File(...),
+    current_user=Depends(get_current_user),
+):
+    if not file.filename or not file.filename.endswith(".xlsx"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Only .xlsx files are supported.",
+        )
+
+    try:
+        contents = await file.read()
+        result = parse_who_questionnaire(contents)
+        return ResponseMainModel(
+            data=result, message="Questionnaire parsed successfully"
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e)
+        )
+
+
+@settings_router.post("/data-dictionary/upload", status_code=status.HTTP_200_OK, response_model=ResponseMainModel)
+async def upload_data_dictionary(
+    file: UploadFile = File(...),
+    version: str = Query(..., regex="^(2022|2016)$"),
+    questionnaire_name: Optional[str] = Query(None),
+    current_user=Depends(get_current_user),
+    db: StandardDatabase = Depends(get_arangodb_session),
+):
+    if not file.filename or not file.filename.endswith(".xlsx"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Only .xlsx files are supported.",
+        )
+    try:
+        contents = await file.read()
+        result = await upload_and_merge(contents, version, questionnaire_name, db)
+        return ResponseMainModel(data=result, message="Questionnaire uploaded and merged successfully")
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+
+
+@settings_router.get("/data-dictionary/{version}", status_code=status.HTTP_200_OK, response_model=ResponseMainModel)
+async def get_data_dictionary(
+    version: str,
+    current_user=Depends(get_current_user),
+    db: StandardDatabase = Depends(get_arangodb_session),
+):
+    try:
+        result = await get_questions(version, db)
+        return ResponseMainModel(data=result, message="Data dictionary fetched successfully")
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+
+
+@settings_router.put("/data-dictionary/{version}/questions", status_code=status.HTTP_200_OK, response_model=ResponseMainModel)
+async def save_data_dictionary_questions(
+    version: str,
+    payload: dict = Body(...),
+    current_user=Depends(get_current_user),
+    db: StandardDatabase = Depends(get_arangodb_session),
+):
+    try:
+        questions = payload.get("questions", [])
+        result = await save_all_questions(version, questions, db)
+        return ResponseMainModel(data=result, message="Questions saved successfully")
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+
+
+@settings_router.post("/data-dictionary/{version}/questions", status_code=status.HTTP_200_OK, response_model=ResponseMainModel)
+async def add_data_dictionary_question(
+    version: str,
+    payload: dict = Body(...),
+    current_user=Depends(get_current_user),
+    db: StandardDatabase = Depends(get_arangodb_session),
+):
+    try:
+        result = await add_question(version, payload, db)
+        return ResponseMainModel(data=result, message="Question added successfully")
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+
+
+@settings_router.put("/data-dictionary/{version}/questions/{question_name}", status_code=status.HTTP_200_OK, response_model=ResponseMainModel)
+async def update_data_dictionary_question(
+    version: str,
+    question_name: str,
+    payload: dict = Body(...),
+    current_user=Depends(get_current_user),
+    db: StandardDatabase = Depends(get_arangodb_session),
+):
+    try:
+        result = await update_question(version, question_name, payload, db)
+        return ResponseMainModel(data=result, message="Question updated successfully")
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    except Exception as e:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
