@@ -111,7 +111,7 @@ async def get_configs_settings(
 
 @settings_router.get("/version", status_code=status.HTTP_200_OK)
 async def get_version():
-    return '3.1.1'
+    return '3.2.1'
 
 @settings_router.post("/system_configs", status_code=status.HTTP_200_OK, response_model=ResponseMainModel)
 async def save_configs_settings(
@@ -532,3 +532,15 @@ async def save_data_backup_settings(
     except Exception as e:
         print(e)
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+
+
+@settings_router.get("/server-time", status_code=status.HTTP_200_OK)
+async def get_server_time():
+    """Return current server UTC time for client clock synchronization."""
+    import time as _time
+    now = datetime.utcnow()
+    return {
+        "epoch_ms": int(_time.time() * 1000),
+        "utc": now.strftime("%H:%M:%S"),
+        "iso": now.isoformat() + "Z"
+    }

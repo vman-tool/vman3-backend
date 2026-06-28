@@ -34,7 +34,9 @@ class FieldMapping(BaseModel):
     consent_id: str  # Optional field
     date: str
     location_level1: str
-    location_level2: str  # Optional field
+    location_level2: str
+    location_level3: Optional[str] = None
+    location_level4: Optional[str] = None
     deceased_gender: str  # Optional field
     is_adult:str  # Optional field
     is_child: str  # Optional field
@@ -86,6 +88,16 @@ class SettingsConfigData(BaseModel):
     cron_settings: Union[CronSettings, None] = None  # New field for cron settings
     backup_settings: Union[BackupSettings, None] = None  # New field for backup settings
     sync_status: Union[SyncStatus, None] = None  # New field for sync status tracking
+
+class SyncHistoryRecord(BaseModel):
+    date: str              # ISO datetime string
+    records_synced: int
+    total_records: int
+    user_name: str = "System"
+    duration_seconds: float
+    method: str = "api"    # 'api' or 'csv'
+    status: str = "completed"
+
 
 class ImagesConfigData(BaseModel):
     logo: Union[str, None] = None
