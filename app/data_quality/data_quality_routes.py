@@ -8,6 +8,13 @@ from app.data_quality.services.data_quality import (fetch_error_details,
                                                     fetch_error_list,
                                                     fetch_form_data,
                                                     save_corrections_data)
+from app.data_quality.services.general_dqa import (
+    fetch_interview_duration_stats,
+    fetch_ics_stats,
+    fetch_ics_value_sample,
+    fetch_rrs_stats,
+    fetch_ici_stats,
+)
 from app.shared.configs.arangodb import get_arangodb_session
 from app.users.decorators.user import get_current_user
 
@@ -17,6 +24,61 @@ data_quality_router = APIRouter(
     responses={404: {"description": "Not found"}},
     # dependencies=[Depends(oauth2_scheme), Depends(get_current_user)]
 )
+
+@data_quality_router.get("/interview-duration")
+async def get_interview_duration_stats(
+    db: StandardDatabase = Depends(get_arangodb_session),
+    current_user = Depends(get_current_user)
+):
+    try:
+        return await fetch_interview_duration_stats(db)
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+
+
+@data_quality_router.get("/ics-value-sample")
+async def get_ics_value_sample(
+    db: StandardDatabase = Depends(get_arangodb_session),
+    current_user = Depends(get_current_user)
+):
+    try:
+        return await fetch_ics_value_sample(db)
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+
+
+@data_quality_router.get("/ics-stats")
+async def get_ics_stats(
+    db: StandardDatabase = Depends(get_arangodb_session),
+    current_user = Depends(get_current_user)
+):
+    try:
+        return await fetch_ics_stats(db)
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+
+
+@data_quality_router.get("/rrs-stats")
+async def get_rrs_stats(
+    db: StandardDatabase = Depends(get_arangodb_session),
+    current_user = Depends(get_current_user)
+):
+    try:
+        return await fetch_rrs_stats(db)
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+
+
+@data_quality_router.get("/ici-stats")
+async def get_ici_stats(
+    db: StandardDatabase = Depends(get_arangodb_session),
+    current_user = Depends(get_current_user)
+):
+    try:
+        return await fetch_ici_stats(db)
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+
 
 @data_quality_router.get("/errors")
 async def get_error_list(

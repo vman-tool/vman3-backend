@@ -556,6 +556,8 @@ async def getVADataAndMergeWithResults(db: StandardDatabase, results: list):
     deceased_gender = config.field_mapping.deceased_gender
     location_level1 = config.field_mapping.location_level1
     location_level2 = config.field_mapping.location_level2
+    location_level3 = config.field_mapping.location_level3  # optional
+    location_level4 = config.field_mapping.location_level4  # optional
     death_date = config.field_mapping.death_date or 'id10023'
     submitted_date = config.field_mapping.submitted_date or 'today' or 'submissiondate'
     interview_date = config.field_mapping.interview_date or 'id10012'
@@ -587,13 +589,15 @@ FOR doc IN {collection.name}
         age_group: age_group,
         locationLevel1: LOWER(doc.{location_level1}),
         locationLevel2: LOWER(doc.{location_level2}),
+        {f'locationLevel3: LOWER(doc.{location_level3}),' if location_level3 else ''}
+        {f'locationLevel4: LOWER(doc.{location_level4}),' if location_level4 else ''}
         death_date: doc.{death_date},
         submitted_date: doc.{submitted_date},
         interview_date: doc.{interview_date},
         reasoans:doc.id10476,
         form_age_group:doc.age_group,
         isneonatal:doc.isneonatal,
-        ischild:doc.ischild, 
+        ischild:doc.ischild,
         isadult:doc.isadult
 
     }}

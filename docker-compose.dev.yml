@@ -49,21 +49,23 @@ services:
         "celery,ccva,odk"
       ]
     volumes:
-      - ./app:/vman3/app  # Mount local app directory for hot reload
+      - ./app:/vman3/app
+    networks:
+      - default    # Redis lives on the default compose network
+      - vman3-net  # ArangoDB lives on vman3-net; reach it by service name
     environment:
       PYTHONUNBUFFERED: "1"
-      # Redis - point to Docker container, NOT localhost
-      REDIS_URL: "redis://redis:6379/0"
+      # Redis — same default compose network, use service name
+      REDIS_URL: "redis://redis:6379"
       REDIS_PASSWORD: "vman@1029"
-      # ArangoDB - from your .env file
-      DB_URL: "http://64.227.70.122:8529"
+      # ArangoDB — on vman3-net, use service name instead of remote IP
+      DB_URL: "http://arango-db:8529"
       DB_NAME: "vman3"
-      DB_PASSWORD: "password"
       DB_ROOT_USER: "root"
       ARANGO_ROOT_USER: "root"
       ARANGO_ROOT_PASSWORD: "password"
-      ARANGODB_URL: "http://64.227.70.122:8529/"
-      # ODK credentials - from your .env file
+      ARANGODB_URL: "http://arango-db:8529/"
+      # ODK credentials
       DEFAULT_PROJECT_ID: "2"
       ODK_API_URL: "https://central.iact.co.tz"
       ODK_API_VERSION: "v1"
@@ -89,10 +91,10 @@ services:
         "--port=5555"
       ]
     ports:
-      - "5555:5555"  # Access Flower at http://localhost:5555
+      - "5555:5555"
     environment:
       PYTHONUNBUFFERED: "1"
-      REDIS_URL: "redis://redis:6379/0"
+      REDIS_URL: "redis://redis:6379"
       REDIS_PASSWORD: "vman@1029"
     depends_on:
       - redis

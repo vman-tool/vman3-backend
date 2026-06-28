@@ -17,16 +17,22 @@ async def get_unique_regions(db: StandardDatabase, current_user:dict):
 
         
     try:
+        bind_vars = {}
+        location_filter = ''
+        if locationKey and locationLimitValues:
+            bind_vars['locationLimitValues'] = [v.lower() for v in locationLimitValues]
+            location_filter = f'FILTER LOWER(dt.{locationKey}) IN @locationLimitValues'
+
         query = f"""
         FOR dt IN form_submissions
-          {f'FILTER dt.{locationKey} IN {locationLimitValues}' if locationKey and locationLimitValues else ''}
-               
+          {location_filter}
+          FILTER dt.{region_field} != null AND dt.{region_field} != ""
           COLLECT uniqueRegion = dt.{region_field}
           RETURN uniqueRegion
         """
 
         def execute_query():
-            cursor = db.aql.execute(query, cache=True)
+            cursor = db.aql.execute(query, bind_vars=bind_vars, cache=True)
             return [region for region in cursor]
 
         unique_regions = await run_in_threadpool(execute_query)

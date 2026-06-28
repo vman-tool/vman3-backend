@@ -20,6 +20,7 @@ async def fetch_charts_statistics( current_user: dict,paging: bool = True, page_
         print("Fetching charts statistics")
         config = await fetch_odk_config(db, True)
         region_field = config.field_mapping.location_level1
+        district_field = config.field_mapping.location_level2
         is_adult_field = config.field_mapping.is_adult
         is_child_field = config.field_mapping.is_child
         is_neonate_field = config.field_mapping.is_neonate
@@ -142,10 +143,39 @@ async def fetch_charts_statistics( current_user: dict,paging: bool = True, page_
                 )
             )
 
+            LET dataOverview = FIRST(
+                FOR doc IN {collection.name}
+                {filter_query}
+                COLLECT AGGREGATE
+                    total_count = COUNT(),
+                    first_date  = MIN(doc.{today_field}),
+                    last_date   = MAX(doc.{today_field})
+                RETURN {{
+                    total: total_count,
+                    first_submission: first_date,
+                    last_submission: last_date
+                }}
+            )
+
+            LET geoData = (
+                FOR doc IN {collection.name}
+                {filter_query}
+                RETURN DISTINCT {{ region: doc.{region_field}, district: doc.{district_field} }}
+            )
+            LET distinctRegions   = LENGTH(UNIQUE(geoData[*].region))
+            LET distinctDistricts = LENGTH(geoData)
+
             RETURN {{
                 monthly_submissions: monthlySubmissions,
                 distribution_by_age: distributionByAge,
-                gender_distribution: genderDistribution
+                gender_distribution: genderDistribution,
+                data_overview: {{
+                    total: dataOverview.total,
+                    first_submission: dataOverview.first_submission,
+                    last_submission: dataOverview.last_submission,
+                    distinct_regions: distinctRegions,
+                    distinct_districts: distinctDistricts
+                }}
             }}
         """
         
@@ -160,7 +190,8 @@ async def fetch_charts_statistics( current_user: dict,paging: bool = True, page_
 
         monthly_submissions_data = result['monthly_submissions']
         distribution_by_age_data = result['distribution_by_age'][0]
-        distribution_by_gender= result['gender_distribution'][0]
+        distribution_by_gender = result['gender_distribution'][0]
+        data_overview = result.get('data_overview', {})
 
         # Structure the combined response
         response_data = {
@@ -168,10 +199,10 @@ async def fetch_charts_statistics( current_user: dict,paging: bool = True, page_
             "distribution_by_age": {
                 "neonates": distribution_by_age_data["neonatal"],
                 "children": distribution_by_age_data["child"],
-                "adults": distribution_by_age_data["adult"]
-           
+                "adults": distribution_by_age_data["adult"],
             },
-            'distribution_by_gender':distribution_by_gender
+            "distribution_by_gender": distribution_by_gender,
+            "data_overview": data_overview,
         }
 
         return ResponseMainModel(
