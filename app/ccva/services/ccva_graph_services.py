@@ -42,15 +42,14 @@ async def fetch_db_processed_ccva_graphs(
         #     locationKey = 'locationLevel2'
         config = await fetch_odk_config(db)
         region_field = config.field_mapping.location_level1
-
-        district_field = config.field_mapping.location_level2
+        instance_id_field = config.field_mapping.instance_id or 'instanceid'
         locationKey, locationLimitValues = get_location_limit_values(current_user)
 
-        if locationKey == region_field:
-            locationKey = 'locationLevel1'
-        elif locationKey == district_field:
-            locationKey = 'locationLevel2'
-        
+        # Do NOT convert locationKey to 'locationLevel1'/'locationLevel2'.
+        # We filter ccva_results via form_submissions IDs so the raw ODK field
+        # name is what we need, and we are not dependent on the merge having
+        # populated locationLevel* inside ccva_results.
+
         print(config.field_mapping)
         config = await fetch_odk_config(db)
         death_date = config.field_mapping.death_date or 'id10023'
@@ -99,20 +98,48 @@ async def fetch_db_processed_ccva_graphs(
         # total_records= defaultsCr[0].get('total_records')
         elapsed_time= defaultsCr[0].get('elapsed_time')
         range= defaultsCr[0].get('range')
-        # to lower case for locations
-        locations = [location.lower() for location in locations] if locations else None
-        locationLimitValues = [location.lower() for location in locationLimitValues] if locationLimitValues else None
-        
-        
+        # Normalise to lowercase
+        locations = [loc.lower() for loc in locations] if locations else None
+        locationLimitValues = [loc.lower() for loc in locationLimitValues] if locationLimitValues else None
+
+        # Build subqueries that resolve allowed ccva_result IDs from form_submissions.
+        # This is the same join-based approach used by the export and avoids relying
+        # on locationLevel1/locationLevel2 being populated inside ccva_results.
+        if locationKey and locationLimitValues:
+            access_ids_subquery = f"""
+LET _accessIds = (
+    FOR _fs IN form_submissions
+        FILTER LOWER(_fs.{locationKey}) IN @locationLimitValues
+        RETURN DISTINCT _fs.{instance_id_field}
+)"""
+            access_filter = "AND (cc.ID IN _accessIds OR cc.uid IN _accessIds)"
+        else:
+            access_ids_subquery = "LET _accessIds = []"
+            access_filter = ""
+
+        if locations:
+            loc_ids_subquery = f"""
+LET _locIds = (
+    FOR _fs IN form_submissions
+        FILTER LOWER(_fs.{region_field}) IN @locations
+        RETURN DISTINCT _fs.{instance_id_field}
+)"""
+            loc_filter = "AND (cc.ID IN _locIds OR cc.uid IN _locIds)"
+        else:
+            loc_ids_subquery = "LET _locIds = []"
+            loc_filter = ""
 
         query = f"""
+{access_ids_subquery}
+{loc_ids_subquery}
+
         LET totalRecords = LENGTH(
             FOR cc IN {collection_name}
                 FILTER cc.task_id == @taskId AND cc.CAUSE1 != "" AND cc.ID != null
                      {f'AND cc.CAUSE1 == "{selected_success_type}"' if selected_success_type=='Undeterminant' else ''}
                       {'AND cc.CAUSE1 != "" AND cc.CAUSE1 != "Undeterminant" '   if selected_success_type=='success' else ''}
-                {f'AND cc.locationLevel1 IN {locations}' if locations else ''}
-                {f'AND cc.{locationKey} IN {locationLimitValues}' if locationKey and locationLimitValues else ''}
+                {loc_filter}
+                {access_filter}
                 {f'AND DATE_TIMESTAMP(cc.{today_field}) >= DATE_TIMESTAMP("{start_date}")' if start_date else ''}
                 {f'AND DATE_TIMESTAMP(cc.{today_field}) <= DATE_TIMESTAMP("{end_date}")' if end_date else ''}
             RETURN 1
@@ -122,8 +149,8 @@ async def fetch_db_processed_ccva_graphs(
                  FILTER cc.task_id == @taskId AND cc.CAUSE1 != "" AND (cc.ischild == "1" OR cc.age_group == "child") AND cc.ID != null
                           {f'AND cc.CAUSE1 == "{selected_success_type}"' if selected_success_type=='Undeterminant' else ''}
                       {'AND cc.CAUSE1 != "" AND cc.CAUSE1 != "Undeterminant" '   if selected_success_type=='success' else ''}
-                {f'AND cc.locationLevel1 IN {locations}' if locations else ''}
-                {f'AND cc.{locationKey} IN {locationLimitValues}' if locationKey and locationLimitValues else ''}
+                {loc_filter}
+                {access_filter}
                 {f'AND DATE_TIMESTAMP(cc.{today_field}) >= DATE_TIMESTAMP("{start_date}")' if start_date else ''}
                 {f'AND DATE_TIMESTAMP(cc.{today_field}) <= DATE_TIMESTAMP("{end_date}")' if end_date else ''}
             RETURN 1
@@ -134,8 +161,8 @@ async def fetch_db_processed_ccva_graphs(
                  FILTER cc.task_id == @taskId AND cc.CAUSE1 != "" AND (cc.isneonatal == "1" OR cc.age_group == "neonate") AND cc.ID != null
                             {f'AND cc.CAUSE1 == "{selected_success_type}"' if selected_success_type=='Undeterminant' else ''}
                       {'AND cc.CAUSE1 != "" AND cc.CAUSE1 != "Undeterminant" '   if selected_success_type=='success' else ''}
-                {f'AND cc.locationLevel1 IN {locations}' if locations else ''}
-                {f'AND cc.{locationKey} IN {locationLimitValues}' if locationKey and locationLimitValues else ''}
+                {loc_filter}
+                {access_filter}
                 {f'AND DATE_TIMESTAMP(cc.{today_field}) >= DATE_TIMESTAMP("{start_date}")' if start_date else ''}
                 {f'AND DATE_TIMESTAMP(cc.{today_field}) <= DATE_TIMESTAMP("{end_date}")' if end_date else ''}
             RETURN 1
@@ -145,8 +172,8 @@ async def fetch_db_processed_ccva_graphs(
                  FILTER cc.task_id == @taskId AND cc.CAUSE1 != "" AND (cc.isadult == "1" OR cc.age_group == "adult") AND cc.ID != null
                             {f'AND cc.CAUSE1 == "{selected_success_type}"' if selected_success_type=='Undeterminant' else ''}
                       {'AND cc.CAUSE1 != "" AND cc.CAUSE1 != "Undeterminant" '   if selected_success_type=='success' else ''}
-                {f'AND cc.locationLevel1 IN {locations}' if locations else ''}
-                {f'AND cc.{locationKey} IN {locationLimitValues}' if locationKey and locationLimitValues else ''}
+                {loc_filter}
+                {access_filter}
                 {f'AND DATE_TIMESTAMP(cc.{today_field}) >= DATE_TIMESTAMP("{start_date}")' if start_date else ''}
                 {f'AND DATE_TIMESTAMP(cc.{today_field}) <= DATE_TIMESTAMP("{end_date}")' if end_date else ''}
             RETURN 1
@@ -157,8 +184,8 @@ async def fetch_db_processed_ccva_graphs(
                  FILTER cc.task_id == @taskId AND cc.CAUSE1 != ""  AND cc.gender == "male" AND cc.ID != null
                             {f'AND cc.CAUSE1 == "{selected_success_type}"' if selected_success_type=='Undeterminant' else ''}
                       {'AND cc.CAUSE1 != "" AND cc.CAUSE1 != "Undeterminant" '   if selected_success_type=='success' else ''}
-                {f'AND cc.locationLevel1 IN {locations}' if locations else ''}
-                {f'AND cc.{locationKey} IN {locationLimitValues}' if locationKey and locationLimitValues else ''}
+                {loc_filter}
+                {access_filter}
                 {f'AND DATE_TIMESTAMP(cc.{today_field}) >= DATE_TIMESTAMP("{start_date}")' if start_date else ''}
                 {f'AND DATE_TIMESTAMP(cc.{today_field}) <= DATE_TIMESTAMP("{end_date}")' if end_date else ''}
             RETURN 1
@@ -169,8 +196,8 @@ async def fetch_db_processed_ccva_graphs(
                  FILTER cc.task_id == @taskId AND cc.CAUSE1 != ""  AND cc.gender == "female" AND cc.ID != null
                             {f'AND cc.CAUSE1 == "{selected_success_type}"' if selected_success_type=='Undeterminant' else ''}
                       {'AND cc.CAUSE1 != "" AND cc.CAUSE1 != "Undeterminant" '   if selected_success_type=='success' else ''}
-                {f'AND cc.locationLevel1 IN {locations}' if locations else ''}
-                {f'AND cc.{locationKey} IN {locationLimitValues}' if locationKey and locationLimitValues else ''}
+                {loc_filter}
+                {access_filter}
                 {f'AND DATE_TIMESTAMP(cc.{today_field}) >= DATE_TIMESTAMP("{start_date}")' if start_date else ''}
                 {f'AND DATE_TIMESTAMP(cc.{today_field}) <= DATE_TIMESTAMP("{end_date}")' if end_date else ''}
             RETURN 1
@@ -183,8 +210,8 @@ async def fetch_db_processed_ccva_graphs(
                                            {f'AND cr.CAUSE1 == "{selected_success_type}"' if selected_success_type=='Undeterminant' else ''}
                       {'AND cr.CAUSE1 != "" AND cr.CAUSE1 != "Undeterminant" '   if selected_success_type=='success' else ''}
        
-                {f'AND cr.locationLevel1 IN {locations}' if locations else ''}
-                {f'AND cr.{locationKey} IN {locationLimitValues}' if locationKey and locationLimitValues else ''}
+                {loc_filter.replace("cc.", "cr.")}
+                {access_filter.replace("cc.", "cr.")}
                 {f'AND DATE_TIMESTAMP(cr.{today_field}) >= DATE_TIMESTAMP("{start_date}")' if start_date else ''}
                 {f'AND DATE_TIMESTAMP(cr.{today_field}) <= DATE_TIMESTAMP("{end_date}")' if end_date else ''}
             COLLECT cause = cr.CAUSE1 WITH COUNT INTO count
@@ -198,8 +225,8 @@ async def fetch_db_processed_ccva_graphs(
                 FILTER cr.task_id == @taskId AND cr.CAUSE1 != "" AND cr.gender == "male" AND cr.ID != null
                                              {f'AND cr.CAUSE1 == "{selected_success_type}"' if selected_success_type=='Undeterminant' else ''}
                       {'AND cr.CAUSE1 != "" AND cr.CAUSE1 != "Undeterminant" '   if selected_success_type=='success' else ''}
-                {f'AND cr.locationLevel1 IN {locations}' if locations else ''}
-                {f'AND cr.{locationKey} IN {locationLimitValues}' if locationKey and locationLimitValues else ''}
+                {loc_filter.replace("cc.", "cr.")}
+                {access_filter.replace("cc.", "cr.")}
                 {f'AND DATE_TIMESTAMP(cr.{today_field}) >= DATE_TIMESTAMP("{start_date}")' if start_date else ''}
                 {f'AND DATE_TIMESTAMP(cr.{today_field}) <= DATE_TIMESTAMP("{end_date}")' if end_date else ''}
             COLLECT cause = cr.CAUSE1 WITH COUNT INTO count
@@ -213,8 +240,8 @@ async def fetch_db_processed_ccva_graphs(
                 FILTER cr.task_id == @taskId AND cr.CAUSE1 != "" AND cr.gender == "female" AND cr.ID != null
                                            {f'AND cr.CAUSE1 == "{selected_success_type}"' if selected_success_type=='Undeterminant' else ''}
                       {'AND cr.CAUSE1 != "" AND cr.CAUSE1 != "Undeterminant" '   if selected_success_type=='success' else ''}
-                {f'AND cr.locationLevel1 IN {locations}' if locations else ''}
-                {f'AND cr.{locationKey} IN {locationLimitValues}' if locationKey and locationLimitValues else ''}
+                {loc_filter.replace("cc.", "cr.")}
+                {access_filter.replace("cc.", "cr.")}
                 {f'AND DATE_TIMESTAMP(cr.{today_field}) >= DATE_TIMESTAMP("{start_date}")' if start_date else ''}
                 {f'AND DATE_TIMESTAMP(cr.{today_field}) <= DATE_TIMESTAMP("{end_date}")' if end_date else ''}
             COLLECT cause = cr.CAUSE1 WITH COUNT INTO count
@@ -228,8 +255,8 @@ async def fetch_db_processed_ccva_graphs(
                 FILTER cr.task_id == @taskId AND cr.CAUSE1 != "" AND (cr.isneonatal == "1" OR cr.age_group == "neonate") AND cr.ID != null
                                             {f'AND cr.CAUSE1 == "{selected_success_type}"' if selected_success_type=='Undeterminant' else ''}
                       {'AND cr.CAUSE1 != "" AND cr.CAUSE1 != "Undeterminant" '   if selected_success_type=='success' else ''}
-                {f'AND cr.locationLevel1 IN {locations}' if locations else ''}
-                {f'AND cr.{locationKey} IN {locationLimitValues}' if locationKey and locationLimitValues else ''}
+                {loc_filter.replace("cc.", "cr.")}
+                {access_filter.replace("cc.", "cr.")}
                 {f'AND DATE_TIMESTAMP(cr.{today_field}) >= DATE_TIMESTAMP("{start_date}")' if start_date else ''}
                 {f'AND DATE_TIMESTAMP(cr.{today_field}) <= DATE_TIMESTAMP("{end_date}")' if end_date else ''}
             COLLECT cause = cr.CAUSE1 WITH COUNT INTO count
@@ -243,8 +270,8 @@ async def fetch_db_processed_ccva_graphs(
                 FILTER cr.task_id == @taskId AND cr.CAUSE1 != "" AND (cr.ischild == "1" OR cr.age_group == "child") AND cr.ID != null
                                            {f'AND cr.CAUSE1 == "{selected_success_type}"' if selected_success_type=='Undeterminant' else ''}
                       {'AND cr.CAUSE1 != "" AND cr.CAUSE1 != "Undeterminant" '   if selected_success_type=='success' else ''}
-                {f'AND cr.locationLevel1 IN {locations}' if locations else ''}
-                {f'AND cr.{locationKey} IN {locationLimitValues}' if locationKey and locationLimitValues else ''}
+                {loc_filter.replace("cc.", "cr.")}
+                {access_filter.replace("cc.", "cr.")}
                 {f'AND DATE_TIMESTAMP(cr.{today_field}) >= DATE_TIMESTAMP("{start_date}")' if start_date else ''}
                 {f'AND DATE_TIMESTAMP(cr.{today_field}) <= DATE_TIMESTAMP("{end_date}")' if end_date else ''}
             COLLECT cause = cr.CAUSE1 WITH COUNT INTO count
@@ -258,8 +285,8 @@ async def fetch_db_processed_ccva_graphs(
                 FILTER cr.task_id == @taskId AND cr.CAUSE1 != "" AND (cr.isadult == "1" OR cr.age_group == "adult") AND cr.ID != null
                                           {f'AND cr.CAUSE1 == "{selected_success_type}"' if selected_success_type=='Undeterminant' else ''}
                       {'AND cr.CAUSE1 != "" AND cr.CAUSE1 != "Undeterminant" '   if selected_success_type=='success' else ''}
-                {f'AND cr.locationLevel1 IN {locations}' if locations else ''}
-                {f'AND cr.{locationKey} IN {locationLimitValues}' if locationKey and locationLimitValues else ''}
+                {loc_filter.replace("cc.", "cr.")}
+                {access_filter.replace("cc.", "cr.")}
                 {f'AND DATE_TIMESTAMP(cr.{today_field}) >= DATE_TIMESTAMP("{start_date}")' if start_date else ''}
                 {f'AND DATE_TIMESTAMP(cr.{today_field}) <= DATE_TIMESTAMP("{end_date}")' if end_date else ''}
             COLLECT cause = cr.CAUSE1 WITH COUNT INTO count
@@ -310,9 +337,11 @@ async def fetch_db_processed_ccva_graphs(
         }}
         """
 
-        bind_vars = {
-            "taskId": ccva_task_id
-        }
+        bind_vars = {"taskId": ccva_task_id}
+        if locationKey and locationLimitValues:
+            bind_vars["locationLimitValues"] = locationLimitValues
+        if locations:
+            bind_vars["locations"] = locations
 
         # print(query, 'query',ccva_task_id)
         def execute_query():

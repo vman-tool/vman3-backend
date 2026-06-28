@@ -11,7 +11,7 @@ from app.shared.configs.security import get_location_limit_values
 from app.shared.utils.cache import ttl_cache
 
 
-@ttl_cache(ttl=300, key_prefix='submissions_statistics')
+@ttl_cache(ttl=30, key_prefix='submissions_statistics')
 async def fetch_submissions_statistics( current_user: dict,paging: bool = True, page_number: int = 1, limit: int = 10, start_date: Optional[date] = None, end_date: Optional[date] = None, locations: Optional[List[str]] = None,date_type:Optional[str]=None, db: StandardDatabase = None) -> ResponseMainModel:
     try:
         config = await fetch_odk_config(db, True)
@@ -118,7 +118,7 @@ async def fetch_submissions_statistics( current_user: dict,paging: bool = True, 
         #     })
 
         def execute_query():
-            cursor = db.aql.execute(query, bind_vars=bind_vars, cache=True)
+            cursor = db.aql.execute(query, bind_vars=bind_vars)
             return [document for document in cursor]
 
         data = await run_in_threadpool(execute_query)

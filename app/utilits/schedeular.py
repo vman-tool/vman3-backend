@@ -47,7 +47,9 @@ async def get_cron_settings(db) -> Dict[str, Any]:
         return {"days": [], "time": "00:00"}
 
 def day_of_week_to_cron(days: List[str]) -> str:
-    """Convert day names to cron day numbers (0-6, where 0 is Monday in APScheduler)"""
+    """Convert day names to cron day numbers (0-6, where 0 is Monday in APScheduler).
+    Callers must ensure days is non-empty before calling this function.
+    """
     day_mapping = {
         'monday': 0,
         'tuesday': 1,
@@ -57,12 +59,8 @@ def day_of_week_to_cron(days: List[str]) -> str:
         'saturday': 5,
         'sunday': 6
     }
-    
-    if not days:
-        return '*'  # If no days specified, run every day
-    
     cron_days = [str(day_mapping[day.lower()]) for day in days if day.lower() in day_mapping]
-    return ','.join(cron_days) if cron_days else '*'
+    return ','.join(cron_days) if cron_days else '0'  # fallback to Monday if all names were unrecognised
 
 # Create a wrapper function that creates a BackgroundTasks object
 #@log_to_db(context="odk_fetch_job_wrapper")
@@ -87,36 +85,39 @@ async def odk_fetch_job_wrapper(db=None):
         logger.error(f"Error executing scheduled ODK fetch job: {str(e)}")
 #@log_to_db(context="schedule_odk_fetch_job")
 async def schedule_odk_fetch_job(db=None):
-    """Schedule the ODK fetch job based on cron settings"""
-
+    """Schedule the ODK fetch job based on cron settings.
+    If no days are configured, the job is removed — sync only happens manually.
+    """
     try:
         # Get cron settings
         cron_settings = await get_cron_settings(db)
         days = cron_settings.get('days', [])
         time_str = cron_settings.get('time', '00:00')
-        
-        # Parse time
-        hour, minute = time_str.split(':')
-        
-        # Convert days to cron format
-        cron_days = day_of_week_to_cron(days)
-        
-        # Remove existing job if it exists
+
+        # Always remove any existing scheduled sync job first
         if scheduler.get_job('odk_fetch_job'):
             scheduler.remove_job('odk_fetch_job')
-        
-        # Schedule new job using the wrapper function
-        scheduler.add_job(
-            odk_fetch_job_wrapper,
-            CronTrigger(day_of_week=cron_days, hour=int(hour), minute=int(minute)),
-            id='odk_fetch_job',
-            replace_existing=True,
-            kwargs={'db': db}
-        )
-        
-        logger.info(f"Scheduled ODK fetch job to run at {time_str} on days: {', '.join(days) if days else 'every day'}")
-        
-        # Also schedule a job to check for updated cron settings every hour
+
+        # Only schedule if at least one day is explicitly selected
+        if not days:
+            logger.info("ODK fetch job: no days configured — job not scheduled (manual sync only)")
+        else:
+            # Parse time
+            hour, minute = time_str.split(':')
+
+            # Convert days to cron format
+            cron_days = day_of_week_to_cron(days)
+
+            scheduler.add_job(
+                odk_fetch_job_wrapper,
+                CronTrigger(day_of_week=cron_days, hour=int(hour), minute=int(minute)),
+                id='odk_fetch_job',
+                replace_existing=True,
+                kwargs={'db': db}
+            )
+            logger.info(f"ODK fetch job scheduled for {time_str} on: {', '.join(days)}")
+
+        # Schedule a job to re-read cron settings every hour so changes take effect without restart
         if not scheduler.get_job('update_cron_settings_job'):
             scheduler.add_job(
                 schedule_odk_fetch_job,

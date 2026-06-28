@@ -19,7 +19,8 @@ class ODKClientAsync:
         self.is_sort_allowed = config.is_sort_allowed
 
     async def __aenter__(self):
-        self.client = httpx.AsyncClient()
+        # 60s read timeout; ODK Central can be slow on large pages
+        self.client = httpx.AsyncClient(timeout=httpx.Timeout(60.0, connect=10.0))
         return self
     
     async def __aexit__(self, exc_type, exc_value, exc_tb):
@@ -80,7 +81,7 @@ class ODKClientAsync:
             user = json.dumps({"email": self.odk_username, "password": self.odk_password})
             url = f"{self.odk_base_url}/{self.odk_api_version}/sessions"
 
-            async with httpx.AsyncClient() as client:
+            async with httpx.AsyncClient(timeout=httpx.Timeout(30.0, connect=10.0)) as client:
                 response = await client.post(url, data=user, headers=headers)
 
                 if response.status_code in {200, 201}:
@@ -96,41 +97,51 @@ class ODKClientAsync:
                             json.dump(session_data, file)
         return session_data
     
-    async def getFormSubmissions(self, start_date=None, end_date=None, skip: int = None, top: int = None, order_by: str = None, order_direction: str = 'asc'):
+    async def getFormSubmissions(self, start_date=None, end_date=None, skip: int = None, top: int = None, order_by: str = None, order_direction: str = 'asc', next_link: str = None):
         headers = {
             "Content-Type": 'application/json',
             "X-Extended-Metadata": "true"
         }
-        
-        pagination_string = f"&$skip={skip}" if skip else "" 
-        pagination_string += f"&$top={top}" if top else ""
 
-        start_date = start_date if start_date else ""
-        end_date = end_date if end_date else ""
+        # If the server returned an @odata.nextLink, follow it directly.
+        # This avoids manually calculated $skip/$top that may exceed the
+        # server's current per-request page-size limit.
+        if next_link:
+            url = next_link
+        else:
+            pagination_string = f"&$skip={skip}" if skip else ""
+            pagination_string += f"&$top={top}" if top else ""
 
-        filter = ""
-        if len(start_date) > 0 and len(end_date) > 0:
-            filter += f'&$filter=__system/submissionDate ge {start_date} and __system/submissionDate le {end_date}'
+            start_date = start_date if start_date else ""
+            end_date = end_date if end_date else ""
 
-        if len(start_date) > 0 and len(end_date) == 0:
-            filter = f'&$filter=__system/submissionDate ge {start_date}'
-        
-        if len(end_date) > 0 and len(start_date) == 0:
-            filter = f'&$filter=__system/submissionDate le {end_date}'
-        
-        if order_by and self.is_sort_allowed:
-            if order_direction not in ("asc", "desc"):
-                order_direction = "asc"
-            filter += f'&$orderby={order_by} {order_direction}'
-        
-        url = f"{self.odk_base_url}/{self.odk_api_version}/projects/{self.odk_default_project_id}/forms/{self.odk_form_id}.svc/Submissions?$count=true{pagination_string}{filter}"
-        
+            filter = ""
+            if len(start_date) > 0 and len(end_date) > 0:
+                filter += f'&$filter=__system/submissionDate ge {start_date} and __system/submissionDate le {end_date}'
+
+            if len(start_date) > 0 and len(end_date) == 0:
+                filter = f'&$filter=__system/submissionDate ge {start_date}'
+
+            if len(end_date) > 0 and len(start_date) == 0:
+                filter = f'&$filter=__system/submissionDate le {end_date}'
+
+            if order_by and self.is_sort_allowed:
+                if order_direction not in ("asc", "desc"):
+                    order_direction = "asc"
+                filter += f'&$orderby={order_by} {order_direction}'
+
+            url = f"{self.odk_base_url}/{self.odk_api_version}/projects/{self.odk_default_project_id}/forms/{self.odk_form_id}.svc/Submissions?$count=true{pagination_string}{filter}"
+
         response = await self.send_request('get', url, headers=headers)
+
+        if response.status_code == 429:
+            retry_after = response.headers.get('Retry-After', '60')
+            raise Exception(f"ODK server rate-limited this request (429). Retry-After: {retry_after}s. Response: {response.text}")
+
         if response.status_code in {200, 201}:
             return response.json()
         else:
-            # Raise an exception with the response text as the error message
-            raise Exception(f"Failed to fetch form submissions: {response.text}")
+            raise Exception(f"Failed to fetch form submissions (HTTP {response.status_code}): {response.text}")
 
 
 

@@ -45,7 +45,34 @@ class ArangoDBClient:
     def _create_collections_sync(self):
         create_collections_and_indexes(self.db, collections_with_indexes)
 
-    async def insert_many(self, collection_name: str, documents: list[dict], overwrite_mode: str = 'ignore', 
+    async def upsert_many(self, collection_name: str, documents: list[dict],
+                          key_field: str = '__id', batch_size: int = 500) -> list:
+        """Insert-or-replace documents matched by key_field (must have a unique index).
+
+        Avoids the silent-failure problem of insert_many(silent=True) when a secondary
+        unique index is violated: AQL UPSERT finds the existing document by key_field
+        and replaces it in-place, preserving the original _key.
+        """
+        return await run_in_threadpool(
+            self._upsert_many_sync, collection_name, documents, key_field, batch_size
+        )
+
+    def _upsert_many_sync(self, collection_name: str, documents: list[dict],
+                          key_field: str = '__id', batch_size: int = 500) -> list:
+        if not documents:
+            return []
+        query = f"""
+            FOR doc IN @docs
+                UPSERT {{{key_field}: doc.{key_field}}}
+                INSERT doc
+                REPLACE doc
+                IN {collection_name}
+        """
+        for i in range(0, len(documents), batch_size):
+            self.db.aql.execute(query, bind_vars={"docs": documents[i:i + batch_size]})
+        return []
+
+    async def insert_many(self, collection_name: str, documents: list[dict], overwrite_mode: str = 'ignore',
                          batch_size: int = 1000, sanitize: bool = True):
         # Wrap the synchronous insert_many in a thread pool
         return await run_in_threadpool(self._insert_many_sync, collection_name, documents, overwrite_mode, batch_size, sanitize)

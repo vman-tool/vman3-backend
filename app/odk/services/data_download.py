@@ -56,10 +56,10 @@ async def update_sync_status_internal(db: StandardDatabase, last_sync_data_count
 
 
 async def fetch_odk_data_initial(
-    start_date: str = None, 
+    start_date: str = None,
     end_date: str = None,
     skip: int = 0,
-    top: int = 3000,
+    top: int = 100,
     force_update: bool = False, 
     resend: bool = False, 
     db: StandardDatabase = None,
@@ -96,15 +96,16 @@ async def fetch_odk_data_initial(
                 raise e
 
             if total_data_count == available_data_count and start_date == server_latest_submisson_date:
-                logger.info("\nVman is up to date.")
+                logger.info("\nVMan is up to date.")
                 return {
-                "download_status": False,
-                "status": "Vman is up to date",
-                
-                "total_data_count": total_data_count,
-                "start_date": start_date,
-                "end_date": end_date,  
-            }
+                    "download_status": False,
+                    "status": "VMan is up to date",
+                    "total_data_count": 0,
+                    "server_total": total_data_count,
+                    "local_count": available_data_count,
+                    "start_date": start_date,
+                    "end_date": end_date,
+                }
             
             if available_data_count > 0 :
                 if available_data_count < total_data_count and start_date == server_latest_submisson_date:
@@ -112,19 +113,20 @@ async def fetch_odk_data_initial(
                 elif available_data_count < total_data_count and start_date != server_latest_submisson_date:
                     end_date = None  
             
+            server_total = total_data_count  # full server count before subtraction
             if total_data_count > available_data_count:
                 total_data_count = total_data_count - available_data_count
 
-            logger.info(f"{total_data_count} total to be downloaded")
-            
-            
+            logger.info(f"{total_data_count} new records to be downloaded (server total: {server_total}, local: {available_data_count})")
+
             return {
                 "download_status": True,
                 "status": "Data to be downloaded",
-                "total_data_count": total_data_count,
+                "total_data_count": total_data_count,   # new records only
+                "server_total": server_total,            # full server count
+                "local_count": available_data_count,     # how many we already have
                 "start_date": start_date,
-                "end_date": end_date,  
-                
+                "end_date": end_date,
             }
             
     except Exception as e:
@@ -141,69 +143,79 @@ async def fetch_odk_data_initial(
 
 async def fetch_odk_data_with_async(
     total_data_count: int,
-    start_date: str = None, 
+    start_date: str = None,
     end_date: str = None,
     skip: int = 0,
-    top: int = 3000,
+    top: int = 100,
     db: StandardDatabase = None,
     start_time: float = 0
-):   
+):
     """
     Fetch ODK data asynchronously with WebSocket progress updates.
-    This function handles the actual data downloading and processing.
+    Uses @odata.nextLink pagination to respect the server's page-size limit.
     """
     try:
         from app.main import websocket__manager
 
         start_time = time.time()
         config = await fetch_odk_config(db)
-        
+
         async with ODKClientAsync(config.odk_api_configs) as odk_client:
             logger.info(f"{total_data_count} total records to be downloaded")
             if websocket__manager:
-                        # await websocket__manager.broadcast(f"Progress: {progress:.0f}%")
-                        progress_data = {
-                            "total_records": total_data_count,
-                            "progress": 0,
-                            "elapsed_time": 0
-                        }
-                        await websocket__manager.broadcast("123",json.dumps(progress_data))
-            num_iterations = (total_data_count // top) + (1 if total_data_count % top != 0 else 0)
-            records_saved = 0
-            last_progress = 0
+                progress_data = {
+                    "total_records": total_data_count,
+                    "progress": 0,
+                    "elapsed_time": 0
+                }
+                await websocket__manager.broadcast("123", json.dumps(progress_data))
 
-            async def fetch_data_chunk(skip, top, start_date, end_date):
+            records_saved = 0
+            next_link = None
+            first_page = True
+
+            # Follow @odata.nextLink instead of calculating skip manually —
+            # this prevents "limit exceeded" errors when the server enforces
+            # a smaller $top cap than what was previously requested.
+            while True:
                 try:
-                    data = await odk_client.getFormSubmissions(top=top, skip=skip, start_date=start_date, end_date=end_date, order_by='__system/submissionDate', order_direction='asc')
+                    if next_link:
+                        data = await odk_client.getFormSubmissions(next_link=next_link)
+                    else:
+                        data = await odk_client.getFormSubmissions(
+                            top=top,
+                            skip=skip if first_page else None,
+                            start_date=start_date,
+                            end_date=end_date,
+                            order_by='__system/submissionDate',
+                            order_direction='asc'
+                        )
+                        first_page = False
+
                     if isinstance(data, str):
                         logger.error(f"Error fetching data: {data}")
                         raise HTTPException(status_code=500, detail=data)
-                    df = pd.json_normalize(data['value'], sep='/')
+
+                    page_records = data.get('value', [])
+                    if not page_records:
+                        break
+
+                    df = pd.json_normalize(page_records, sep='/')
                     df.columns = [col.split('/')[-1] for col in df.columns]
-                    
                     df.columns = df.columns.str.lower()
                     df = df.dropna(axis=1, how='all')
+                    df = df.loc[:, ~df.columns.duplicated()]
+                    chunk = loads(df.to_json(orient='records'))
 
-                    # TODO: Investigate on duplicate columns temporary solution is to rename duplicate columns
-                    df = df.loc[:, ~df.columns.duplicated()] 
-                    
-                    return loads(df.to_json(orient='records'))
-                except Exception as e:
-                    raise e
-            async def insert_all_data(data: List[dict]):
-                nonlocal records_saved, last_progress, start_time
-                try:
-                    # Batch insert all records at once instead of one-by-one
-                    if data:
-                        await insert_many_data_to_arangodb(data, overwrite_mode='replace')
-                        records_saved += len(data)
+                    if chunk:
+                        await insert_many_data_to_arangodb(chunk, overwrite_mode='replace')
+                        records_saved += len(chunk)
 
-                        # Cap progress at 100% to prevent overflow
                         progress = min((records_saved / total_data_count) * 100, 100.0)
                         elapsed_time = time.time() - start_time
-                        
+
                         logger.info(f"Progress: {progress:.1f}% ({records_saved}/{total_data_count} records)")
-                        
+
                         if websocket__manager:
                             progress_data = {
                                 "total_records": total_data_count,
@@ -212,18 +224,11 @@ async def fetch_odk_data_with_async(
                                 "records_processed": records_saved
                             }
                             await websocket__manager.broadcast("123", json.dumps(progress_data))
-                except Exception as e:
-                    raise e
 
-            # Process data in chunks
-            for i in range(num_iterations):
-                chunk_skip = skip + i * top
-                chunk_top = top
+                    next_link = data.get('@odata.nextLink')
+                    if not next_link:
+                        break
 
-                try:
-                    data_chunk = await fetch_data_chunk(chunk_skip, chunk_top, start_date, end_date)
-                    if data_chunk:
-                        await insert_all_data(data_chunk)
                 except Exception as e:
                     raise e
 
@@ -231,10 +236,8 @@ async def fetch_odk_data_with_async(
             total_elapsed_time = end_time - start_time
             logger.info(f"Total elapsed time: {total_elapsed_time:.2f}s")
 
-            # Get current total data count from database after sync
             current_records_info = await get_margin_dates_and_records_count(db)
             current_total_data = current_records_info.get('total_records', 0) if current_records_info else 0
-            # Update sync status automatically after sync completion
             await update_sync_status_internal(db, records_saved, current_total_data)
 
             if records_saved == total_data_count:
@@ -245,8 +248,7 @@ async def fetch_odk_data_with_async(
                 return {"status": "Data inserted with issues", "elapsed_time": total_elapsed_time}
     except Exception as e:
         if websocket__manager:
-            await websocket__manager.broadcast("123",f"Error: {str(e)}")
-            
+            await websocket__manager.broadcast("123", f"Error: {str(e)}")
         raise e
 
 
@@ -301,15 +303,26 @@ async def insert_data_to_arangodb(data: dict,data_source:str=None):
     
     
 async def insert_many_data_to_arangodb(data: List[dict], overwrite_mode: str = 'ignore'):
-
     try:
-        # Optimize: Use clean_document which does both null removal and sanitization in one pass
         data = [clean_document(item) for item in data]
-  
-        db:ArangoDBClient = await get_arangodb_client()
-        # Pass sanitize=False since we already cleaned/sanitized above
-        return await db.insert_many(collection_name=db_collections.VA_TABLE, documents=data, overwrite_mode=overwrite_mode, sanitize=False)
+        db: ArangoDBClient = await get_arangodb_client()
 
+        if overwrite_mode == 'replace':
+            # AQL UPSERT on __id correctly handles both new inserts and updates.
+            # The native insert_many(silent=True) silently drops documents that
+            # violate the unique __id secondary index, so new records never land.
+            return await db.upsert_many(
+                collection_name=db_collections.VA_TABLE,
+                documents=data,
+                key_field='__id',
+            )
+
+        return await db.insert_many(
+            collection_name=db_collections.VA_TABLE,
+            documents=data,
+            overwrite_mode=overwrite_mode,
+            sanitize=False,
+        )
     except Exception as e:
         raise e
     
@@ -336,7 +349,7 @@ async def get_margin_dates_and_records_count(db: StandardDatabase = None):
             """
 
     def execute_query():
-        cursor = db.aql.execute(query=query, cache=True)
+        cursor = db.aql.execute(query=query)
         return cursor.next()
 
     return await run_in_threadpool(execute_query)

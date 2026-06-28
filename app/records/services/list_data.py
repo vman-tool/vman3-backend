@@ -103,7 +103,7 @@ async def fetch_va_records(current_user:dict,paging: bool = True, page_number: i
         def execute_count_query():
             # Avoid passing pagination bind vars (offset/size) to the count query
             count_bind_vars = {k: v for k, v in bind_vars.items() if k not in ("offset", "size")}
-            total_records_cursor = db.aql.execute(count_query, bind_vars=count_bind_vars, cache=True)
+            total_records_cursor = db.aql.execute(count_query, bind_vars=count_bind_vars)
             return total_records_cursor.next()
 
         total_records = await run_in_threadpool(execute_count_query)
@@ -197,7 +197,7 @@ async def fetch_va_records_json(current_user:dict,paging: bool = True,data_sourc
         count_query = f"RETURN LENGTH({collection.name})"
         
         def execute_json_count_query():
-            total_records_cursor = db.aql.execute(count_query, cache=True)
+            total_records_cursor = db.aql.execute(count_query)
             return total_records_cursor.next()
 
         total_records = await run_in_threadpool(execute_json_count_query)
