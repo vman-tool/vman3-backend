@@ -34,10 +34,12 @@ print(f"🔧 Celery Broker URL: {BROKER_URL.replace(REDIS_PASSWORD or '', '***')
 print(f"🔧 Creating Celery app with broker: {BROKER_URL[:30]}...")
 
 # Create Celery app
+# backend=None: task results are never consumed (progress goes via Redis Pub/Sub),
+# so storing them in Redis only causes "retry limit exceeded" errors on reconnect.
 celery_app = Celery(
     'vman3',
     broker=BROKER_URL,
-    backend=BROKER_URL,  # Use Redis for result backend too
+    backend=None,
     include=[
         'app.tasks.ccva_tasks',
         'app.tasks.odk_tasks',
@@ -58,12 +60,14 @@ celery_app.conf.update(
     enable_utc=True,
     
     # Task settings
-    task_track_started=True,
+    task_track_started=False,  # requires result backend; disabled since backend=None
+    task_ignore_result=True,   # don't attempt to store results anywhere
     task_time_limit=3600,  # 1 hour max per task
     task_soft_time_limit=3300,  # Soft limit at 55 minutes
-    
-    # Result settings
-    result_expires=86400,  # Results expire after 24 hours
+
+    # Broker connection resilience (Celery 5.x)
+    broker_connection_retry_on_startup=True,
+    broker_connection_max_retries=10,
     
     # Worker settings
     worker_prefetch_multiplier=1,  # Fair task distribution

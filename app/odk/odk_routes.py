@@ -19,7 +19,7 @@ from app.shared.configs.constants import db_collections
 # Celery task imports
 from app.tasks.odk_tasks import sync_odk_data_task
 
-from app.users.decorators.user import check_privileges
+from app.users.decorators.user import check_privileges, get_current_user
 from app.shared.configs.constants import AccessPrivileges
 from typing import List
 
@@ -56,7 +56,7 @@ async def get_form_submission_status(
     start_date: str = None,
     end_date: str = None,
     skip: int = 0,
-    top: int = 3000,
+    top: int = 100,
     force_update: bool = Query(default=False),
     db: StandardDatabase = Depends(get_arangodb_session)
 ):
@@ -90,16 +90,15 @@ async def fetch_odk_data_with_async_endpoint(
     start_date: str = None,
     end_date: str = None,
     skip: int = 0,
-    top: int = 3000,
+    top: int = 100,
     force_update: bool = Query(default=False),
     required_privs: List[str] = Depends(check_privileges([AccessPrivileges.ODK_DATA_SYNC])),
+    current_user=Depends(get_current_user),
     db: StandardDatabase = Depends(get_arangodb_session)
 ):
-    app_logger.info(f"Fetching ODK data with async: {datetime.now().isoformat()}")
-    app_logger.info(f"Start date: {start_date}, End date: {end_date}, Skip: {skip}, Top: {top}")
-    
+    app_logger.info(f"ODK sync requested by {getattr(current_user, 'email', 'unknown')} at {datetime.now().isoformat()}")
+
     try:
-        # First, do initial validation and get data count
         initial_response = await data_download.fetch_odk_data_initial(
             db=db,
             start_date=start_date,
@@ -109,29 +108,30 @@ async def fetch_odk_data_with_async_endpoint(
             force_update=force_update
         )
 
-        # If download is needed, dispatch the task to Celery
         if initial_response.get('download_status') is True:
             total_data_count = initial_response.get('total_data_count', 0)
             fetch_start_date = initial_response.get('start_date')
-            
-            # Dispatch to Celery for distributed task processing
-            # WebSocket progress updates are sent via Redis Pub/Sub
-            
-            # Debug: Log the Celery configuration
-            from app.celery_app import celery_app, BROKER_URL
-            app_logger.info(f"🔧 Dispatching to Celery with broker: {BROKER_URL[:30]}...")
-            app_logger.info(f"🔧 Celery app broker: {celery_app.conf.broker_url[:30] if celery_app.conf.broker_url else 'NOT SET'}...")
-            
+
+            user_name = (
+                getattr(current_user, 'name', None)
+                or getattr(current_user, 'email', None)
+                or "System"
+            )
+
             sync_odk_data_task.delay(
                 total_data_count=total_data_count,
-                task_id="123",  # Default task_id for ODK sync
+                task_id="123",
                 start_date=fetch_start_date,
                 end_date=end_date,
                 skip=skip,
-                top=top
+                top=top,
+                user_name=user_name,
+                method="api",
+                server_total=initial_response.get('server_total', total_data_count),
+                local_count=initial_response.get('local_count', 0),
             )
-            app_logger.info("ODK sync task dispatched to Celery")
-            
+            app_logger.info(f"ODK sync task dispatched (user={user_name}, {total_data_count} records)")
+
         return {"status": "Data fetch initiated", "using_celery": True, **initial_response}
 
     except Exception as e:
@@ -245,6 +245,101 @@ async def get_sync_status(
         )
 
 
+@odk_router.post("/cancel-sync", status_code=status.HTTP_200_OK)
+async def cancel_sync(
+    db: StandardDatabase = Depends(get_arangodb_session),
+) -> ResponseMainModel:
+    """
+    Cancel the running ODK sync task cooperatively.
+
+    1. Reads the per-page Redis snapshot and saves a 'cancelled' history record immediately.
+       This is reliable because it runs here in the endpoint, not in the task process.
+    2. Sets the cooperative cancel flag so the Celery task exits at its next page boundary.
+
+    No SIGTERM: terminating the worker process prevented history from ever being saved.
+    """
+    try:
+        from app.tasks.odk_tasks import CANCEL_KEY_PREFIX, CANCEL_KEY_TTL, get_redis_client
+        from fastapi.concurrency import run_in_threadpool
+        import json as _json, time as _time
+        from datetime import timezone
+
+        task_id = "123"
+        r = get_redis_client()
+
+        # 1. Save cancelled history from snapshot BEFORE signalling the task.
+        snapshot_json = r.get(f"sync:snapshot:{task_id}")
+        if snapshot_json:
+            try:
+                snapshot = _json.loads(snapshot_json)
+                elapsed = _time.time() - snapshot.get("start_time", _time.time())
+                record = {
+                    "date": datetime.now(timezone.utc).isoformat(),
+                    "records_synced": snapshot.get("records_saved", 0),
+                    "total_records": snapshot.get("total_data_count", 0),
+                    "user_name": snapshot.get("user_name", "System"),
+                    "duration_seconds": round(elapsed, 1),
+                    "method": snapshot.get("method", "api"),
+                    "status": "cancelled",
+                }
+
+                def _insert_history():
+                    col_name = db_collections.SYNC_HISTORY
+                    if not db.has_collection(col_name):
+                        db.create_collection(col_name)
+                    db.collection(col_name).insert(record)
+
+                await run_in_threadpool(_insert_history)
+                r.delete(f"sync:snapshot:{task_id}")
+                app_logger.info(
+                    f"Saved cancelled sync history: {snapshot.get('records_saved', 0)} records "
+                    f"in {round(elapsed, 1)}s"
+                )
+            except Exception as hist_err:
+                app_logger.error(f"Could not save cancelled history from snapshot: {hist_err}")
+
+        # 2. Set cooperative cancel flag — task exits at next page boundary without SIGTERM.
+        r.setex(f"{CANCEL_KEY_PREFIX}{task_id}", CANCEL_KEY_TTL, "1")
+
+        # 3. Invalidate the Dashboard statistics cache so it refreshes on next load.
+        try:
+            from app.shared.utils.cache import invalidate_cache
+            await invalidate_cache('submissions_statistics')
+        except Exception:
+            pass
+
+        return ResponseMainModel(
+            data={"cancelled": True},
+            message="Cancellation requested"
+        )
+    except Exception as e:
+        app_logger.error(f"Cancel sync error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@odk_router.get("/sync-history", status_code=status.HTTP_200_OK)
+async def get_sync_history(
+    limit: int = Query(default=20, ge=1, le=100),
+    db: StandardDatabase = Depends(get_arangodb_session),
+) -> ResponseMainModel:
+    """Return the most recent sync history entries, newest first."""
+    try:
+        from fastapi.concurrency import run_in_threadpool
+
+        def _fetch():
+            col_name = db_collections.SYNC_HISTORY
+            if not db.has_collection(col_name):
+                return []
+            cursor = db.aql.execute(
+                f"FOR doc IN {col_name} SORT doc.date DESC LIMIT @limit RETURN doc",
+                bind_vars={"limit": limit},
+            )
+            return list(cursor)
+
+        records = await run_in_threadpool(_fetch)
+        return ResponseMainModel(data=records, message="Sync history retrieved", total=len(records))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 

@@ -29,6 +29,7 @@ class db_collections():
     CCVA_ERRORS_CORRECTIONS:str = 'ccva_errors_corrections'
     CCVA_PUBLIC_RESULTS: str = 'ccva_public_results'  # Single collection for all public CCVA data (temporary with TTL)
     TASK_PROGRESS: str = 'task_progress'
+    SYNC_HISTORY: str = 'sync_history'
 
 class Special_Constants():
     UPLOAD_FOLDER: str = '/uploads'
@@ -144,7 +145,10 @@ collections_with_indexes = {
     ],
     db_collections.TASK_PROGRESS: [
         {"fields": ["expires_at"], "type": "persistent", "name": "idx_expires_at", "expireAfter": 0}
-    ]
+    ],
+    db_collections.SYNC_HISTORY: [
+        {"fields": ["date"], "type": "persistent", "name": "idx_sync_date"},
+    ],
 }
 
 class AccessPrivileges():
@@ -222,6 +226,10 @@ class AccessPrivileges():
     CCVA_MODULE_CRUD: str = 'CCVA_MODULE_CRUD'
     CCVA_MODULE_VIEW_RESULTS: str = 'CCVA_MODULE_VIEW_RESULTS'
     CCVA_MODULE_RESULT_ERROR_DOWNLOAD: str= 'CCVA_MODULE_RESULT_ERROR_DOWNLOAD'
+
+    # DATA EXPORT
+    SETTINGS_DATA_EXPORT: str = 'SETTINGS_DATA_EXPORT'
+    SETTINGS_DATA_EXPORT_PCVA_CCVA: str = 'SETTINGS_DATA_EXPORT_PCVA_CCVA'
     
     
     

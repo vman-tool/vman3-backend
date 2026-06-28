@@ -8,6 +8,7 @@ from fastapi.security import OAuth2PasswordBearer
 from arango.database import StandardDatabase
 
 from app.shared.configs.arangodb import get_arangodb_session
+from app.shared.configs.constants import db_collections
 from app.shared.configs.models import ResponseMainModel
 from app.shared.configs.security import get_token_user
 from app.users.models.user import User
@@ -53,34 +54,49 @@ async def get_export_user(
     db = Depends(get_arangodb_session)
 ):
     """
-    Validates a short-lived export token from query parameter.
+    Validates a short-lived export token (passed as query param) and returns
+    a user dict that includes access_limit — identical shape to get_current_user.
     """
     try:
-        # Decode token
         payload = get_token_payload(token, settings.JWT_SECRET, settings.JWT_ALGORITHM)
-        
+
         if not payload:
-            raise HTTPException(status_code=401, detail="Invalid token")
-            
-        # Verify type is export_token
+            raise HTTPException(status_code=401, detail="Invalid export token")
         if payload.get("type") != "export_token":
             raise HTTPException(status_code=401, detail="Invalid token type")
-            
-        # Get user
-        user_id = payload.get("sub")
+
+        user_id = payload.get("sub")  # this is the user's _key
         if not user_id:
             raise HTTPException(status_code=401, detail="Invalid token subject")
-            
-        # Find user by ID (using a direct query since load_user uses email)
-        # Or we can reuse get_current_user logic if we had user_id lookup
-        # For now, let's fetch the user directly
-        user_cursor = await User.get(user_id, db=db)
-        
-        if not user_cursor:
-             raise HTTPException(status_code=401, detail="User not found")
-             
-        return user_cursor
 
+        # Load user document by _key
+        user_doc = db.collection(db_collections.USERS).get(user_id)
+        if not user_doc or not user_doc.get("is_active"):
+            raise HTTPException(status_code=401, detail="User not found or inactive")
+
+        # Load access_limit from separate collection (same pattern as get_token_user)
+        user_uuid = user_doc.get("uuid")
+        ac = None
+        if user_uuid:
+            try:
+                access_cursor = db.collection(db_collections.USER_ACCESS_LIMIT).find(
+                    {"user": user_uuid, "is_deleted": False}, limit=1
+                )
+                ac = next(access_cursor, None)
+            except Exception:
+                pass  # no access_limit record = no restriction
+
+        return {
+            "uuid": user_doc.get("uuid"),
+            "id": user_doc.get("_key"),
+            "name": user_doc.get("name"),
+            "email": user_doc.get("email"),
+            "is_active": user_doc.get("is_active"),
+            "access_limit": ac.get("access_limit") if ac is not None else None,
+        }
+
+    except HTTPException:
+        raise
     except Exception as e:
         print(f"Export token validation error: {e}")
         raise HTTPException(status_code=401, detail="Invalid or expired export token")
