@@ -21,6 +21,7 @@ from app.shared.configs.security import (
     verify_password,
 )
 from app.shared.configs.settings import get_settings
+from app.settings.services.odk_configs import fetch_odk_config
 from app.shared.utils.database_utilities import record_exists, replace_object_values
 from app.users.models.role import Role, UserAccessLimit, UserRole
 from app.users.models.user import User, UserToken
@@ -313,7 +314,34 @@ async def fetch_user_detail(pk: str, db):
     )
     raise HTTPException(status_code=400, detail="User does not exist.")
 
-async def fetch_users(paging: bool= None, page_number: int = None, limit: int = None, search: str = None, db: StandardDatabase = None):
+async def _fetch_roles_and_limits(user_uuids: List[str], db: StandardDatabase) -> Dict:
+    if not user_uuids:
+        return {}
+    query = f"""
+        FOR uuid IN @user_uuids
+            LET access_info = (
+                FOR a IN {db_collections.USER_ACCESS_LIMIT}
+                    FILTER a.user == uuid AND a.is_deleted == false
+                    RETURN a.access_limit
+            )[0]
+            LET role_list = (
+                FOR ur IN {db_collections.USER_ROLES}
+                    FILTER ur.user == uuid AND ur.is_deleted == false
+                    LET role_doc = (
+                        FOR r IN {db_collections.ROLES}
+                            FILTER r.uuid == ur.role AND r.is_deleted == false
+                            RETURN {{ uuid: r.uuid, name: r.name }}
+                    )[0]
+                    FILTER role_doc != null
+                    RETURN role_doc
+            )
+            RETURN {{ user: uuid, roles: role_list, access_limit: access_info }}
+    """
+    results = await VManBaseModel.run_custom_query(query=query, bind_vars={'user_uuids': user_uuids}, db=db)
+    return {item['user']: item for item in results} if results else {}
+
+
+async def fetch_users(paging: bool = None, page_number: int = None, limit: int = None, search: str = None, db: StandardDatabase = None):
     filters = {}
     if search:
         filters['like_conditions'] = [
@@ -330,33 +358,34 @@ async def fetch_users(paging: bool= None, page_number: int = None, limit: int = 
     )
 
     total_users = await User.count(filters=filters, include_deleted=None, db=db)
+
+    if not users:
+        raise HTTPException(status_code=400, detail="Users not found.")
+
+    extras = await _fetch_roles_and_limits([u['uuid'] for u in users], db)
+
     user_data = [
-                UserResponse(
-                    uuid=user["uuid"],
-                    id=user["_key"],
-                    name=user["name"],
-                    email=user["email"],
-                    is_active=user["is_active"],
-                    created_at=user["created_at"],
-                    created_by=user.get("created_by") if "created_by" in user else None,
-                    image=user.get("image") if "image" in user else None
-                ) for user in users
-            ]
-    
-    if users:
-        pager = None
-        if paging:
-            pager = Pager(
-                page=page_number,
-                limit=limit
-            )
-        return ResponseMainModel(
-                data=user_data,
-                message="Users fetched successfully",
-                total= total_users,
-                pager=pager
-            )
-    raise HTTPException(status_code=400, detail="Users not found.")
+        UserResponse(
+            uuid=user["uuid"],
+            id=user["_key"],
+            name=user["name"],
+            email=user["email"],
+            is_active=user["is_active"],
+            created_at=user["created_at"],
+            created_by=user.get("created_by"),
+            image=user.get("image"),
+            roles=extras.get(user['uuid'], {}).get('roles', []),
+            access_limit=extras.get(user['uuid'], {}).get('access_limit'),
+        ) for user in users
+    ]
+
+    pager = Pager(page=page_number, limit=limit) if paging else None
+    return ResponseMainModel(
+        data=user_data,
+        message="Users fetched successfully",
+        total=total_users,
+        pager=pager,
+    )
 
 # async def fetch_user_detail(pk: str, db: StandardDatabase):
 #     loop = asyncio.get_event_loop()
@@ -468,6 +497,28 @@ async def assign_roles(data: AssignRolesRequest = None, current_user: User = Non
                     user_role = await UserRole(**user_role_json).save(db=db)
                 elif len(existing_user_role) == 1:
                     continue
+        if data.access_limit and data.access_limit.get('field') and current_user.get('access_limit') and current_user['access_limit'].get('field'):
+            try:
+                config = await fetch_odk_config(db)
+                fm = config.field_mapping
+                field_to_level = {
+                    fm.location_level1: 1,
+                    fm.location_level2: 2,
+                    fm.location_level3: 3,
+                    fm.location_level4: 4,
+                } if fm else {}
+                creator_level = field_to_level.get(current_user['access_limit']['field'], 0)
+                new_level = field_to_level.get(data.access_limit['field'], 0)
+                if creator_level > 0 and new_level > 0 and new_level < creator_level:
+                    raise HTTPException(
+                        status_code=403,
+                        detail="You cannot assign an access level above your own organizational level."
+                    )
+            except HTTPException:
+                raise
+            except Exception:
+                pass
+
         if data.access_limit:
             existing_access_limit = await UserAccessLimit.get_many(filters={"user": data.user}, db=db)
             if len(existing_access_limit) == 1:
