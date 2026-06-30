@@ -22,8 +22,7 @@ services:
 
   redis:
     container_name: redis-vman3-dev
-    image: redis:latest
-    platform: linux/amd64
+    image: redis:7.4-alpine
     command: redis-server --requirepass vman@1029
     ports:
       - "6370:6379"
@@ -34,7 +33,6 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    platform: linux/amd64
     command:
       [
         "python3",
@@ -63,14 +61,8 @@ services:
       DB_NAME: "vman3"
       DB_ROOT_USER: "root"
       ARANGO_ROOT_USER: "root"
-      ARANGO_ROOT_PASSWORD: "password"
+      ARANGO_ROOT_PASSWORD: "${ARANGO_ROOT_PASSWORD:-password}"
       ARANGODB_URL: "http://arango-db:8529/"
-      # ODK credentials
-      DEFAULT_PROJECT_ID: "2"
-      ODK_API_URL: "https://central.iact.co.tz"
-      ODK_API_VERSION: "v1"
-      ODK_USERNAME: "admin@vman.net"
-      ODK_PASSWORD: "welcome2vman"
     depends_on:
       - redis
     restart: always

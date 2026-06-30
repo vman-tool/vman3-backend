@@ -21,6 +21,8 @@ class UserResponse(BaseResponse):
     created_at: Union[str, None, datetime] = None
     created_by: Union[str, int, None] = None
     image: Union[str, None] = None
+    access_limit: Union[Dict, None] = None
+    roles: Union[List[Dict], None] = None
     
     
 
