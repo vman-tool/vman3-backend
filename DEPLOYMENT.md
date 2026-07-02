@@ -121,3 +121,74 @@ When deployed standalone:
 - Can be disabled via `CCVA_PUBLIC_ENABLED=false`
 - All existing endpoints work the same way
 
+---
+
+## ODK Data Sync — Celery Worker Operations
+
+### Background
+
+The sync pipeline uses Celery (broker: Redis) to run ODK data downloads in the background. Each sync run is assigned a unique UUID as its `task_id`, which is stored in Redis under the key `sync:active_task_id`. The following Redis keys are associated with each active sync:
+
+| Key | Purpose |
+|-----|---------|
+| `sync:active_task_id` | Points to the UUID of the currently active sync |
+| `sync:snapshot:{task_id}` | Live progress snapshot; present only while sync is running |
+| `sync:cancel:{task_id}` | Cooperative cancel flag; set by the cancel endpoint |
+| `sync:celery_task_id:{task_id}` | Maps vman task_id → Celery worker UUID |
+
+All keys carry a 1-hour TTL and are cleared automatically on completion or cancellation.
+
+### Restarting the Celery Worker (e.g. after changing the ODK URL)
+
+**Option 1 — API is reachable (preferred):**
+
+```bash
+# 1. Clear stale Redis sync state via the reset endpoint
+curl -X POST https://your-api/odk/reset-sync-state \
+  -H "Authorization: Bearer <token>"
+
+# 2. Restart only the Celery worker — Redis, ArangoDB, and frontend are unaffected
+docker compose restart celery-worker
+
+# 3. Start a new sync normally from the UI
+```
+
+**Option 2 — API is unreachable (worker completely dead):**
+
+```bash
+# Clear all stale sync keys from Redis directly, then restart the worker
+TASK_ID=$(docker exec vman3-redis-1 redis-cli -a vman@1029 GET sync:active_task_id)
+
+docker exec vman3-redis-1 redis-cli -a vman@1029 DEL \
+  sync:active_task_id \
+  "sync:snapshot:${TASK_ID}" \
+  "sync:cancel:${TASK_ID}" \
+  "sync:celery_task_id:${TASK_ID}"
+
+docker compose restart celery-worker
+```
+
+### Diagnosing a stuck sync
+
+```bash
+# Check if the Celery worker container is running
+docker compose ps celery-worker
+
+# Tail Celery worker logs for errors
+docker compose logs celery-worker --tail=60
+
+# Inspect current sync state in Redis
+docker exec vman3-redis-1 redis-cli -a vman@1029 GET sync:active_task_id
+# → prints the active task UUID, or (nil) if no sync is registered
+
+# Check if snapshot (running indicator) exists for that task
+docker exec vman3-redis-1 redis-cli -a vman@1029 EXISTS sync:snapshot:<task_id>
+# → 1 = task is (or appears) running; 0 = task has finished or never started
+```
+
+### Notes
+
+- You do **not** need to restart Redis, ArangoDB, or the frontend to recover a stuck sync.
+- The `POST /odk/reset-sync-state` endpoint requires `ODK_DATA_SYNC` privilege.
+- If a previous cancel left `sync:cancel:{task_id}` set and the worker was restarted before the task could clear it, the stale cancel flag would cause any new task using that same ID to self-cancel immediately. The UUID-per-sync design eliminates this entirely — each run gets a fresh ID.
+
