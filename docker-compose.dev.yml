@@ -56,13 +56,15 @@ services:
       # Redis — same default compose network, use service name
       REDIS_URL: "redis://redis:6379"
       REDIS_PASSWORD: "vman@1029"
-      # ArangoDB — on vman3-net, use service name instead of remote IP
-      DB_URL: "http://arango-db:8529"
+      # ArangoDB — use explicit container name to avoid conflict with deployment
+      # arango-db (deployment) and backend-arango-db-1 (dev) both live on vman3-net;
+      # point the worker at the dev instance that the FastAPI backend also uses.
+      DB_URL: "http://backend-arango-db-1:8529"
       DB_NAME: "vman3"
       DB_ROOT_USER: "root"
       ARANGO_ROOT_USER: "root"
-      ARANGO_ROOT_PASSWORD: "${ARANGO_ROOT_PASSWORD:-password}"
-      ARANGODB_URL: "http://arango-db:8529/"
+      ARANGO_ROOT_PASSWORD: "password"
+      ARANGODB_URL: "http://backend-arango-db-1:8529/"
     depends_on:
       - redis
     restart: always

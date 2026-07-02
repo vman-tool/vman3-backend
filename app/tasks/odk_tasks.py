@@ -24,7 +24,9 @@ from json import loads
 logger = get_task_logger(__name__)
 
 CANCEL_KEY_PREFIX = "sync:cancel:"
-CANCEL_KEY_TTL = 3600  # seconds
+CANCEL_KEY_TTL    = 3600  # seconds — used for cancel flag and celery task ID keys
+SNAPSHOT_TTL      = 300   # seconds — snapshot is refreshed every page; if the task
+                           # dies the guard auto-unlocks within this window
 
 
 # ── Redis helpers ─────────────────────────────────────────────────────────────
@@ -64,7 +66,7 @@ def _update_snapshot(task_id: str, records_saved: int, start_time: float,
     """Write live progress to Redis so the cancel endpoint can save accurate history."""
     try:
         r = get_redis_client()
-        r.setex(f"sync:snapshot:{task_id}", CANCEL_KEY_TTL, json.dumps({
+        r.setex(f"sync:snapshot:{task_id}", SNAPSHOT_TTL, json.dumps({
             "records_saved": records_saved,
             "start_time": start_time,
             "user_name": user_name,

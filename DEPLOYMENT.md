@@ -156,14 +156,12 @@ docker compose restart celery-worker
 **Option 2 — API is unreachable (worker completely dead):**
 
 ```bash
-# Clear all stale sync keys from Redis directly, then restart the worker
-TASK_ID=$(docker exec vman3-redis-1 redis-cli -a vman@1029 GET sync:active_task_id)
+# List all stale sync keys (to see what's stuck)
+docker exec redis-vman3-dev redis-cli -a vman@1029 --no-auth-warning KEYS "sync:*"
 
-docker exec vman3-redis-1 redis-cli -a vman@1029 DEL \
-  sync:active_task_id \
-  "sync:snapshot:${TASK_ID}" \
-  "sync:cancel:${TASK_ID}" \
-  "sync:celery_task_id:${TASK_ID}"
+# Delete all of them at once
+docker exec redis-vman3-dev sh -c \
+  'redis-cli -a vman@1029 --no-auth-warning KEYS "sync:*" | xargs redis-cli -a vman@1029 --no-auth-warning DEL'
 
 docker compose restart celery-worker
 ```
@@ -178,11 +176,11 @@ docker compose ps celery-worker
 docker compose logs celery-worker --tail=60
 
 # Inspect current sync state in Redis
-docker exec vman3-redis-1 redis-cli -a vman@1029 GET sync:active_task_id
+docker exec redis-vman3-dev redis-cli -a vman@1029 GET sync:active_task_id
 # → prints the active task UUID, or (nil) if no sync is registered
 
 # Check if snapshot (running indicator) exists for that task
-docker exec vman3-redis-1 redis-cli -a vman@1029 EXISTS sync:snapshot:<task_id>
+docker exec redis-vman3-dev redis-cli -a vman@1029 EXISTS sync:snapshot:<task_id>
 # → 1 = task is (or appears) running; 0 = task has finished or never started
 ```
 
