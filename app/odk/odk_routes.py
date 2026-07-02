@@ -1,6 +1,7 @@
 
 
 
+import uuid
 from datetime import datetime
 from arango.database import StandardDatabase
 from decouple import config
@@ -17,11 +18,14 @@ from app.settings.models.settings import SettingsConfigData, SyncStatus
 from app.shared.configs.constants import db_collections
 
 # Celery task imports
-from app.tasks.odk_tasks import sync_odk_data_task
+from app.tasks.odk_tasks import sync_odk_data_task, get_redis_client, CANCEL_KEY_TTL
 
 from app.users.decorators.user import check_privileges, get_current_user
 from app.shared.configs.constants import AccessPrivileges
 from typing import List
+
+# Redis key that always points to the currently active sync task
+ACTIVE_TASK_KEY = "sync:active_task_id"
 
 odk_router = APIRouter(
     prefix="/odk",
@@ -99,6 +103,15 @@ async def fetch_odk_data_with_async_endpoint(
     app_logger.info(f"ODK sync requested by {getattr(current_user, 'email', 'unknown')} at {datetime.now().isoformat()}")
 
     try:
+        # Guard: reject if a sync is already running
+        r = get_redis_client()
+        active_id = r.get(ACTIVE_TASK_KEY)
+        if active_id and r.exists(f"sync:snapshot:{active_id}"):
+            raise HTTPException(
+                status_code=409,
+                detail="A sync is already in progress. Cancel it before starting a new one."
+            )
+
         initial_response = await data_download.fetch_odk_data_initial(
             db=db,
             start_date=start_date,
@@ -118,9 +131,12 @@ async def fetch_odk_data_with_async_endpoint(
                 or "System"
             )
 
+            task_id = str(uuid.uuid4())
+            r.setex(ACTIVE_TASK_KEY, CANCEL_KEY_TTL, task_id)
+
             sync_odk_data_task.delay(
                 total_data_count=total_data_count,
-                task_id="123",
+                task_id=task_id,
                 start_date=fetch_start_date,
                 end_date=end_date,
                 skip=skip,
@@ -130,10 +146,14 @@ async def fetch_odk_data_with_async_endpoint(
                 server_total=initial_response.get('server_total', total_data_count),
                 local_count=initial_response.get('local_count', 0),
             )
-            app_logger.info(f"ODK sync task dispatched (user={user_name}, {total_data_count} records)")
+            app_logger.info(f"ODK sync task dispatched (id={task_id}, user={user_name}, {total_data_count} records)")
+        else:
+            task_id = None
 
-        return {"status": "Data fetch initiated", "using_celery": True, **initial_response}
+        return {"status": "Data fetch initiated", "using_celery": True, "task_id": task_id, **initial_response}
 
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -264,8 +284,8 @@ async def cancel_sync(
         import json as _json, time as _time
         from datetime import timezone
 
-        task_id = "123"
         r = get_redis_client()
+        task_id = r.get(ACTIVE_TASK_KEY) or "123"
 
         # 1. Save cancelled history from snapshot BEFORE signalling the task.
         snapshot_json = r.get(f"sync:snapshot:{task_id}")
@@ -314,6 +334,39 @@ async def cancel_sync(
         )
     except Exception as e:
         app_logger.error(f"Cancel sync error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@odk_router.post("/reset-sync-state", status_code=status.HTTP_200_OK)
+async def reset_sync_state(
+    required_privs: List[str] = Depends(check_privileges([AccessPrivileges.ODK_DATA_SYNC])),
+) -> ResponseMainModel:
+    """
+    Clear all stale sync-related Redis keys.
+    Call this when the Celery worker is being restarted after a stuck or
+    interrupted sync — ensures the next sync start isn't blocked by stale state.
+    """
+    try:
+        r = get_redis_client()
+        active_id = r.get(ACTIVE_TASK_KEY)
+        deleted_keys = []
+        keys_to_delete = [ACTIVE_TASK_KEY]
+        if active_id:
+            keys_to_delete += [
+                f"sync:snapshot:{active_id}",
+                f"sync:cancel:{active_id}",
+                f"sync:celery_task_id:{active_id}",
+            ]
+        for key in keys_to_delete:
+            if r.delete(key):
+                deleted_keys.append(key)
+        app_logger.info(f"Sync state reset — cleared keys: {deleted_keys}")
+        return ResponseMainModel(
+            data={"cleared_keys": deleted_keys, "previous_task_id": active_id},
+            message="Sync state cleared. Safe to restart Celery worker and start a new sync."
+        )
+    except Exception as e:
+        app_logger.error(f"Reset sync state error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 

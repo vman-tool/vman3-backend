@@ -161,7 +161,10 @@ async def add_configs_settings(configData: SettingsConfigData, db: StandardDatab
         # Add handling for sync status
         elif configData.type == 'sync_status' and configData.sync_status:
             data['sync_status'] = configData.sync_status.model_dump()
-            
+
+        elif configData.type == 'dqa_thresholds' and configData.dqa_thresholds:
+            data['dqa_thresholds'] = configData.dqa_thresholds.model_dump()
+
         else:
             raise ValueError("Invalid type or missing configuration data")
 
