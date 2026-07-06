@@ -61,7 +61,7 @@ async def get_ccva_record_count(current_user:dict, db: StandardDatabase, start_d
 
         
 # The main run_ccva function that integrates everything
-async def run_ccva(db: StandardDatabase, records:ResponseMainModel, task_id: str, task_results: Dict,start_date: Optional[date] = None, end_date: Optional[date] = None, malaria_status:Optional[str]=None, hiv_status:Optional[str]=None, ccva_algorithm:Optional[str]=None, user_id: str = "unknown"):
+async def run_ccva(db: StandardDatabase, records:ResponseMainModel, task_id: str, task_results: Dict,start_date: Optional[date] = None, end_date: Optional[date] = None, malaria_status:Optional[str]=None, hiv_status:Optional[str]=None, ccva_algorithm:Optional[str]=None, user_id: str = "unknown", dk_threshold: Optional[float] = None, ood_threshold: Optional[float] = None):
     try:
                 # Define the async callback to send progress updates
                 # Define the async callback to send progress updates
@@ -168,7 +168,7 @@ async def run_ccva(db: StandardDatabase, records:ResponseMainModel, task_id: str
         
         
         await asyncio.to_thread(
-            runCCVA, odk_raw=database_dataframe, file_id=task_id, update_callback=update_callback,db= db, id_col=id_col,date_col=date_col,start_time=start_time, algorithm= ccva_algorithm,   malaria= malaria_status, hiv= hiv_status, user_id=user_id,
+            runCCVA, odk_raw=database_dataframe, file_id=task_id, update_callback=update_callback, db=db, id_col=id_col, date_col=date_col, start_time=start_time, algorithm=ccva_algorithm, malaria=malaria_status, hiv=hiv_status, user_id=user_id, dk_threshold=dk_threshold, ood_threshold=ood_threshold,
             
         )
         
@@ -184,8 +184,58 @@ async def run_ccva(db: StandardDatabase, records:ResponseMainModel, task_id: str
 
 def runCCVA(odk_raw:pd.DataFrame, id_col: str = None,date_col:str =None,start_time:timedelta=None, instrument: str = '2016WHOv151', algorithm: str = 'InterVA5',
             top=10, undetermined: bool = True, malaria: str = "h", hiv: str = "h",
-            file_id: str = "unnamed_file", update_callback=None, db: StandardDatabase=None, user_id: str = None):
-    
+            file_id: str = "unnamed_file", update_callback=None, db: StandardDatabase=None, user_id: str = None,
+            dk_threshold: Optional[float] = None, ood_threshold: Optional[float] = None):
+
+    # ── VMan ML 1.0 branch ────────────────────────────────────────────────────
+    if algorithm == "VManML10":
+        from app.ccva.services.vman_ml_service import run_vman_ml
+        rcd = run_vman_ml(
+            odk_raw=odk_raw,
+            file_id=file_id,
+            id_col=id_col,
+            update_callback=update_callback,
+            dk_threshold=dk_threshold,
+            ood_threshold=ood_threshold,
+            start_time=start_time,
+        )
+        if not rcd:
+            call_update_callback(update_callback, {"progress": 0, "message": "No predictions returned by VMan ML", "status": "error", "task_id": file_id, "error": True})
+            return
+
+        results_to_insert = asyncio.run(getVADataAndMergeWithResults(db, null_convert_data(rcd)))
+        if results_to_insert is None:
+            call_update_callback(update_callback, {"progress": 0, "message": "No records found after merge", "status": "error", "task_id": file_id, "error": True})
+            return
+
+        db.collection(db_collections.CCVA_RESULTS).insert_many(results_to_insert, overwrite=True, overwrite_mode="update")
+
+        # Build CSMF per group (all/male/female/adult/child/neonate) and persist
+        # to CCVA_GRAPH_RESULTS — same format as InterVA5 compile_ccva_results().
+        ccva_results = compile_ml_csmf_results(
+            results=results_to_insert,
+            task_id=file_id,
+            total_records=len(odk_raw),
+            start_time=start_time,
+            user_id=user_id,
+            date_col=date_col,
+            odk_raw=odk_raw,
+            db=db,
+        )
+
+        call_update_callback(update_callback, {
+            "progress": 100,
+            "message": "VMan ML 1.0 analysis complete.",
+            "status": "completed",
+            "data": ccva_results,
+            "elapsed_time": ccva_results["elapsed_time"],
+            "total_records": ccva_results["total_records"],
+            "task_id": file_id,
+            "error": False,
+        })
+        return
+    # ── end VMan ML branch ────────────────────────────────────────────────────
+
     try:
         # Transform the input data
         if id_col:
@@ -294,6 +344,83 @@ def runCCVA(odk_raw:pd.DataFrame, id_col: str = None,date_col:str =None,start_ti
         raise e
 
         
+
+def compile_ml_csmf_results(
+    results: list,
+    task_id: str,
+    total_records: int,
+    start_time,
+    user_id: str,
+    date_col: Optional[str],
+    odk_raw: pd.DataFrame,
+    db: StandardDatabase,
+    top: int = 10,
+    algorithm: str = "VManML10",
+) -> dict:
+    """Build CSMF from ML prediction results and write to CCVA_GRAPH_RESULTS.
+
+    Produces the same dict shape as compile_ccva_results() so the frontend
+    chart component renders both algorithms identically.
+    """
+    df = pd.DataFrame(results)
+
+    def _group_csmf(sub: pd.DataFrame) -> dict:
+        if sub.empty:
+            return {"index": [], "values": []}
+        counts = sub["CAUSE1"].fillna("Undetermined").value_counts()
+        total = len(sub)
+        top_causes = counts.head(top)
+        return {
+            "index": top_causes.index.tolist(),
+            "values": [round(float(v) / total, 4) for v in top_causes.values],
+        }
+
+    all_r     = _group_csmf(df)
+    male_r    = _group_csmf(df[df["gender"] == "male"])    if "gender"    in df.columns else {"index": [], "values": []}
+    female_r  = _group_csmf(df[df["gender"] == "female"])  if "gender"    in df.columns else {"index": [], "values": []}
+    adult_r   = _group_csmf(df[df["age_group"] == "adult"])   if "age_group" in df.columns else {"index": [], "values": []}
+    child_r   = _group_csmf(df[df["age_group"] == "child"])   if "age_group" in df.columns else {"index": [], "values": []}
+    neonate_r = _group_csmf(df[df["age_group"] == "neonate"]) if "age_group" in df.columns else {"index": [], "values": []}
+
+    if date_col and date_col in odk_raw.columns:
+        date_series = pd.to_datetime(odk_raw[date_col], errors="coerce")
+        valid_dates = date_series.dropna()
+        if not valid_dates.empty:
+            latest_date   = valid_dates.max().to_pydatetime().isoformat()
+            earliest_date = valid_dates.min().to_pydatetime().isoformat()
+        else:
+            latest_date = earliest_date = None
+    else:
+        latest_date = earliest_date = None
+
+    elapsed = datetime.now() - start_time
+    elapsed_str = f"{elapsed.seconds//3600}:{(elapsed.seconds//60)%60:02d}:{elapsed.seconds%60:02d}"
+
+    ccva_results = {
+        "task_id":                    task_id,
+        "created_at":                 datetime.now().isoformat(),
+        "total_records":              total_records,
+        "data_processed_with_results": len(results),
+        "elapsed_time":               elapsed_str,
+        "user_id":                    user_id,
+        "range":                      {"start": latest_date, "end": earliest_date},
+        "algorithm":                  algorithm,
+        "all":                        all_r,
+        "male":                       male_r,
+        "female":                     female_r,
+        "adult":                      adult_r,
+        "child":                      child_r,
+        "neonate":                    neonate_r,
+    }
+
+    db.collection(db_collections.CCVA_GRAPH_RESULTS).insert(ccva_results)
+    # Empty error-log entry — keeps the same contract as InterVA5 runs
+    db.collection(db_collections.CCVA_ERRORS).insert(
+        {"_key": task_id, "task_id": task_id, "error_logs": []},
+        overwrite=True, overwrite_mode="update",
+    )
+    return ccva_results
+
 
 # Function to compile the results from InterVA5
 def compile_ccva_results(iv5out, top=10, undetermined=True,start_time:timedelta=None,
@@ -423,6 +550,7 @@ def compile_ccva_results(iv5out, top=10, undetermined=True,start_time:timedelta=
         "elapsed_time":   f"{elapsed_time.seconds // 3600}:{(elapsed_time.seconds // 60) % 60}:{elapsed_time.seconds % 60}",
         "user_id": user_id,
         "range":rangeDates,
+        "algorithm": "InterVA5",
         "all": all_results,
         "male": male_results,
         "female": female_results,
