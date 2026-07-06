@@ -15,6 +15,12 @@ from app.data_quality.services.general_dqa import (
     fetch_rrs_stats,
     fetch_ici_stats,
 )
+from app.data_quality.services.dqa_analytics_service import (
+    fetch_dqa_analytics_snapshot,
+    compute_and_store_dqa_analytics,
+    get_dqa_analytics_config,
+    save_dqa_analytics_config,
+)
 from app.shared.configs.arangodb import get_arangodb_session
 from app.users.decorators.user import get_current_user
 
@@ -76,6 +82,57 @@ async def get_ici_stats(
 ):
     try:
         return await fetch_ici_stats(db)
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+
+
+@data_quality_router.get("/analytics")
+async def get_dqa_analytics(
+    db: StandardDatabase = Depends(get_arangodb_session),
+    current_user=Depends(get_current_user),
+):
+    try:
+        snapshot = await fetch_dqa_analytics_snapshot(db)
+        return {"data": snapshot, "message": "ok"}
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+
+
+@data_quality_router.post("/analytics/refresh", status_code=status.HTTP_202_ACCEPTED)
+async def refresh_dqa_analytics(
+    db: StandardDatabase = Depends(get_arangodb_session),
+    current_user=Depends(get_current_user),
+):
+    """Enqueue an immediate recompute of the DQA analytics snapshot."""
+    try:
+        from app.tasks.dqa_tasks import compute_dqa_analytics_task
+        compute_dqa_analytics_task.delay()
+        return {"message": "DQA analytics computation started", "status": "started"}
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+
+
+@data_quality_router.get("/analytics/config")
+async def get_analytics_config(
+    db: StandardDatabase = Depends(get_arangodb_session),
+    current_user=Depends(get_current_user),
+):
+    try:
+        config = await get_dqa_analytics_config(db)
+        return {"data": config, "message": "ok"}
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+
+
+@data_quality_router.put("/analytics/config")
+async def update_analytics_config(
+    config: dict,
+    db: StandardDatabase = Depends(get_arangodb_session),
+    current_user=Depends(get_current_user),
+):
+    try:
+        saved = await save_dqa_analytics_config(db, config)
+        return {"data": saved, "message": "Schedule configuration saved"}
     except Exception as e:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
 

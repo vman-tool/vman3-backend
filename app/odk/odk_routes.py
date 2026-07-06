@@ -18,14 +18,11 @@ from app.settings.models.settings import SettingsConfigData, SyncStatus
 from app.shared.configs.constants import db_collections
 
 # Celery task imports
-from app.tasks.odk_tasks import sync_odk_data_task, get_redis_client, CANCEL_KEY_TTL
+from app.tasks.odk_tasks import sync_odk_data_task, get_redis_client, CANCEL_KEY_TTL, ACTIVE_TASK_KEY
 
 from app.users.decorators.user import check_privileges, get_current_user
 from app.shared.configs.constants import AccessPrivileges
 from typing import List
-
-# Redis key that always points to the currently active sync task
-ACTIVE_TASK_KEY = "sync:active_task_id"
 
 odk_router = APIRouter(
     prefix="/odk",
@@ -368,6 +365,35 @@ async def reset_sync_state(
     except Exception as e:
         app_logger.error(f"Reset sync state error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@odk_router.get("/active-sync", status_code=status.HTTP_200_OK)
+async def get_active_sync(current_user=Depends(get_current_user)):
+    """Returns whether a data sync is currently running and basic progress metadata."""
+    try:
+        import json as _json
+        r = get_redis_client()
+
+        # Last schedule fire info (persists 24 h so UI can always confirm it ran)
+        fired_raw = r.get("odk:last_schedule_fired")
+        last_schedule_fired = _json.loads(fired_raw) if fired_raw else None
+
+        task_id = r.get(ACTIVE_TASK_KEY)
+        if not task_id:
+            return {"active": False, "last_schedule_fired": last_schedule_fired}
+        # Task key exists — sync is active even if snapshot not written yet
+        snapshot_raw = r.get(f"sync:snapshot:{task_id}")
+        snap = _json.loads(snapshot_raw) if snapshot_raw else {}
+        return {
+            "active": True,
+            "user_name": snap.get("user_name", "System"),
+            "records_saved": snap.get("records_saved", 0),
+            "total_data_count": snap.get("total_data_count", 0),
+            "method": snap.get("method", "api"),
+            "last_schedule_fired": last_schedule_fired,
+        }
+    except Exception:
+        return {"active": False, "last_schedule_fired": None}
 
 
 @odk_router.get("/sync-history", status_code=status.HTTP_200_OK)
