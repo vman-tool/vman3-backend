@@ -31,8 +31,8 @@ services:
   celery-worker:
     container_name: celery-worker-dev
     build:
-      context: .
-      dockerfile: Dockerfile
+      context: ..
+      dockerfile: backend/Dockerfile
     command:
       [
         "python3",
@@ -72,8 +72,8 @@ services:
   flower:
     container_name: flower-dev
     build:
-      context: .
-      dockerfile: Dockerfile
+      context: ..
+      dockerfile: backend/Dockerfile
     command:
       [
         "python3",
