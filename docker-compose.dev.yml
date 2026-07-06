@@ -69,6 +69,41 @@ services:
       - redis
     restart: always
 
+
+  celery-beat:
+    container_name: celery-beat-dev
+    build:
+      context: ..
+      dockerfile: backend/Dockerfile
+    command:
+      [
+        "python3",
+        "-m",
+        "celery",
+        "-A",
+        "app.celery_app",
+        "beat",
+        "--loglevel=info"
+      ]
+    volumes:
+      - ./app:/vman3/app
+    networks:
+      - default
+      - vman3-net
+    environment:
+      PYTHONUNBUFFERED: "1"
+      REDIS_URL: "redis://redis:6379"
+      REDIS_PASSWORD: "vman@1029"
+      DB_URL: "http://backend-arango-db-1:8529"
+      DB_NAME: "vman3"
+      DB_ROOT_USER: "root"
+      ARANGO_ROOT_USER: "root"
+      ARANGO_ROOT_PASSWORD: "password"
+      ARANGODB_URL: "http://backend-arango-db-1:8529/"
+    depends_on:
+      - redis
+    restart: always
+
   flower:
     container_name: flower-dev
     build:

@@ -27,6 +27,7 @@ CANCEL_KEY_PREFIX = "sync:cancel:"
 CANCEL_KEY_TTL    = 3600  # seconds — used for cancel flag and celery task ID keys
 SNAPSHOT_TTL      = 300   # seconds — snapshot is refreshed every page; if the task
                            # dies the guard auto-unlocks within this window
+ACTIVE_TASK_KEY   = "sync:active_task_id"  # single Redis key tracking the running sync
 
 
 # ── Redis helpers ─────────────────────────────────────────────────────────────
@@ -81,6 +82,15 @@ def _clear_snapshot(task_id: str) -> None:
     try:
         r = get_redis_client()
         r.delete(f"sync:snapshot:{task_id}")
+    except Exception:
+        pass
+
+
+def _clear_active_task() -> None:
+    """Delete ACTIVE_TASK_KEY when the sync task finishes so the guard is immediately released."""
+    try:
+        r = get_redis_client()
+        r.delete(ACTIVE_TASK_KEY)
     except Exception:
         pass
 
@@ -291,6 +301,7 @@ def sync_odk_data_task(
                 "message": f"Sync cancelled — {records_saved:,} records saved in {elapsed:.0f}s",
             })
             logger.info(f"ODK sync task {task_id} cancelled: {records_saved} records saved in {elapsed:.2f}s")
+            _clear_active_task()
             return {"status": "cancelled", "records_saved": records_saved, "elapsed_time": elapsed}
         else:
             publish_progress(task_id, {
@@ -304,6 +315,7 @@ def sync_odk_data_task(
                 "message": f"Sync completed: {records_saved:,} new records in {elapsed:.0f}s",
             })
             logger.info(f"ODK sync task {task_id} completed: {records_saved} records in {elapsed:.2f}s")
+            _clear_active_task()
             return {"status": "completed", "records_saved": records_saved, "elapsed_time": elapsed}
 
     except Exception as e:
@@ -320,6 +332,7 @@ def sync_odk_data_task(
             "message": f"Sync failed: {e}",
             "error": True,
         })
+        _clear_active_task()
         try:
             from app.shared.configs.arangodb import get_arangodb_client_sync
             _db = get_arangodb_client_sync()
@@ -338,6 +351,127 @@ def sync_odk_data_task(
             _loop.close()
         except Exception:
             pass
+        raise
+
+
+# ── Scheduled ODK sync ───────────────────────────────────────────────────────
+
+@shared_task(
+    bind=False,
+    name="app.tasks.odk_tasks.check_odk_sync_schedule",
+    ignore_result=True,
+)
+def check_odk_sync_schedule():
+    """
+    Runs every minute via Celery beat.
+    Lightweight: reads cron_settings from DB, checks day + time, acquires a
+    per-minute lock, then dispatches run_scheduled_odk_sync to do the heavy work.
+    No imports from odk_routes to avoid circular-import issues.
+    """
+    from app.shared.configs.arangodb import get_arangodb_client_sync
+    from app.shared.configs.constants import db_collections
+
+    try:
+        db = get_arangodb_client_sync()
+
+        config_doc = db.collection(db_collections.SYSTEM_CONFIGS).get("vman_config")
+        if not config_doc:
+            logger.debug("ODK cron: vman_config not found — skipping")
+            return
+
+        cron = config_doc.get("cron_settings") or {}
+        days = [d.lower() for d in (cron.get("days") or [])]
+        run_time = (cron.get("time") or "").strip()
+
+        if not days or not run_time:
+            logger.debug("ODK cron: no days or time configured — skipping")
+            return
+
+        now = datetime.utcnow()
+        current_day  = now.strftime("%A").lower()
+        current_time = now.strftime("%H:%M")
+
+        if current_day not in days:
+            return
+        if current_time != run_time:
+            return
+
+        # Per-minute lock — prevents double-fire if beat fires twice in one minute
+        r = get_redis_client()
+        lock_key = f"odk:cron_lock:{current_day}:{run_time}"
+        if not r.set(lock_key, "1", nx=True, ex=90):
+            logger.debug("ODK cron lock held — skipping duplicate fire")
+            return
+
+        logger.info(f"ODK cron matched ({current_day} {run_time}) — dispatching scheduled sync")
+        r.setex("odk:last_schedule_fired", 86400, json.dumps({
+            "day": current_day,
+            "time": current_time,
+            "fired_at": now.strftime("%Y-%m-%dT%H:%M:%SZ"),
+        }))
+        run_scheduled_odk_sync.delay()
+
+    except Exception as exc:
+        logger.error(f"ODK cron schedule check failed: {exc}", exc_info=True)
+
+
+@shared_task(
+    bind=False,
+    name="app.tasks.odk_tasks.run_scheduled_odk_sync",
+    ignore_result=True,
+    max_retries=1,
+    default_retry_delay=60,
+)
+def run_scheduled_odk_sync():
+    """
+    Performs the actual scheduled ODK sync:
+      1. Checks whether a sync is already running.
+      2. Calls fetch_odk_data_initial to discover how many new records exist.
+      3. Dispatches sync_odk_data_task with the correct parameters.
+    Separated from check_odk_sync_schedule so the schedule check stays fast and
+    any failure here doesn't suppress the per-minute schedule check.
+    """
+    import uuid
+    from app.shared.configs.arangodb import get_arangodb_client_sync
+    from app.odk.services.data_download import fetch_odk_data_initial
+
+    try:
+        r = get_redis_client()
+
+        active_id = r.get(ACTIVE_TASK_KEY)
+        if active_id and r.exists(f"sync:snapshot:{active_id}"):
+            logger.info("Scheduled sync: another sync already running — skipping")
+            return
+
+        db = get_arangodb_client_sync()
+        initial = asyncio.run(fetch_odk_data_initial(db=db, skip=0, top=1, force_update=False))
+
+        if not initial.get("download_status"):
+            logger.info("Scheduled sync: no new records available")
+            return
+
+        total_data_count = initial.get("total_data_count", 0)
+        fetch_start_date = initial.get("start_date")
+        task_id = str(uuid.uuid4())
+
+        r.setex(ACTIVE_TASK_KEY, CANCEL_KEY_TTL, task_id)
+
+        sync_odk_data_task.delay(
+            total_data_count=total_data_count,
+            task_id=task_id,
+            start_date=fetch_start_date,
+            end_date=None,
+            skip=0,
+            top=500,
+            user_name="Scheduled",
+            method="api",
+            server_total=initial.get("server_total", total_data_count),
+            local_count=initial.get("local_count", 0),
+        )
+        logger.info(f"Scheduled sync dispatched (id={task_id}, {total_data_count} records)")
+
+    except Exception as exc:
+        logger.error(f"Scheduled ODK sync failed: {exc}", exc_info=True)
         raise
 
 
