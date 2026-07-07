@@ -95,8 +95,14 @@ async def add_configs_settings(configData: SettingsConfigData, db: StandardDatab
         if configData.type == 'odk_api_configs' and configData.odk_api_configs:
             odk_data = configData.odk_api_configs.model_dump()
             data['odk_api_configs'] = odk_data
-            
+
             data_simpleSpace = SimpleNamespace(**odk_data)
+
+            # Clear any cached session before validating — the new server won't
+            # accept a token issued by the old server.
+            import os as _os
+            if _os.path.exists("session.json"):
+                _os.remove("session.json")
 
             # Validate ODK configuration
             async with ODKClientAsync(data_simpleSpace) as odk_client:
@@ -155,7 +161,10 @@ async def add_configs_settings(configData: SettingsConfigData, db: StandardDatab
         # Add handling for sync status
         elif configData.type == 'sync_status' and configData.sync_status:
             data['sync_status'] = configData.sync_status.model_dump()
-            
+
+        elif configData.type == 'dqa_thresholds' and configData.dqa_thresholds:
+            data['dqa_thresholds'] = configData.dqa_thresholds.model_dump()
+
         else:
             raise ValueError("Invalid type or missing configuration data")
 

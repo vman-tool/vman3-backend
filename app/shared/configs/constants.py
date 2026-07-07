@@ -30,6 +30,7 @@ class db_collections():
     CCVA_PUBLIC_RESULTS: str = 'ccva_public_results'  # Single collection for all public CCVA data (temporary with TTL)
     TASK_PROGRESS: str = 'task_progress'
     SYNC_HISTORY: str = 'sync_history'
+    DQA_ANALYTICS: str = 'dqa_analytics'
 
 class Special_Constants():
     UPLOAD_FOLDER: str = '/uploads'
@@ -148,6 +149,9 @@ collections_with_indexes = {
     ],
     db_collections.SYNC_HISTORY: [
         {"fields": ["date"], "type": "persistent", "name": "idx_sync_date"},
+    ],
+    db_collections.DQA_ANALYTICS: [
+        {"fields": ["computed_at"], "type": "persistent", "name": "idx_dqa_computed_at"},
     ],
 }
 

@@ -62,27 +62,32 @@ def day_of_week_to_cron(days: List[str]) -> str:
     cron_days = [str(day_mapping[day.lower()]) for day in days if day.lower() in day_mapping]
     return ','.join(cron_days) if cron_days else '0'  # fallback to Monday if all names were unrecognised
 
-# Create a wrapper function that creates a BackgroundTasks object
-#@log_to_db(context="odk_fetch_job_wrapper")
+# Dispatch the scheduled sync via Celery so we avoid calling FastAPI route
+# functions directly (their Depends/Query parameters are never resolved outside
+# a request context, making the call unreliable).
 async def odk_fetch_job_wrapper(db=None):
-    """Wrapper function to create BackgroundTasks and call the fetch function"""
-    from fastapi import BackgroundTasks
-    # from app.ccva.services.odk_fetch import fetch_odk_data_with_async_endpoint
-    from app.odk.odk_routes import fetch_odk_data_with_async_endpoint
+    """Dispatch run_scheduled_odk_sync to Celery instead of calling the route directly."""
+    from app.tasks.odk_tasks import run_scheduled_odk_sync, get_redis_client
+    import json as _json
     try:
-        # Create a new BackgroundTasks object
-        background_tasks = BackgroundTasks()
-        
-        # If db is not provided, get a new connection
-        if db is None:
-            db = await get_arangodb_session()
-        logger.info(f"Scheduled ODK fetch job started at {datetime.now().isoformat()}")
-        # Call the fetch function with the required parameters
-        await fetch_odk_data_with_async_endpoint(background_tasks=background_tasks, db=db)
-        
-        logger.info(f"Scheduled ODK fetch job executed successfully at {datetime.now().isoformat()}")
+        now = datetime.utcnow()
+        logger.info(f"APScheduler: ODK scheduled sync firing at {now.strftime('%Y-%m-%dT%H:%M:%SZ')}")
+
+        # Stamp the "last fired" key so the UI badge updates immediately
+        try:
+            r = get_redis_client()
+            r.setex("odk:last_schedule_fired", 86400, _json.dumps({
+                "day": now.strftime("%A").lower(),
+                "time": now.strftime("%H:%M"),
+                "fired_at": now.strftime("%Y-%m-%dT%H:%M:%SZ"),
+            }))
+        except Exception:
+            pass
+
+        run_scheduled_odk_sync.delay()
+        logger.info("APScheduler: dispatched run_scheduled_odk_sync to Celery worker")
     except Exception as e:
-        logger.error(f"Error executing scheduled ODK fetch job: {str(e)}")
+        logger.error(f"APScheduler: error dispatching scheduled ODK sync: {str(e)}")
 #@log_to_db(context="schedule_odk_fetch_job")
 async def schedule_odk_fetch_job(db=None):
     """Schedule the ODK fetch job based on cron settings.
@@ -110,12 +115,11 @@ async def schedule_odk_fetch_job(db=None):
 
             scheduler.add_job(
                 odk_fetch_job_wrapper,
-                CronTrigger(day_of_week=cron_days, hour=int(hour), minute=int(minute)),
+                CronTrigger(day_of_week=cron_days, hour=int(hour), minute=int(minute), timezone='UTC'),
                 id='odk_fetch_job',
                 replace_existing=True,
-                kwargs={'db': db}
             )
-            logger.info(f"ODK fetch job scheduled for {time_str} on: {', '.join(days)}")
+            logger.info(f"ODK fetch job scheduled for {time_str} UTC on: {', '.join(days)}")
 
         # Schedule a job to re-read cron settings every hour so changes take effect without restart
         if not scheduler.get_job('update_cron_settings_job'):
