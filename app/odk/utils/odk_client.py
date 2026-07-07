@@ -10,8 +10,9 @@ from app.settings.models.settings import OdkConfigModel
 
 class ODKClientAsync:
     def __init__(self, config: OdkConfigModel):
-        self.odk_default_project_id = config.project_id 
-        self.odk_base_url = config.url
+        self.odk_default_project_id = config.project_id
+        # Strip trailing slash so endpoint paths never get a double slash
+        self.odk_base_url = str(config.url).rstrip('/')
         self.odk_api_version = config.api_version
         self.odk_username = config.username
         self.odk_password = config.password
@@ -44,17 +45,18 @@ class ODKClientAsync:
 
 
         response = await self.client.request(method, url, **kwargs)
-        # If unauthorized, recheck cached session key before continuing
-        if response.status_code == 401:
+        # 401 = token expired/invalid; 403 = token from a different server.
+        # Both mean the cached session is stale — clear it and retry once.
+        if response.status_code in {401, 403}:
             if os.path.exists("session.json"):
                 os.remove("session.json")
-                
-                session_object = await self.odk_authenticate()
-                if session_object and "token" in session_object:
-                    self.client.headers.update({'Authorization': f'Bearer {session_object["token"]}'})
-                    response = await self.client.request(method, url, **kwargs)
-                else:
-                    return httpx.Response(status_code=404, content="Cannot authenticate to the remote server")
+
+            session_object = await self.odk_authenticate()
+            if session_object and "token" in session_object:
+                self.client.headers.update({'Authorization': f'Bearer {session_object["token"]}'})
+                response = await self.client.request(method, url, **kwargs)
+            else:
+                return httpx.Response(status_code=404, content="Cannot authenticate to the remote server")
         return response
 
     async def odk_authenticate(self, headers=None, session_cache=None, clear_cache=False):

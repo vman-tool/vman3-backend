@@ -52,6 +52,8 @@ async def run_ccva_with_csv(
     malaria_status = Body('h', alias="malaria_status"),
     ccva_algorithm: Optional[str] = Body(None, alias="ccva_algorithm"),
     hiv_status: Optional[str] = Body('h', alias="hiv_status"),
+    dk_threshold: Optional[float] = Body(None, alias="dk_threshold"),
+    ood_threshold: Optional[float] = Body(None, alias="ood_threshold"),
     current_user: Optional[str] = Depends(get_current_user),
     start_date: Optional[date] = Body(None, alias="start_date"),
     top: Optional[int] = Body(None, alias="top"),
@@ -63,7 +65,7 @@ async def run_ccva_with_csv(
 
     try:
         # Validate ccva_algorithm
-        if ccva_algorithm is not None and ccva_algorithm not in ["InterVA5"]:
+        if ccva_algorithm is not None and ccva_algorithm not in ["InterVA5", "VManML10"]:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid CCVA algorithm, or algorithm not yet supported.")
 
         # Generate task ID
@@ -72,7 +74,7 @@ async def run_ccva_with_csv(
 
         # Read CSV file immediately
         contents = await file.read()
-        
+
         # Prepare extra info for progress tracking (initial immediate response)
         user_id = current_user.get('uid') or current_user.get('id') or "unknown" if isinstance(current_user, dict) else "unknown"
 
@@ -117,10 +119,12 @@ async def run_ccva_with_csv(
 @ccva_router.post("", status_code=status.HTTP_200_OK,)
 async def run_internal_ccva(
     background_tasks: BackgroundTasks,
-    oauth = Depends(oauth2_scheme), 
+    oauth = Depends(oauth2_scheme),
     malaria_status = Body('h', alias="malaria_status"),
     ccva_algorithm: Optional[str] = Body(None, alias="ccva_algorithm"),
     hiv_status: Optional[str] = Body('h', alias="hiv_status"),
+    dk_threshold: Optional[float] = Body(None, alias="dk_threshold"),
+    ood_threshold: Optional[float] = Body(None, alias="ood_threshold"),
     current_user: Optional[str] = Depends(get_current_user),
     start_date: Optional[date] = Body(None, alias="start_date"),
     end_date: Optional[date] = Body(None, alias="end_date"),
@@ -132,37 +136,35 @@ async def run_internal_ccva(
 
     try:
         # Validate ccva_algorithm
-        if ccva_algorithm is not None and ccva_algorithm not in ["InterVA5"]:
+        if ccva_algorithm is not None and ccva_algorithm not in ["InterVA5", "VManML10"]:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid CCVA algorithm, or algorithm not yet supported.")
 
         # Generate task ID and fetch records
         task_id = str(uuid.uuid4())
-        ## show the progress of getting data from db in web socket
         task_results = {}  # Initialize task results storage
-        
+
         # Prepare extra info for progress tracking
         user_id = current_user.get('uid') or current_user.get('id') or "unknown" if isinstance(current_user, dict) else "unknown"
 
         # Dispatch CCVA task to Celery or FastAPI BackgroundTasks
         if USE_CELERY:
-            # Use Celery for distributed task processing (recommended for production)
-            # Memory Optimization: Don't fetch all records here. Just get the count for the initial response.
             total_records = await get_ccva_record_count(current_user, db, start_date, end_date, date_type, top)
             if total_records == 0:
                 raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No records found to run CCVA")
 
             try:
-                # Pass filtering parameters to Celery worker instead of full dataset
                 access_limit = current_user.get('access_limit') if isinstance(current_user, dict) else None
-                
+
                 run_ccva_task.delay(
-                    records_data=None, # Worker will fetch data internally
+                    records_data=None,
                     task_id=task_id,
                     start_date=str(start_date) if start_date else None,
                     end_date=str(end_date) if end_date else None,
                     malaria_status=malaria_status,
                     hiv_status=hiv_status,
                     ccva_algorithm=ccva_algorithm,
+                    dk_threshold=dk_threshold,
+                    ood_threshold=ood_threshold,
                     user_id=user_id,
                     date_type=date_type,
                     top=top,
@@ -170,17 +172,16 @@ async def run_internal_ccva(
                 )
             except Exception as dispatch_err:
                 raise HTTPException(
-                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE, 
+                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                     detail="Background task service (Redis/Celery) is currently unavailable. Please check the backend services."
                 )
         else:
-            # Use FastAPI BackgroundTasks (single-worker mode) - fetch all records immediately
             records = await get_record_to_run_ccva(current_user, db, None, task_id, task_results, start_date, end_date, date_type=date_type, top=top)
             if not records:
                 raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No records found to run CCVA")
-            
+
             total_records = len(records.data)
-            background_tasks.add_task(run_ccva, db, records, task_id, task_results, start_date, end_date, malaria_status, hiv_status, ccva_algorithm, user_id)
+            background_tasks.add_task(run_ccva, db, records, task_id, task_results, start_date, end_date, malaria_status, hiv_status, ccva_algorithm, user_id, dk_threshold=dk_threshold, ood_threshold=ood_threshold)
         
         # Constructing response
         datas = {

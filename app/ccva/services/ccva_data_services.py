@@ -286,7 +286,6 @@ async def fetch_all_processed_ccva_graphs(paging: bool = True, page_number: int 
             RETURN u
         )[0]
         RETURN {
-            
             "id": doc._key,
             "task_id": doc.task_id,
             "created_at": doc.created_at,
@@ -295,8 +294,8 @@ async def fetch_all_processed_ccva_graphs(paging: bool = True, page_number: int 
             "start": doc.range.start,
             "end": doc.range.end,
             "isDefault": doc.isDefault,
+            "algorithm": doc.algorithm != null ? doc.algorithm : "InterVA5",
             "run_by_name": user ? user.name : "Unknown"
-
         }
         """
         bind_vars["@users_collection"] = db_collections.USERS

@@ -71,6 +71,47 @@ class SyncStatus(BaseModel):
     last_sync_data_count: Optional[int] = 0  # Number of records received in last sync
     total_synced_data: Optional[int] = 0  # Total cumulative data synced
 
+# ── DQA Threshold configuration ───────────────────────────────────────────────
+
+class TierConfig(BaseModel):
+    label: str
+    color: str = "green"   # "green" | "amber" | "red" | "none"
+
+class IndicatorThresholds(BaseModel):
+    threshold_high: float
+    threshold_mid:  float
+    tier1: TierConfig
+    tier2: TierConfig
+    tier3: TierConfig
+
+class AidThresholds(BaseModel):
+    min_normal:  float = 30.0
+    max_normal:  float = 60.0
+    tier_short:  TierConfig = Field(default_factory=lambda: TierConfig(label="Too Short", color="red"))
+    tier_normal: TierConfig = Field(default_factory=lambda: TierConfig(label="Normal", color="none"))
+    tier_long:   TierConfig = Field(default_factory=lambda: TierConfig(label="Too Long", color="red"))
+
+class DqaThresholds(BaseModel):
+    ics: IndicatorThresholds = Field(default_factory=lambda: IndicatorThresholds(
+        threshold_high=90.0, threshold_mid=70.0,
+        tier1=TierConfig(label="Excellent", color="green"),
+        tier2=TierConfig(label="Good",      color="amber"),
+        tier3=TierConfig(label="Critical",  color="red"),
+    ))
+    rrs: IndicatorThresholds = Field(default_factory=lambda: IndicatorThresholds(
+        threshold_high=80.0, threshold_mid=50.0,
+        tier1=TierConfig(label="Excellent", color="green"),
+        tier2=TierConfig(label="Good",      color="amber"),
+        tier3=TierConfig(label="Critical",  color="red"),
+    ))
+    ici: IndicatorThresholds = Field(default_factory=lambda: IndicatorThresholds(
+        threshold_high=90.0, threshold_mid=70.0,
+        tier1=TierConfig(label="Excellent", color="green"),
+        tier2=TierConfig(label="Good",      color="amber"),
+        tier3=TierConfig(label="Critical",  color="red"),
+    ))
+    aid: AidThresholds = Field(default_factory=AidThresholds)
+
 # class SettingsConfigData(BaseModel):
 #     type: Union[str, None] = 'odk_api_configs'  # Optional field with a default value
 #     odk_api_configs: Union[OdkConfigModel, None] = None  # Optional field
@@ -85,9 +126,11 @@ class SettingsConfigData(BaseModel):
     field_mapping: Union[FieldMapping, None] = None  # Optional field
     va_summary: Union[List[str], None] = None
     field_labels: Union[List[FieldLabels], None] = None
-    cron_settings: Union[CronSettings, None] = None  # New field for cron settings
-    backup_settings: Union[BackupSettings, None] = None  # New field for backup settings
-    sync_status: Union[SyncStatus, None] = None  # New field for sync status tracking
+    cron_settings: Union[CronSettings, None] = None
+    backup_settings: Union[BackupSettings, None] = None
+    sync_status: Union[SyncStatus, None] = None
+    dqa_thresholds: Union[DqaThresholds, None] = None
+
 
 class SyncHistoryRecord(BaseModel):
     date: str              # ISO datetime string

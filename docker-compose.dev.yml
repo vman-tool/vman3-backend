@@ -22,8 +22,7 @@ services:
 
   redis:
     container_name: redis-vman3-dev
-    image: redis:latest
-    platform: linux/amd64
+    image: redis:7.4-alpine
     command: redis-server --requirepass vman@1029
     ports:
       - "6370:6379"
@@ -32,9 +31,8 @@ services:
   celery-worker:
     container_name: celery-worker-dev
     build:
-      context: .
-      dockerfile: Dockerfile
-    platform: linux/amd64
+      context: ..
+      dockerfile: backend/Dockerfile
     command:
       [
         "python3",
@@ -58,19 +56,50 @@ services:
       # Redis — same default compose network, use service name
       REDIS_URL: "redis://redis:6379"
       REDIS_PASSWORD: "vman@1029"
-      # ArangoDB — on vman3-net, use service name instead of remote IP
-      DB_URL: "http://arango-db:8529"
+      # ArangoDB — use explicit container name to avoid conflict with deployment
+      # arango-db (deployment) and backend-arango-db-1 (dev) both live on vman3-net;
+      # point the worker at the dev instance that the FastAPI backend also uses.
+      DB_URL: "http://backend-arango-db-1:8529"
       DB_NAME: "vman3"
       DB_ROOT_USER: "root"
       ARANGO_ROOT_USER: "root"
       ARANGO_ROOT_PASSWORD: "password"
-      ARANGODB_URL: "http://arango-db:8529/"
-      # ODK credentials
-      DEFAULT_PROJECT_ID: "2"
-      ODK_API_URL: "https://central.iact.co.tz"
-      ODK_API_VERSION: "v1"
-      ODK_USERNAME: "admin@vman.net"
-      ODK_PASSWORD: "welcome2vman"
+      ARANGODB_URL: "http://backend-arango-db-1:8529/"
+    depends_on:
+      - redis
+    restart: always
+
+
+  celery-beat:
+    container_name: celery-beat-dev
+    build:
+      context: ..
+      dockerfile: backend/Dockerfile
+    command:
+      [
+        "python3",
+        "-m",
+        "celery",
+        "-A",
+        "app.celery_app",
+        "beat",
+        "--loglevel=info"
+      ]
+    volumes:
+      - ./app:/vman3/app
+    networks:
+      - default
+      - vman3-net
+    environment:
+      PYTHONUNBUFFERED: "1"
+      REDIS_URL: "redis://redis:6379"
+      REDIS_PASSWORD: "vman@1029"
+      DB_URL: "http://backend-arango-db-1:8529"
+      DB_NAME: "vman3"
+      DB_ROOT_USER: "root"
+      ARANGO_ROOT_USER: "root"
+      ARANGO_ROOT_PASSWORD: "password"
+      ARANGODB_URL: "http://backend-arango-db-1:8529/"
     depends_on:
       - redis
     restart: always
@@ -78,8 +107,8 @@ services:
   flower:
     container_name: flower-dev
     build:
-      context: .
-      dockerfile: Dockerfile
+      context: ..
+      dockerfile: backend/Dockerfile
     command:
       [
         "python3",

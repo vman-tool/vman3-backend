@@ -9,6 +9,7 @@ This module configures Celery with Redis as the message broker for:
 
 import os
 from celery import Celery
+from celery.schedules import crontab
 from decouple import config
 
 # Redis configuration - Read from environment
@@ -43,6 +44,7 @@ celery_app = Celery(
     include=[
         'app.tasks.ccva_tasks',
         'app.tasks.odk_tasks',
+        'app.tasks.dqa_tasks',
     ]
 )
 
@@ -94,10 +96,18 @@ celery_app.conf.update(
     task_default_queue='celery',
 )
 
-# Optional: Beat schedule for periodic tasks (can be extended later)
+# Beat schedule:
+#   check_dqa_analytics_schedule  — hourly, fires the DQA snapshot recompute
+#                                   at the user-configured UTC hour.
+#   check_odk_sync_schedule       — every minute, fires ODK data sync on the
+#                                   user-configured day + time.
 celery_app.conf.beat_schedule = {
-    # Example: 'odk-auto-sync': {
-    #     'task': 'app.tasks.odk_tasks.auto_sync_odk_data',
-    #     'schedule': 3600.0,  # Every hour
-    # },
+    'check-dqa-analytics-schedule': {
+        'task': 'app.tasks.dqa_tasks.check_dqa_analytics_schedule',
+        'schedule': crontab(minute=0),   # every hour at :00
+    },
+    'check-odk-sync-schedule': {
+        'task': 'app.tasks.odk_tasks.check_odk_sync_schedule',
+        'schedule': crontab(),           # every minute
+    },
 }

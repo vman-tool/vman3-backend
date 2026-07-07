@@ -104,6 +104,29 @@ services:
       restart_policy:
         condition: any
 
+  celery-beat:
+    image: ilyatuu/vman3_backend:latest
+    command: >
+      celery -A app.celery_app beat --loglevel=info
+    env_file:
+      - .env
+    environment:
+      PYTHONUNBUFFERED: "1"
+      REDIS_URL: "redis://redis:6379"
+      REDIS_PASSWORD: "vman@1029"
+    networks:
+      - vman3-net
+    volumes:
+      - ccva_files:/app/ccva_files
+      - app_data:/app
+    depends_on:
+      - redis
+      - arango-db
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: any
+
 networks:
   vman3-net:
     external: true

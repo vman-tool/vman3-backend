@@ -75,7 +75,9 @@ def run_ccva_task(
     user_id: str = "unknown",
     date_type: Optional[str] = None,
     top: Optional[int] = None,
-    access_limit: Optional[Dict] = None
+    access_limit: Optional[Dict] = None,
+    dk_threshold: Optional[float] = None,
+    ood_threshold: Optional[float] = None,
 ):
     """
     Celery task to run CCVA analysis.
@@ -212,7 +214,9 @@ def run_ccva_task(
             algorithm=ccva_algorithm,
             malaria=malaria_status,
             hiv=hiv_status,
-            user_id=user_id
+            user_id=user_id,
+            dk_threshold=dk_threshold,
+            ood_threshold=ood_threshold,
         )
         
         elapsed = datetime.now() - start_time
