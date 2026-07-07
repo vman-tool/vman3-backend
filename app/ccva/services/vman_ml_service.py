@@ -5,48 +5,27 @@ Wraps the vman_ml package (CCVAPredictor + DataPreprocessor) so it fits
 the same call pattern as runCCVA / InterVA5.  Returns a list of dicts
 with an 'ID' key (== instance-ID from the ODK form) and cause-of-death
 fields that are compatible with getVADataAndMergeWithResults.
+
+vman_ml is installed as a pip package from https://github.com/vman-tool/ccva-ml.
+To update the ML code, bump the tag in requirements.txt and rebuild the image.
+To update the model, copy the new .pkl into ml_models/ and update model_registry.json.
 """
 
 from __future__ import annotations
 
 import os
 import sys
+import time
+import types
 import logging
 from datetime import datetime
 from pathlib import Path
 from typing import Callable, Optional
 
 import pandas as pd
-from app.shared.utils.async_utils import call_update_callback  # noqa: E402
+from app.shared.utils.async_utils import call_update_callback
 
 logger = logging.getLogger(__name__)
-
-# ── locate the vman_ml package ────────────────────────────────────────────────
-def _ensure_vman_ml_importable() -> None:
-    try:
-        import vman_ml  # noqa: F401
-        return
-    except ImportError:
-        pass
-
-    candidates = [
-        Path(__file__).parents[5] / "vman_ml",
-        Path(__file__).parents[4] / "vman_ml",
-        Path("/vman3/vman_ml"),                               # Docker (WORKDIR /vman3)
-        Path("/Users/ilyatuu/Documents/Code/vman3/vman_ml"), # local dev
-    ]
-    for candidate in candidates:
-        if (candidate / "vman_ml" / "__init__.py").exists():
-            sys.path.insert(0, str(candidate))
-            logger.info(f"vman_ml found at {candidate}")
-            return
-    raise ImportError(
-        "vman_ml package not found. Either install it with "
-        "'pip install -e /path/to/vman_ml' or place the repo next to the backend."
-    )
-
-
-_ensure_vman_ml_importable()
 
 # Limit native threading before any sklearn/numpy/shap import.
 # SHAP 0.49.x TreeExplainer uses multi-threaded C++ that segfaults on
@@ -56,39 +35,44 @@ os.environ.setdefault("OPENBLAS_NUM_THREADS", "1")
 os.environ.setdefault("MKL_NUM_THREADS", "1")
 os.environ.setdefault("NUMEXPR_NUM_THREADS", "1")
 
-from vman_ml.processing import DataPreprocessor          # noqa: E402
-from vman_ml.prediction import CCVAPredictor             # noqa: E402
-from vman_ml.instrument_dictionary import detect_instrument_version  # noqa: E402
-
-# The model pkl was saved when the package was named 'ccva_ml'.
-# Register alias modules so joblib/pickle can find the renamed classes.
-import types as _types, sys as _sys, vman_ml as _vman_ml  # noqa: E402
+from vman_ml.processing import DataPreprocessor
+from vman_ml.prediction import CCVAPredictor
+from vman_ml.instrument_dictionary import detect_instrument_version
 
 
 def _register_ccva_ml_aliases() -> None:
+    """Register ccva_ml.* aliases for model files pickled before the package rename.
+
+    The current ccva_model_combined.pkl was saved when the package was still
+    named 'ccva_ml'. joblib/pickle needs the original module paths to unpickle
+    the classes. Once the model is retrained with the package named 'vman_ml',
+    this function can be removed.
+    """
     import importlib
     for sub in ("processing", "prediction", "narrative", "instrument_dictionary",
                 "mapcauselist", "label_audit"):
         src = f"vman_ml.{sub}"
         dst = f"ccva_ml.{sub}"
-        if dst not in _sys.modules:
+        if dst not in sys.modules:
             try:
                 mod = importlib.import_module(src)
-                alias = _types.ModuleType(dst)
+                alias = types.ModuleType(dst)
                 alias.__dict__.update(mod.__dict__)
                 alias.__name__ = dst
-                _sys.modules[dst] = alias
+                sys.modules[dst] = alias
             except ImportError:
                 pass
-    if "ccva_ml" not in _sys.modules:
-        root = _types.ModuleType("ccva_ml")
+    if "ccva_ml" not in sys.modules:
+        import vman_ml as _vman_ml
+        root = types.ModuleType("ccva_ml")
         root.__dict__.update(_vman_ml.__dict__)
-        _sys.modules["ccva_ml"] = root
+        sys.modules["ccva_ml"] = root
 
 
 _register_ccva_ml_aliases()
 
-# Default model path — backend/app/ccva/ml_models/ccva_model_combined.pkl
+# Default model: backend/app/ccva/ml_models/ccva_model_combined.pkl
+# Replace this file (and update model_registry.json) after each retrain.
 _DEFAULT_MODEL = Path(__file__).parent.parent / "ml_models" / "ccva_model_combined.pkl"
 
 
@@ -140,21 +124,34 @@ def run_vman_ml(
         raise FileNotFoundError(f"VMan ML model not found: {resolved_model}")
 
     # ── 2. Preprocess ─────────────────────────────────────────────────────────
-    _progress(10, "VMan ML 1.0: preprocessing data...",
+    _progress(10, f"VMan ML 1.0: preprocessing {n_records} records...",
               log=f"VMan ML 1.0 | preprocessing {n_records} VA records")
+    t_preprocess = time.perf_counter()
+
     preprocessor = DataPreprocessor(verbose=False)
-    df = preprocessor._preprocess_data(odk_raw.copy())
+
+    def _preprocess_progress(pct: int) -> None:
+        # Map 0-100 from change_null_toskipped → overall 10-20%
+        _progress(10 + int(pct * 0.10), f"VMan ML 1.0: preprocessing... ({pct}%)")
+
+    df = preprocessor._preprocess_data(odk_raw.copy(), progress_callback=_preprocess_progress)
+    t_preprocess = time.perf_counter() - t_preprocess
 
     # ── 3. Detect instrument version ──────────────────────────────────────────
+    t_detect = time.perf_counter()
     detection = detect_instrument_version(df)
     version = detection.get("version", "unknown") if isinstance(detection, dict) else "unknown"
-    _progress(20, "VMan ML 1.0: detecting instrument version...",
-              log=f"VMan ML 1.0 | instrument version detected: {version}")
+    t_detect = time.perf_counter() - t_detect
+    _progress(22, "VMan ML 1.0: detecting instrument version...",
+              log=(f"VMan ML 1.0 | preprocess: {t_preprocess:.1f}s | "
+                   f"instrument version detected: {version} ({t_detect:.2f}s)"))
 
     # ── 4. Load model ─────────────────────────────────────────────────────────
+    t_load = time.perf_counter()
     _progress(30, "VMan ML 1.0: loading model...",
               log=f"VMan ML 1.0 | loading model from {resolved_model.name}")
     predictor = CCVAPredictor(str(resolved_model), verbose=False)
+    t_load = time.perf_counter() - t_load
 
     # Disable SHAP: shap 0.49.x + sklearn 1.7+ causes SIGSEGV on ARM64 in
     # multi-threaded C++ (thread crash at 0x0580). pred_notes will be empty.
@@ -164,8 +161,8 @@ def run_vman_ml(
     n_classes = len(predictor.original_classes)
     n_features = len(predictor.expected_columns)
     _progress(35, "VMan ML 1.0: model ready.",
-              log=(f"VMan ML 1.0 | model: {model_name} | "
-                   f"{n_features} features | {n_classes} cause classes | "
+              log=(f"VMan ML 1.0 | model loaded in {t_load:.1f}s | "
+                   f"{model_name} | {n_features} features | {n_classes} cause classes | "
                    f"DK threshold: {predictor.dk_threshold:.0%} | "
                    f"OOD entropy > {predictor.ood_entropy_threshold:.3f}"))
 
@@ -182,15 +179,17 @@ def run_vman_ml(
                   log=f"VMan ML 1.0 | DK threshold overridden to {dk_threshold:.0%}")
 
     # ── 6. Predict ────────────────────────────────────────────────────────────
+    t_predict = time.perf_counter()
     _progress(40, "VMan ML 1.0: running predictions...",
               log=f"VMan ML 1.0 | running predictions on {n_records} records...")
     pred_df = predictor.predict_detailed(df)
+    t_predict = time.perf_counter() - t_predict
 
     # ── 7. Log OOD / DK / classified counts ──────────────────────────────────
     n_ood = int((pred_df["prediction"] == "out_of_distribution").sum())
     n_classified = int((pred_df["prediction"] != "out_of_distribution").sum())
     _progress(80, "VMan ML 1.0: formatting results...",
-              log=(f"VMan ML 1.0 | predictions complete | "
+              log=(f"VMan ML 1.0 | predictions done in {t_predict:.1f}s | "
                    f"classified: {n_classified} | out-of-distribution: {n_ood} | "
                    f"total: {n_records}"))
 
