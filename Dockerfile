@@ -24,17 +24,13 @@ RUN apt-get update \
         libpq-dev \
         gettext \
     && pip install --upgrade pip \
+    && pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cpu \
     && pip install --no-cache-dir -r requirements.txt \
     && pip install -e . \
     && apt-get remove -y gcc git libffi-dev build-essential \
     && apt-get autoremove -y \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
-
-# ── Pre-cache sentence-transformer model ──────────────────────────────────────
-# Bakes the ~500 MB multilingual MiniLM model into the image so the first
-# prediction does not require outbound internet access at runtime.
-RUN python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('paraphrase-multilingual-MiniLM-L12-v2')"
 
 # ── Application source ────────────────────────────────────────────────────────
 COPY app ./app/
