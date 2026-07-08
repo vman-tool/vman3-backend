@@ -135,6 +135,10 @@ networks:
 volumes:
   vman3db:
   ccva_files:
+    external: true
+    name: vman3_ccva_files
   app_data:
   uploads:
+    external: true
+    name: vman3_uploads
   settings_json:
