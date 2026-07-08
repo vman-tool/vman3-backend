@@ -11,6 +11,7 @@ from fastapi import (
     Body,
     Depends,
     File,
+    Form,
     HTTPException,
     Query,
     UploadFile,
@@ -28,7 +29,7 @@ from app.settings.services.odk_configs import (
     save_system_images,
 )
 from app.shared.utils.cache import invalidate_cache_pattern
-from datetime import datetime
+from datetime import datetime, timezone
 from app.shared.configs.arangodb import get_arangodb_session
 from app.shared.configs.constants import AccessPrivileges, db_collections
 from app.shared.configs.models import ResponseMainModel
@@ -544,3 +545,102 @@ async def get_server_time():
         "utc": now.strftime("%H:%M:%S"),
         "iso": now.isoformat() + "Z"
     }
+
+
+# ── VMan ML Model management ───────────────────────────────────────────────────
+
+import json as _json
+import shutil as _shutil
+from pathlib import Path as _Path
+
+_ML_MODELS_DIR  = _Path(__file__).parent.parent / "ccva" / "ml_models"
+_ACTIVE_MODEL   = _ML_MODELS_DIR / "ccva_model_combined.pkl"
+_MODEL_REGISTRY = _ML_MODELS_DIR / "model_registry.json"
+_MODEL_ARCHIVE  = _ML_MODELS_DIR / "archive"
+
+
+@settings_router.get("/ml-model", status_code=status.HTTP_200_OK, response_model=ResponseMainModel)
+async def get_ml_model_info(_=Depends(get_current_user)):
+    """Return the current model registry (version, metrics, history)."""
+    try:
+        if _MODEL_REGISTRY.exists():
+            with open(_MODEL_REGISTRY) as f:
+                registry = _json.load(f)
+        else:
+            registry = {}
+        return ResponseMainModel(data=registry, message="Model info retrieved", error=False)
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+
+
+@settings_router.post("/ml-model/upload", status_code=status.HTTP_200_OK, response_model=ResponseMainModel)
+async def upload_ml_model(
+    file: UploadFile = File(...),
+    version: str = Form(...),
+    notes: str = Form(""),
+    accuracy: float = Form(...),
+    f1_macro: float = Form(...),
+    f1_weighted: float = Form(...),
+    n_training_samples: int = Form(...),
+    n_test_samples: int = Form(...),
+    cv_f1_macro: Optional[float] = Form(None),
+    current_user=Depends(get_current_user),
+    required_privs: List[str] = Depends(check_privileges([AccessPrivileges.SETTINGS_CREATE_SYSTEM_CONFIGS])),
+):
+    """Upload a new .pkl model file and update the model registry."""
+    if not (file.filename or "").endswith(".pkl"):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,
+                            detail="Only .pkl model files are accepted.")
+
+    # Read old registry before overwriting
+    old_registry: dict = {}
+    if _MODEL_REGISTRY.exists():
+        with open(_MODEL_REGISTRY) as f:
+            old_registry = _json.load(f)
+
+    # Archive the current active model
+    history: list = list(old_registry.get("history", []))
+    if _ACTIVE_MODEL.exists() and old_registry.get("version"):
+        _MODEL_ARCHIVE.mkdir(parents=True, exist_ok=True)
+        old_version   = old_registry["version"]
+        old_date      = old_registry.get("trained_at", "unknown")
+        archive_name  = f"ccva_model_v{old_version}_{old_date}.pkl"
+        _shutil.copy2(_ACTIVE_MODEL, _MODEL_ARCHIVE / archive_name)
+        history.append({
+            "version":     old_version,
+            "trained_at":  old_date,
+            "algorithm":   old_registry.get("algorithm", ""),
+            "archive":     f"archive/{archive_name}",
+            "replaced_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        })
+
+    # Save the new model file
+    content = await file.read()
+    with open(_ACTIVE_MODEL, "wb") as f:
+        f.write(content)
+
+    # Build new registry entry
+    metrics: dict = {
+        "accuracy":           round(accuracy, 4),
+        "f1_macro":           round(f1_macro, 4),
+        "f1_weighted":        round(f1_weighted, 4),
+        "n_training_samples": n_training_samples,
+        "n_test_samples":     n_test_samples,
+    }
+    if cv_f1_macro is not None:
+        metrics["cv_f1_macro"] = round(cv_f1_macro, 4)
+
+    new_registry = {
+        "active":       "ccva_model_combined.pkl",
+        "version":      version,
+        "trained_at":   datetime.now(timezone.utc).strftime("%Y-%m-%d"),
+        "source_file":  file.filename,
+        "algorithm":    old_registry.get("algorithm", "XGBoost"),
+        "notes":        notes,
+        "metrics":      metrics,
+        "history":      history,
+    }
+    with open(_MODEL_REGISTRY, "w") as f:
+        _json.dump(new_registry, f, indent=2)
+
+    return ResponseMainModel(data=new_registry, message="Model updated successfully", error=False)
