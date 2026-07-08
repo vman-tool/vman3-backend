@@ -1,9 +1,6 @@
 name: vman3_backend
 
 on:
-  push:
-    branches:
-      - main
   pull_request:
     branches:
       - main
