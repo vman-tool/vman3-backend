@@ -42,6 +42,7 @@ services:
       - app_data:/app
       - settings_json:/vman3/settings.json
       - uploads:/vman3/app/uploads
+      - hf_cache:/root/.cache/huggingface
     deploy:
       replicas: 3
       restart_policy:
@@ -96,6 +97,7 @@ services:
       - ccva_files:/app/ccva_files
       - app_data:/app
       - uploads:/vman3/app/uploads
+      - hf_cache:/root/.cache/huggingface
     depends_on:
       - redis
       - arango-db
@@ -142,3 +144,4 @@ volumes:
     external: true
     name: vman3_uploads
   settings_json:
+  hf_cache:
