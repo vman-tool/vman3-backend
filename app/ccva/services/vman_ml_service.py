@@ -13,8 +13,11 @@ To update the model, copy the new .pkl into ml_models/ and update model_registry
 
 from __future__ import annotations
 
+import json
 import os
+import platform
 import sys
+import threading
 import time
 import types
 import logging
@@ -27,13 +30,49 @@ from app.shared.utils.async_utils import call_update_callback
 
 logger = logging.getLogger(__name__)
 
-# Limit native threading before any sklearn/numpy/shap import.
-# SHAP 0.49.x TreeExplainer uses multi-threaded C++ that segfaults on
-# Apple Silicon (ARM64) with sklearn 1.7+ in thread contexts (SIGSEGV at 0x580).
-os.environ.setdefault("OMP_NUM_THREADS", "1")
-os.environ.setdefault("OPENBLAS_NUM_THREADS", "1")
-os.environ.setdefault("MKL_NUM_THREADS", "1")
-os.environ.setdefault("NUMEXPR_NUM_THREADS", "1")
+
+def _ensure_vman_ml_resource_dictionaries() -> None:
+    """Create lightweight fallback instrument dictionaries when packaged workbooks are absent."""
+    try:
+        import vman_ml.instrument_dictionary as instrument_dictionary  # type: ignore
+    except Exception:
+        return
+
+    resource_dir = Path(instrument_dictionary.__file__).resolve().parent / "resources" / "dictionaries"
+    resource_dir.mkdir(parents=True, exist_ok=True)
+
+    for version in ("2016", "2022"):
+        json_path = resource_dir / f"va_instr_{version}.json"
+        if json_path.exists():
+            continue
+
+        payload = {
+            "version": version,
+            "source_file": f"fallback://{version}",
+            "settings": {},
+            "survey": [],
+            "survey_columns": [],
+            "survey_index": {},
+            "feature_columns": [],
+            "choice_lists": {},
+        }
+        with json_path.open("w", encoding="utf-8") as handle:
+            json.dump(payload, handle, indent=2, ensure_ascii=False)
+
+
+_ensure_vman_ml_resource_dictionaries()
+
+# SHAP 0.49.x + sklearn 1.7+ segfaults on ARM64 (Apple Silicon) when
+# TreeExplainer runs in multi-threaded C++ contexts.  SHAP is disabled below
+# (_get_shap_explainer patched to None), so the crash can't occur.  We still
+# constrain threads on ARM64 dev boxes as a belt-and-suspenders guard, but on
+# Linux/AMD64 (production Docker) we leave threading unrestricted so the
+# SentenceTransformer embedding model can use all available CPU cores.
+if platform.machine() in ("arm64", "aarch64"):
+    os.environ.setdefault("OMP_NUM_THREADS", "1")
+    os.environ.setdefault("OPENBLAS_NUM_THREADS", "1")
+    os.environ.setdefault("MKL_NUM_THREADS", "1")
+    os.environ.setdefault("NUMEXPR_NUM_THREADS", "1")
 
 from vman_ml.processing import DataPreprocessor
 from vman_ml.prediction import CCVAPredictor
@@ -74,6 +113,25 @@ _register_ccva_ml_aliases()
 # Default model: backend/app/ccva/ml_models/ccva_model_combined.pkl
 # Replace this file (and update model_registry.json) after each retrain.
 _DEFAULT_MODEL = Path(__file__).parent.parent / "ml_models" / "ccva_model_combined.pkl"
+
+# Process-level predictor cache.
+# CCVAPredictor is expensive: unpickling XGBoost + initialising the
+# SentenceTransformer model takes 10-30 s.  Caching at module level means
+# each Celery worker process pays that cost once and reuses the predictor
+# for every subsequent task — the embedding model stays warm in memory.
+_predictor_cache: dict[str, "CCVAPredictor"] = {}
+_predictor_lock = threading.Lock()
+
+
+def _get_cached_predictor(model_path: Path) -> "CCVAPredictor":
+    key = str(model_path)
+    if key not in _predictor_cache:
+        with _predictor_lock:
+            if key not in _predictor_cache:
+                p = CCVAPredictor(str(model_path), verbose=False)
+                p._get_shap_explainer = lambda: None  # SHAP disabled (see above)
+                _predictor_cache[key] = p
+    return _predictor_cache[key]
 
 
 def run_vman_ml(
@@ -146,27 +204,29 @@ def run_vman_ml(
               log=(f"VMan ML 1.0 | preprocess: {t_preprocess:.1f}s | "
                    f"instrument version detected: {version} ({t_detect:.2f}s)"))
 
-    # ── 4. Load model ─────────────────────────────────────────────────────────
+    # ── 4. Load model (from cache when available) ─────────────────────────────
     t_load = time.perf_counter()
+    is_cached = str(resolved_model) in _predictor_cache
     _progress(30, "VMan ML 1.0: loading model...",
-              log=f"VMan ML 1.0 | loading model from {resolved_model.name}")
-    predictor = CCVAPredictor(str(resolved_model), verbose=False)
+              log=f"VMan ML 1.0 | {'reusing cached' if is_cached else 'loading'} model from {resolved_model.name}")
+    predictor = _get_cached_predictor(resolved_model)
     t_load = time.perf_counter() - t_load
-
-    # Disable SHAP: shap 0.49.x + sklearn 1.7+ causes SIGSEGV on ARM64 in
-    # multi-threaded C++ (thread crash at 0x0580). pred_notes will be empty.
-    predictor._get_shap_explainer = lambda: None
 
     model_name = type(predictor.model).__name__
     n_classes = len(predictor.original_classes)
     n_features = len(predictor.expected_columns)
     _progress(35, "VMan ML 1.0: model ready.",
-              log=(f"VMan ML 1.0 | model loaded in {t_load:.1f}s | "
+              log=(f"VMan ML 1.0 | model {'(cached)' if is_cached else f'loaded in {t_load:.1f}s'} | "
                    f"{model_name} | {n_features} features | {n_classes} cause classes | "
                    f"DK threshold: {predictor.dk_threshold:.0%} | "
                    f"OOD entropy > {predictor.ood_entropy_threshold:.3f}"))
 
     # ── 5. Apply threshold overrides ─────────────────────────────────────────
+    # Save originals so the cached predictor isn't left in a modified state.
+    _orig_ood = predictor.ood_threshold
+    _orig_ood_entropy = predictor.ood_entropy_threshold
+    _orig_dk = predictor.dk_threshold
+
     if ood_threshold is not None and 0 < ood_threshold < 1:
         predictor.ood_threshold = ood_threshold
         predictor.ood_entropy_threshold = None
@@ -182,7 +242,13 @@ def run_vman_ml(
     t_predict = time.perf_counter()
     _progress(40, "VMan ML 1.0: running predictions...",
               log=f"VMan ML 1.0 | running predictions on {n_records} records...")
-    pred_df = predictor.predict_detailed(df)
+    try:
+        pred_df = predictor.predict_detailed(df)
+    finally:
+        # Restore so the next task gets unmodified defaults from the cache.
+        predictor.ood_threshold = _orig_ood
+        predictor.ood_entropy_threshold = _orig_ood_entropy
+        predictor.dk_threshold = _orig_dk
     t_predict = time.perf_counter() - t_predict
 
     # ── 7. Log OOD / DK / classified counts ──────────────────────────────────

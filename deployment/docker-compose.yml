@@ -14,8 +14,7 @@ services:
 
   frontend:
     image: ilyatuu/vman3_frontend
-    ports:
-      - "4200:4200"
+    platform: linux/amd64
     volumes:
       - ./config.json:/usr/share/nginx/html/assets/config.json
     networks:
@@ -25,6 +24,7 @@ services:
   backend:
     container_name: backend
     image: ilyatuu/vman3_backend:latest
+    platform: linux/amd64
     command:
       [
         "gunicorn",
@@ -49,6 +49,13 @@ services:
       - .env
     environment:
       PYTHONUNBUFFERED: "1"
+      # Override .env Redis URLs: inside Docker containers 'localhost' resolves
+      # to the container itself, not the Redis service. These override the
+      # 'localhost:6370' values in .env so FastAPICache and the WebSocket
+      # Pub/Sub listener can reach Redis via the Docker service name.
+      REDIS_URL: "redis://redis-vman3:6379"
+      REDIS_CELERY_URL: "redis://redis-vman3:6379"
+      REDIS_PASSWORD: "vman@1029"
     networks:
       - vman3-net
     restart: always
@@ -85,6 +92,7 @@ services:
   celery-worker:
     container_name: celery-worker
     image: ilyatuu/vman3_backend:latest
+    platform: linux/amd64
     command:
       [
         "python",
@@ -121,6 +129,7 @@ services:
   flower:
     container_name: flower
     image: mher/flower:master
+    platform: linux/amd64
     command:
       [
         "celery",
