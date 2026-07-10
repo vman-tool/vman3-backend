@@ -35,6 +35,13 @@ services:
       - .env
     environment:
       PYTHONUNBUFFERED: "1"
+      # Override .env Redis URLs: inside Docker containers, 'localhost' resolves
+      # to the container itself, not the Redis service. These override the
+      # 'localhost:6370' values in .env so FastAPICache and the WebSocket
+      # Pub/Sub listener can reach Redis via the Docker service name.
+      REDIS_URL: "redis://redis:6379"
+      REDIS_CELERY_URL: "redis://redis:6379"
+      REDIS_PASSWORD: "vman@1029"
     networks:
       - vman3-net
     volumes:
@@ -83,13 +90,14 @@ services:
   celery-worker:
     image: ilyatuu/vman3_backend:latest
     command: >
-      celery -A app.celery_app worker --loglevel=info --queues=odk,celery --concurrency=2
+      celery -A app.celery_app worker --loglevel=info --queues=celery,ccva,odk --concurrency=2
     env_file:
       - .env
     environment:
       PYTHONUNBUFFERED: "1"
-      # Ensure Celery can connect to Redis
       REDIS_URL: "redis://redis:6379"
+      # celery_app.py reads REDIS_CELERY_URL for the broker URL
+      REDIS_CELERY_URL: "redis://redis:6379"
       REDIS_PASSWORD: "vman@1029"
     networks:
       - vman3-net
@@ -115,6 +123,7 @@ services:
     environment:
       PYTHONUNBUFFERED: "1"
       REDIS_URL: "redis://redis:6379"
+      REDIS_CELERY_URL: "redis://redis:6379"
       REDIS_PASSWORD: "vman@1029"
     networks:
       - vman3-net
