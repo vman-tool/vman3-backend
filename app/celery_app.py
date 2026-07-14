@@ -96,6 +96,36 @@ celery_app.conf.update(
     task_default_queue='celery',
 )
 
+# ── Pre-warm VMan ML predictor on worker start ────────────────────────────────
+# CCVAPredictor unpickles XGBoost + initialises the SentenceTransformer model,
+# which takes 10-30 s on a cold process.  Loading it once at worker-init time
+# means every CCVA task reuses the in-memory cache and sees zero load delay.
+#
+# This runs in a daemon thread so worker startup is not blocked — the model
+# is ready long before any real task arrives.  If loading fails (missing file,
+# import error) a warning is printed but the worker continues; the first task
+# will trigger a normal load with its own error handling.
+from celery.signals import worker_process_init
+
+@worker_process_init.connect
+def _prewarm_vman_ml_predictor(**kwargs):
+    def _load():
+        try:
+            from app.ccva.services.vman_ml_service import _get_cached_predictor, _DEFAULT_MODEL
+            if not _DEFAULT_MODEL.exists():
+                print(f"[prewarm] VMan ML model not found at {_DEFAULT_MODEL} — skipping.")
+                return
+            print(f"[prewarm] Loading VMan ML predictor from {_DEFAULT_MODEL.name}...")
+            _get_cached_predictor(_DEFAULT_MODEL)
+            print("[prewarm] VMan ML predictor ready.")
+        except Exception as exc:
+            print(f"[prewarm] WARNING: VMan ML predictor pre-warm failed: {exc}")
+
+    import threading
+    t = threading.Thread(target=_load, daemon=True, name="vman-ml-prewarm")
+    t.start()
+
+
 # Beat schedule:
 #   check_dqa_analytics_schedule  — hourly, fires the DQA snapshot recompute
 #                                   at the user-configured UTC hour.

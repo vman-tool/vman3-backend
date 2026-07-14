@@ -238,26 +238,81 @@ def run_vman_ml(
         _progress(37, "VMan ML 1.0: applying threshold overrides.",
                   log=f"VMan ML 1.0 | DK threshold overridden to {dk_threshold:.0%}")
 
-    # ── 6. Predict ────────────────────────────────────────────────────────────
+    # ── 6. Predict — native progress callback + parallel predict_proba ──────────
+    # predict_detailed now accepts a progress_callback.  The callback receives
+    # a 0-100 value from inside predict_detailed; we remap that into the
+    # 40-80% band of our overall task progress bar.
+    #
+    # Internally, predict_detailed splits the scaled numpy array into chunks and
+    # runs model.predict_proba on them in a ThreadPoolExecutor, so multiple CPU
+    # cores are used even though we make a single call here.
+    #
+    # A heartbeat thread fires every 20 s as a last-resort safety net in case
+    # the callback stops firing (e.g. feature preparation stalls on a slow disk).
     t_predict = time.perf_counter()
-    _progress(40, "VMan ML 1.0: running predictions...",
-              log=f"VMan ML 1.0 | running predictions on {n_records} records...")
+    _heartbeat_stop = threading.Event()
+    _last_cb_time: list[float] = [time.monotonic()]
+
+    def _native_predict_cb(inner_pct: int, msg: str = "") -> None:
+        """Map predict_detailed's 0-100 → our 40-80% band and forward to UI."""
+        _last_cb_time[0] = time.monotonic()
+        outer_pct = 40 + int(inner_pct * 0.40)   # 0%→40%  100%→80%
+        _progress(outer_pct,
+                  f"VMan ML 1.0: {msg}" if msg else "VMan ML 1.0: predicting...",
+                  log=f"VMan ML 1.0 | predict_detailed ({inner_pct}%) — {msg}")
+
+    def _heartbeat() -> None:
+        """Ping the UI every 20 s if predict_detailed hasn't called back recently."""
+        while not _heartbeat_stop.wait(20):
+            silence = time.monotonic() - _last_cb_time[0]
+            if silence >= 18:
+                elapsed_s = (datetime.now() - start_time).seconds
+                _progress(40, "VMan ML 1.0: still predicting...",
+                          log=f"VMan ML 1.0 | predict_detailed running | "
+                              f"no callback for {silence:.0f}s | elapsed {elapsed_s}s")
+
+    _hb = threading.Thread(target=_heartbeat, daemon=True)
+    _hb.start()
+
+    # Auto-detect parallelism: use half the available CPUs, capped at 4 workers.
+    # On unknown server hardware this respects the actual core count without
+    # over-subscribing (each worker inherits its fair share of model threads).
+    import os as _os
+    n_cpus = _os.cpu_count() or 4
+    n_workers = max(1, min(4, n_cpus // 2))
+
+    _progress(40, f"VMan ML 1.0: starting predictions on {n_records} records "
+              f"({n_workers} parallel workers, {n_cpus} CPUs detected)...",
+              log=f"VMan ML 1.0 | predict start | {n_records} records | "
+                  f"{n_workers} workers | {n_cpus} CPUs")
+
     try:
-        pred_df = predictor.predict_detailed(df)
+        pred_df = predictor.predict_detailed(
+            df,
+            progress_callback=_native_predict_cb,
+            n_parallel_workers=n_workers,
+        )
     finally:
-        # Restore so the next task gets unmodified defaults from the cache.
+        _heartbeat_stop.set()
+        _hb.join(timeout=1)
+        # Restore thresholds so the cached predictor is unmodified for next task.
         predictor.ood_threshold = _orig_ood
         predictor.ood_entropy_threshold = _orig_ood_entropy
         predictor.dk_threshold = _orig_dk
+
     t_predict = time.perf_counter() - t_predict
+    throughput = n_records / t_predict if t_predict > 0 else 0
+    _progress(80, f"VMan ML 1.0: predictions complete ({n_records} records in {t_predict:.1f}s).",
+              log=f"VMan ML 1.0 | predict done | {t_predict:.1f}s | "
+                  f"{throughput:.0f} records/s | {n_workers} parallel workers")
 
     # ── 7. Log OOD / DK / classified counts ──────────────────────────────────
     n_ood = int((pred_df["prediction"] == "out_of_distribution").sum())
     n_classified = int((pred_df["prediction"] != "out_of_distribution").sum())
-    _progress(80, "VMan ML 1.0: formatting results...",
-              log=(f"VMan ML 1.0 | predictions done in {t_predict:.1f}s | "
-                   f"classified: {n_classified} | out-of-distribution: {n_ood} | "
-                   f"total: {n_records}"))
+    _progress(82, "VMan ML 1.0: formatting results...",
+              log=(f"VMan ML 1.0 | {n_classified} classified | "
+                   f"{n_ood} out-of-distribution | {n_records} total | "
+                   f"predict wall-clock {t_predict:.1f}s ({throughput:.0f} rec/s)"))
 
     # ── 8. Map to InterVA5-compatible result dicts ────────────────────────────
     id_field = id_col or "instanceid"
