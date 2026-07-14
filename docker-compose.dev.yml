@@ -21,7 +21,7 @@ services:
         condition: any
 
   redis:
-    container_name: redis-vman3-dev
+    container_name: redis-vman3
     image: redis:7.4-alpine
     command: redis-server --requirepass vman@1029
     ports:
