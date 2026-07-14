@@ -417,17 +417,19 @@ class InterVA5:
             call_update_callback(self.update_callback, {"progress": 0,"message": "    InterVA5 analysis in progress...","log": "InterVA5 analysis in progress...","elapsed_time": elapsed_time,"error": False, "total_records":self.va_input.shape[0]})
 
         for i in range(N):
-            # elapsed_time =f"{(datetime.datetime.now() - self.start_time).seconds // 3600}:{(datetime.datetime.now() - self.start_time).seconds // 60 % 60}:{(datetime.datetime.now() - self.start_time).seconds % 60}"
             if self.gui_ctrl["break"]:
                 raise RuntimeError
             k = i + 1
             if k % nd == 0:
+                progress = int(100 * k / N)
+                elapsed_time = f"{(datetime.datetime.now() - self.start_time).seconds // 3600}:{(datetime.datetime.now() - self.start_time).seconds // 60 % 60}:{(datetime.datetime.now() - self.start_time).seconds % 60}"
                 if self.update_callback:
-                   call_update_callback(self.update_callback, {"progress": progress,"message": "InterVA5 analysis in progress...","log": f"Running InterVA5 analysis... Processing record {k}/{N} ({progress}% completed)","elapsed_time": elapsed_time,"error": False, "total_records":self.va_input.shape[0]})
+                   call_update_callback(self.update_callback, {"progress": progress,"message": "InterVA5 analysis in progress...","log": f"Processing record {k}/{N} ({progress}% completed)","elapsed_time": elapsed_time,"error": False, "total_records":self.va_input.shape[0]})
 
             if k == N:
+                elapsed_time = f"{(datetime.datetime.now() - self.start_time).seconds // 3600}:{(datetime.datetime.now() - self.start_time).seconds // 60 % 60}:{(datetime.datetime.now() - self.start_time).seconds % 60}"
                 if self.update_callback:
-                    call_update_callback(self.update_callback, {"progress": 90,"message": "InterVA5 analysis completed","log": f"Running InterVA5 analysis... Completed processing all {N} records (100%)","elapsed_time": elapsed_time,"total_records":self.va_input.shape[0], "error": False})
+                    call_update_callback(self.update_callback, {"progress": 99,"message": "Finalising results...","log": f"All {N} records processed — compiling results...","elapsed_time": elapsed_time,"total_records":self.va_input.shape[0], "error": False})
 
  
 
