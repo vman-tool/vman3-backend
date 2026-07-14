@@ -1,6 +1,6 @@
 
 services:
-  arango-db:
+  arangodb:
     image: arangodb/arangodb:3.12.2
     env_file:
       - .env
@@ -21,7 +21,7 @@ services:
         condition: any
 
   redis:
-    container_name: redis-vman3-dev
+    container_name: redis-vman3
     image: redis:7.4-alpine
     command: redis-server --requirepass vman@1029
     ports:
@@ -57,14 +57,14 @@ services:
       REDIS_URL: "redis://redis:6379"
       REDIS_PASSWORD: "vman@1029"
       # ArangoDB — use explicit container name to avoid conflict with deployment
-      # arango-db (deployment) and backend-arango-db-1 (dev) both live on vman3-net;
+      # arangodb (deployment) and backend-arangodb-1 (dev) both live on vman3-net;
       # point the worker at the dev instance that the FastAPI backend also uses.
-      DB_URL: "http://backend-arango-db-1:8529"
+      DB_URL: "http://backend-arangodb-1:8529"
       DB_NAME: "vman3"
       DB_ROOT_USER: "root"
       ARANGO_ROOT_USER: "root"
       ARANGO_ROOT_PASSWORD: "password"
-      ARANGODB_URL: "http://backend-arango-db-1:8529/"
+      ARANGODB_URL: "http://backend-arangodb-1:8529/"
     depends_on:
       - redis
     restart: always
@@ -94,12 +94,12 @@ services:
       PYTHONUNBUFFERED: "1"
       REDIS_URL: "redis://redis:6379"
       REDIS_PASSWORD: "vman@1029"
-      DB_URL: "http://backend-arango-db-1:8529"
+      DB_URL: "http://backend-arangodb-1:8529"
       DB_NAME: "vman3"
       DB_ROOT_USER: "root"
       ARANGO_ROOT_USER: "root"
       ARANGO_ROOT_PASSWORD: "password"
-      ARANGODB_URL: "http://backend-arango-db-1:8529/"
+      ARANGODB_URL: "http://backend-arangodb-1:8529/"
     depends_on:
       - redis
     restart: always
