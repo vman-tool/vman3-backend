@@ -75,7 +75,7 @@ cp .env_sample .env
 After ensuring the above configurations, build and run the Docker containers:
 
 ```bash
-docker compose up arango-db -d
+docker compose up arangodb -d
 
 ```
 
@@ -98,12 +98,19 @@ The application will be accessible at `http://localhost:8080/vman/api/v1`.
 
 ### 7. Running the Application with Docker Compose
 
-
 After ensuring the above configurations, build and run the Docker containers:
 
 ```bash
 docker compose up --build
 ```
+
+> **⚠️ Migration note — `arango-db` renamed to `arangodb` (July 2026)**
+> If you previously had an `arango-db` container running, use `--remove-orphans` to
+> clean up the old container before the renamed one starts:
+> ```bash
+> docker compose up -d --remove-orphans
+> ```
+> Data in the `vman3db` volume is preserved automatically.
 
 ## Development Guidelines
 
