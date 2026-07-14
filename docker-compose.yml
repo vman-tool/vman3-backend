@@ -55,7 +55,7 @@ services:
       restart_policy:
         condition: any
 
-  arango-db:
+  arangodb:
     image: arangodb/arangodb:3.12.2
     env_file:
       - .env
@@ -108,7 +108,7 @@ services:
       - hf_cache:/root/.cache/huggingface
     depends_on:
       - redis
-      - arango-db
+      - arangodb
     deploy:
       replicas: 2  # Run 2 Celery workers for better throughput
       restart_policy:
@@ -132,7 +132,7 @@ services:
       - app_data:/app
     depends_on:
       - redis
-      - arango-db
+      - arangodb
     deploy:
       replicas: 1
       restart_policy:
