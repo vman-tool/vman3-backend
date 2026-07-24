@@ -105,7 +105,7 @@ async def fetch_error_list(
     
 async def fetch_error_details(db: StandardDatabase, error_id: str) -> ResponseMainModel:
     try:
-        # collection = db.collection(db_collections.CCVA_ERRORS)
+        # Original query — unchanged so it stays reliable
         query = f"""
             FOR e IN {db_collections.CCVA_ERRORS}
                 FILTER e.uuid == @error_id
@@ -122,16 +122,12 @@ async def fetch_error_details(db: StandardDatabase, error_id: str) -> ResponseMa
                     uuid: uuid,
                     error_types: errorType,
                     group: group,
-                    error_messages: UNIQUE(groupedErrors[*].e.error_message) // Aggregate unique error messages
+                    error_messages: UNIQUE(groupedErrors[*].e.error_message)
                 }},
-                form_data: formData[0] // Include the matching form data
+                form_data: formData[0]
             }}
         """
 
-        # print(query)
-        
-        # print(query)
-        
         def execute_details_query():
             cursor = db.aql.execute(query, bind_vars={"error_id": error_id}, cache=True)
             return cursor.next()
@@ -140,6 +136,26 @@ async def fetch_error_details(db: StandardDatabase, error_id: str) -> ResponseMa
 
         if not result:
             raise BadRequestException("Error not found", f"No error found with id {error_id}")
+
+        # Fetch audit trail separately so a missing/empty collection never breaks the main load
+        audit_trail = []
+        try:
+            audit_query = f"""
+                FOR c IN {db_collections.CCVA_ERRORS_CORRECTIONS}
+                    FILTER c.form_id == @error_id
+                    SORT c.changed_at DESC
+                    RETURN KEEP(c, ["changed_at", "changed_by", "changes"])
+            """
+
+            def execute_audit_query():
+                cursor = db.aql.execute(audit_query, bind_vars={"error_id": error_id})
+                return list(cursor)
+
+            audit_trail = await run_in_threadpool(execute_audit_query)
+        except Exception as audit_err:
+            print(f"Audit trail fetch failed (non-fatal): {audit_err}")
+
+        result["audit_trail"] = audit_trail
 
         return ResponseMainModel(
             data=result,
@@ -206,35 +222,68 @@ async def update_form_data(db: StandardDatabase, form_id: str, updated_data: dic
         raise BadRequestException(f"Failed to update form data: {str(e)}", str(e))
 
 
-async def save_corrections_data(db: StandardDatabase, form_id:str, updated_data: dict) -> ResponseMainModel:
+async def save_corrections_data(
+    db: StandardDatabase, uuid: str, updated_data: dict, changed_by: dict
+) -> ResponseMainModel:
+    """Update the VA record in VA_TABLE and log a structured audit entry."""
     try:
-        collection = db.collection(db_collections.CCVA_ERRORS_CORRECTIONS)
-        
-        # Add timestamps to the updated_data
-        updated_data["created_at"] = datetime.utcnow().isoformat()
-        updated_data["updated_at"] = datetime.utcnow().isoformat()
-        updated_data["form_id"] = form_id
+        now = datetime.utcnow().isoformat()
 
-        # Query to insert the data
-        query = f"""
-        INSERT @updated_data INTO {collection.name}
-        RETURN NEW
+        # Fetch current record to compute field-level diff
+        fetch_query = f"""
+        FOR fs IN {db_collections.VA_TABLE}
+            FILTER fs.__id == CONCAT("uuid:", @uuid)
+            RETURN fs
         """
-        
-        def execute_save_corrections_query():
-            cursor = db.aql.execute(query, bind_vars={"updated_data": updated_data}, cache=True)
+
+        def execute_fetch():
+            cursor = db.aql.execute(fetch_query, bind_vars={"uuid": uuid})
             return cursor.next()
 
-        result = await run_in_threadpool(execute_save_corrections_query)
+        current = await run_in_threadpool(execute_fetch)
+        if not current:
+            raise BadRequestException("Form data not found", f"No VA record found with uuid {uuid}")
 
-        if not result:
-            raise BadRequestException("Failed to insert form data", "No data was inserted")
+        changes = [
+            {"field": field, "old_value": current.get(field), "new_value": new_val}
+            for field, new_val in updated_data.items()
+            if current.get(field) != new_val
+        ]
+
+        update_query = f"""
+        FOR fs IN {db_collections.VA_TABLE}
+            FILTER fs.__id == CONCAT("uuid:", @uuid)
+            UPDATE fs WITH @updated_data IN {db_collections.VA_TABLE}
+            RETURN NEW
+        """
+
+        def execute_update():
+            cursor = db.aql.execute(
+                update_query,
+                bind_vars={"uuid": uuid, "updated_data": updated_data},
+            )
+            return cursor.next()
+
+        result = await run_in_threadpool(execute_update)
+
+        log_entry = {
+            "form_id": uuid,
+            "changed_by": changed_by,
+            "changed_at": now,
+            "changes": changes,
+        }
+        log_query = f"INSERT @entry INTO {db_collections.CCVA_ERRORS_CORRECTIONS}"
+
+        def execute_log():
+            db.aql.execute(log_query, bind_vars={"entry": log_entry})
+
+        await run_in_threadpool(execute_log)
 
         return ResponseMainModel(
             data=result,
-            message="Form data inserted successfully",
+            message="Form data updated successfully",
             total=1
         )
     except Exception as e:
         print(e)
-        raise BadRequestException(f"Failed to insert form data: {str(e)}", str(e))
+        raise BadRequestException(f"Failed to update form data: {str(e)}", str(e))

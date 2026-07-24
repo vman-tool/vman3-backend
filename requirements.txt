@@ -109,4 +109,4 @@ flower>=2.0.0
 # VMan ML 1.0 — installed from GitHub; ML deps (sklearn, xgboost, shap, etc.)
 # are declared in vman_ml's install_requires and installed transitively.
 git+https://github.com/vman-tool/vman3_ml.git@v1.0.3
-git+https://github.com/vman-tool/vman3_dq.git@v1.0.2
+git+https://github.com/vman-tool/vman3_dq.git@v1.0.3
