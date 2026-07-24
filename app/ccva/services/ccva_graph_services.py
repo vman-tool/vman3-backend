@@ -296,44 +296,39 @@ LET _locIds = (
         )
 
         RETURN {{
-         "graphs":{{   "all": {{
-                "index": allCauses[*].cause,
-                "counts": allCauses[*].count,
-                "values": allCauses[*].percent
+            "graphs": {{
+                "all": {{
+                    "index": allCauses[*].cause,
+                    "counts": allCauses[*].count,
+                    "values": allCauses[*].percent
+                }},
+                "male": {{
+                    "index": maleCauses[*].cause,
+                    "counts": maleCauses[*].count,
+                    "values": maleCauses[*].percent
+                }},
+                "female": {{
+                    "index": femaleCauses[*].cause,
+                    "counts": femaleCauses[*].count,
+                    "values": femaleCauses[*].percent
+                }},
+                "adult": {{
+                    "index": adultCauses[*].cause,
+                    "counts": adultCauses[*].count,
+                    "values": adultCauses[*].percent
+                }},
+                "child": {{
+                    "index": childCauses[*].cause,
+                    "counts": childCauses[*].count,
+                    "values": childCauses[*].percent
+                }},
+                "neonate": {{
+                    "index": neonateCauses[*].cause,
+                    "counts": neonateCauses[*].count,
+                    "values": neonateCauses[*].percent
+                }}
             }},
-            "male": {{
-                "index": maleCauses[*].cause,
-                "counts": maleCauses[*].count,
-                "values": maleCauses[*].percent
-            }},
-            "female": {{
-                "index": femaleCauses[*].cause,
-                "counts": femaleCauses[*].count,
-                "values": femaleCauses[*].percent
-            }},
-              "adult": {{
-                "index": adultCauses[*].cause,
-                "counts": adultCauses[*].count,
-                "values": adultCauses[*].percent
-            }},
-               "child": {{
-                "index": childCauses[*].cause,
-                "counts": childCauses[*].count,
-                "values": childCauses[*].percent
-            }},
-            "neonate": {{
-                "index": neonateCauses[*].cause,
-                "counts": neonateCauses[*].count,
-                "values": neonateCauses[*].percent
-            }},
-         
-          
-            }},
-            "total_records": totalRecords,
-            "created_at": "{created_at}",
-            "elapsed_time": "{elapsed_time}",
-            "range": {range},
-            "task_id": "{ccva_task_id}"
+            "total_records": totalRecords
         }}
         """
 
@@ -350,11 +345,15 @@ LET _locIds = (
 
         data = await run_in_threadpool(execute_query)
 
-
         if not data:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No records found")
 
-        # Return response
+        # Attach metadata outside AQL to avoid f-string injection of Python objects
+        data[0]['created_at'] = created_at
+        data[0]['elapsed_time'] = elapsed_time
+        data[0]['range'] = range
+        data[0]['task_id'] = ccva_task_id
+
         return ResponseMainModel(
             data=data,
             message="Processed CCVA fetched successfully",
