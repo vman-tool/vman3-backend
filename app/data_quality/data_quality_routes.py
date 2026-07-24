@@ -209,7 +209,8 @@ async def update_form_data_route(
     current_user = Depends(get_current_user)
 ):
     try:
-        updated_form = await save_corrections_data(db, form_id, updated_data)
+        changed_by = {"name": getattr(current_user, "name", ""), "email": getattr(current_user, "email", "")}
+        updated_form = await save_corrections_data(db, form_id, updated_data, changed_by)
         if not updated_form:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Form data not found or could not be updated")
         return {"message": "Form data updated successfully", "updated_form": updated_form}
