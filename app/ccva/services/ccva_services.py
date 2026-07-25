@@ -128,7 +128,7 @@ async def run_ccva(db: StandardDatabase, records:ResponseMainModel, task_id: str
         initial_progress = InterVA5Progress(
             progress=1,
             total_records= len(records.data),
-            message="Collecting data.",
+            message="Fetching VA records..." if ccva_algorithm == "VManML10" else "Collecting data.",
             status="running",
             elapsed_time=f"{(datetime.now() - start_time).seconds // 3600}:{(datetime.now() - start_time).seconds // 60 % 60}:{(datetime.now() - start_time).seconds % 60}",
             task_id=task_id,
@@ -155,7 +155,7 @@ async def run_ccva(db: StandardDatabase, records:ResponseMainModel, task_id: str
         # Run the CCVA process in a thread pool, with real-time updates
         await update_callback(InterVA5Progress(
         progress=4,
-        message="Running InterVA5 analysis...",
+        message="Preparing data pipeline..." if ccva_algorithm == "VManML10" else "Running InterVA5 analysis...",
         status="running",
         total_records=len(database_dataframe),
         elapsed_time=f"{(datetime.now() - start_time).seconds // 3600}:{(datetime.now() - start_time).seconds // 60 % 60}:{(datetime.now() - start_time).seconds % 60}",
@@ -190,6 +190,22 @@ def runCCVA(odk_raw:pd.DataFrame, id_col: str = None,date_col:str =None,start_ti
     # ── VMan ML 1.0 branch ────────────────────────────────────────────────────
     if algorithm == "VManML10":
         from app.ccva.services.vman_ml_service import run_vman_ml
+
+        def _ml_elapsed() -> str:
+            s = int((datetime.now() - start_time).total_seconds())
+            return f"{s // 3600}:{(s // 60) % 60:02d}:{s % 60:02d}"
+
+        def _ml_progress(pct: int, msg: str) -> None:
+            call_update_callback(update_callback, {
+                "progress": pct,
+                "message": msg,
+                "status": "running",
+                "task_id": file_id,
+                "elapsed_time": _ml_elapsed(),
+                "error": False,
+                "total_records": len(odk_raw),
+            })
+
         rcd = run_vman_ml(
             odk_raw=odk_raw,
             file_id=file_id,
@@ -203,13 +219,16 @@ def runCCVA(odk_raw:pd.DataFrame, id_col: str = None,date_col:str =None,start_ti
             call_update_callback(update_callback, {"progress": 0, "message": "No predictions returned by VMan ML", "status": "error", "task_id": file_id, "error": True})
             return
 
+        _ml_progress(91, f"Merging {len(rcd):,} predictions with VA records...")
         results_to_insert = asyncio.run(getVADataAndMergeWithResults(db, null_convert_data(rcd)))
         if results_to_insert is None:
             call_update_callback(update_callback, {"progress": 0, "message": "No records found after merge", "status": "error", "task_id": file_id, "error": True})
             return
 
+        _ml_progress(95, f"Saving {len(results_to_insert):,} classified records...")
         db.collection(db_collections.CCVA_RESULTS).insert_many(results_to_insert, overwrite=True, overwrite_mode="update")
 
+        _ml_progress(97, "Building CoD frequency graphs...")
         # Build CSMF per group (all/male/female/adult/child/neonate) and persist
         # to CCVA_GRAPH_RESULTS — same format as InterVA5 compile_ccva_results().
         ccva_results = compile_ml_csmf_results(
@@ -669,9 +688,6 @@ async def fetch_ccva_results_and_errors(db: StandardDatabase, task_id: str):
         return None
     
 async def getVADataAndMergeWithResults(db: StandardDatabase, results: list):
-    # save results to csv
-    df = pd.DataFrame(results)
-    df.to_csv('results.csv')
     from app.settings.services.odk_configs import fetch_odk_config
 
     # Fetch configurations asynchronously
@@ -699,13 +715,13 @@ async def getVADataAndMergeWithResults(db: StandardDatabase, results: list):
     if not data_uids:
         return results
 
-    # Define a batch AQL query for all data_uids at once
-    collection = db.collection(db_collections.VA_TABLE)
-    data_uids_str = ', '.join(f'"{uid}"' for uid in data_uids)
+    # Build a batch AQL query. Field names come from trusted config (f-string OK).
+    # data_uids is user data — use a bind var to avoid a ~1 MB inline literal for
+    # large datasets, and to let ArangoDB cache the query plan across runs.
     query = f"""
-FOR doc IN {collection.name}
-    FILTER doc.{instance_id} IN [{data_uids_str}]
-    LET age_group = 
+FOR doc IN {db_collections.VA_TABLE}
+    FILTER doc.{instance_id} IN @data_uids
+    LET age_group =
         (doc.age_group=="neonate" || TO_NUMBER(doc.{is_neonate}) == 1 || ((TO_NUMBER(doc.isneonatal1) == 1 || TO_NUMBER(doc.isneonatal2) == 1))) ? "neonate" :
         (doc.age_group=="child" || TO_NUMBER(doc.{is_child}) == 1 || ((TO_NUMBER(doc.ischild1) == 1 || TO_NUMBER(doc.ischild2) == 1))) ? "child" :
         (doc.age_group=="adult" || TO_NUMBER(doc.{is_adult}) == 1 || ((TO_NUMBER(doc.isadult1) == 1 || TO_NUMBER(doc.isadult2) == 1))) ? "adult" :
@@ -727,14 +743,11 @@ FOR doc IN {collection.name}
         isneonatal:doc.isneonatal,
         ischild:doc.ischild,
         isadult:doc.isadult
-
     }}
     """
-    # print(query)
-    # Execute the query with caching
-    # Execute the query with caching
+
     def execute_va_data_query():
-        cursor = db.aql.execute(query, cache=True)
+        cursor = db.aql.execute(query, bind_vars={"data_uids": data_uids})
         return {doc['uid']: doc for doc in cursor}
 
     # Convert the cursor to a dictionary keyed by UID for easy lookup
