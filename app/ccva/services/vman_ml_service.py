@@ -134,6 +134,35 @@ def _get_cached_predictor(model_path: Path) -> "CCVAPredictor":
     return _predictor_cache[key]
 
 
+# Human-readable display names for cluster and special prediction labels.
+# Applied post-prediction — no retraining needed to change these.
+_CAUSE_DISPLAY_NAMES: dict[str, str] = {
+    # Cluster labels generated at training time by processing._who_cluster_label()
+    "cluster_circulatory_system_disorders":                       "Circulatory System Disorders",
+    "cluster_diseases_of_the_circulatory_system":                 "Circulatory System Diseases",
+    "cluster_external_causes_of_death":                           "External Causes of Death",
+    "cluster_gastrointestinal_disorders":                         "Gastrointestinal Disorders",
+    "cluster_infectious_and_parasitic_diseases":                  "Infectious & Parasitic Diseases",
+    "cluster_mental_and_nervous_system_disorders":                "Mental & Nervous System Disorders",
+    "cluster_neonatal_causes_of_death":                           "Neonatal Causes of Death",
+    "cluster_neoplasms":                                          "Neoplasms",
+    "cluster_nutritional_and_endocrine_disorders":               "Nutritional & Endocrine Disorders",
+    "cluster_pregnancy_childbirth_and_puerperium_related_disorders": "Pregnancy & Childbirth Disorders",
+    "cluster_renal_disorders":                                    "Renal Disorders",
+    "cluster_respiratory_disorders":                              "Respiratory Disorders",
+    "cluster_stillbirths":                                        "Stillbirths",
+    # Special / fallback labels
+    "out_of_distribution":                                        "Undetermined",
+}
+
+
+def _display_cause(label: str | None) -> str:
+    """Return a human-readable display name for a prediction label."""
+    if not label:
+        return ""
+    return _CAUSE_DISPLAY_NAMES.get(label, label)
+
+
 def run_vman_ml(
     odk_raw: pd.DataFrame,
     file_id: str,
@@ -334,9 +363,9 @@ def run_vman_ml(
 
         records.append({
             "ID":                      va_id,
-            "CAUSE1":                  pred,
+            "CAUSE1":                  _display_cause(pred),
             "LIK1":                    round(prob * 100, 2),
-            "CAUSE2":                  row.get("pred_second_prediction") or "",
+            "CAUSE2":                  _display_cause(row.get("pred_second_prediction") or ""),
             "LIK2":                    None,
             "pred_probability":        prob,
             "pred_confidence_lower":   row.get("pred_confidence_lower"),
