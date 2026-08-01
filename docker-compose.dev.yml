@@ -140,4 +140,3 @@ volumes:
   ccva_files:
   app_data:
   uploads:
-  settings_json:

@@ -47,7 +47,6 @@ services:
     volumes:
       - ccva_files:/app/ccva_files
       - app_data:/app
-      - settings_json:/vman3/settings.json
       - uploads:/vman3/app/uploads
       - hf_cache:/root/.cache/huggingface
     deploy:
@@ -152,5 +151,4 @@ volumes:
   uploads:
     external: true
     name: vman3_uploads
-  settings_json:
   hf_cache:

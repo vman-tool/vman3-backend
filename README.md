@@ -55,13 +55,7 @@ ODK_PASSWORD=""
 
 ```
 
-### 4. add settings.json
-# command copy the content of settings.json.example to settings.json
-
-```bash
-
-cp settings.json.example settings.json
-```
+### 4. Copy the sample environment file
 # command copy the content of env_sample.example to .env
 
 ```
