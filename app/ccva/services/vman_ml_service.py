@@ -134,6 +134,35 @@ def _get_cached_predictor(model_path: Path) -> "CCVAPredictor":
     return _predictor_cache[key]
 
 
+# Human-readable display names for cluster and special prediction labels.
+# Applied post-prediction — no retraining needed to change these.
+_CAUSE_DISPLAY_NAMES: dict[str, str] = {
+    # Cluster labels generated at training time by processing._who_cluster_label()
+    "cluster_circulatory_system_disorders":                       "Circulatory System Disorders",
+    "cluster_diseases_of_the_circulatory_system":                 "Circulatory System Diseases",
+    "cluster_external_causes_of_death":                           "External Causes of Death",
+    "cluster_gastrointestinal_disorders":                         "Gastrointestinal Disorders",
+    "cluster_infectious_and_parasitic_diseases":                  "Infectious & Parasitic Diseases",
+    "cluster_mental_and_nervous_system_disorders":                "Mental & Nervous System Disorders",
+    "cluster_neonatal_causes_of_death":                           "Neonatal Causes of Death",
+    "cluster_neoplasms":                                          "Neoplasms",
+    "cluster_nutritional_and_endocrine_disorders":               "Nutritional & Endocrine Disorders",
+    "cluster_pregnancy_childbirth_and_puerperium_related_disorders": "Pregnancy & Childbirth Disorders",
+    "cluster_renal_disorders":                                    "Renal Disorders",
+    "cluster_respiratory_disorders":                              "Respiratory Disorders",
+    "cluster_stillbirths":                                        "Stillbirths",
+    # Special / fallback labels
+    "out_of_distribution":                                        "Undetermined",
+}
+
+
+def _display_cause(label: str | None) -> str:
+    """Return a human-readable display name for a prediction label."""
+    if not label:
+        return ""
+    return _CAUSE_DISPLAY_NAMES.get(label, label)
+
+
 def run_vman_ml(
     odk_raw: pd.DataFrame,
     file_id: str,
@@ -182,7 +211,7 @@ def run_vman_ml(
         raise FileNotFoundError(f"VMan ML model not found: {resolved_model}")
 
     # ── 2. Preprocess ─────────────────────────────────────────────────────────
-    _progress(10, f"VMan ML 1.0: preprocessing {n_records} records...",
+    _progress(10, f"Formatting & cleaning {n_records:,} records...",
               log=f"VMan ML 1.0 | preprocessing {n_records} VA records")
     t_preprocess = time.perf_counter()
 
@@ -190,7 +219,7 @@ def run_vman_ml(
 
     def _preprocess_progress(pct: int) -> None:
         # Map 0-100 from change_null_toskipped → overall 10-20%
-        _progress(10 + int(pct * 0.10), f"VMan ML 1.0: preprocessing... ({pct}%)")
+        _progress(10 + int(pct * 0.10), f"Cleaning & preparing records... ({pct}%)")
 
     df = preprocessor._preprocess_data(odk_raw.copy(), progress_callback=_preprocess_progress)
     t_preprocess = time.perf_counter() - t_preprocess
@@ -200,14 +229,14 @@ def run_vman_ml(
     detection = detect_instrument_version(df)
     version = detection.get("version", "unknown") if isinstance(detection, dict) else "unknown"
     t_detect = time.perf_counter() - t_detect
-    _progress(22, "VMan ML 1.0: detecting instrument version...",
+    _progress(22, "Validating instrument structure...",
               log=(f"VMan ML 1.0 | preprocess: {t_preprocess:.1f}s | "
                    f"instrument version detected: {version} ({t_detect:.2f}s)"))
 
     # ── 4. Load model (from cache when available) ─────────────────────────────
     t_load = time.perf_counter()
     is_cached = str(resolved_model) in _predictor_cache
-    _progress(30, "VMan ML 1.0: loading model...",
+    _progress(30, "Loading prediction model...",
               log=f"VMan ML 1.0 | {'reusing cached' if is_cached else 'loading'} model from {resolved_model.name}")
     predictor = _get_cached_predictor(resolved_model)
     t_load = time.perf_counter() - t_load
@@ -215,7 +244,7 @@ def run_vman_ml(
     model_name = type(predictor.model).__name__
     n_classes = len(predictor.original_classes)
     n_features = len(predictor.expected_columns)
-    _progress(35, "VMan ML 1.0: model ready.",
+    _progress(35, "Configuring prediction model...",
               log=(f"VMan ML 1.0 | model {'(cached)' if is_cached else f'loaded in {t_load:.1f}s'} | "
                    f"{model_name} | {n_features} features | {n_classes} cause classes | "
                    f"DK threshold: {predictor.dk_threshold:.0%} | "
@@ -230,12 +259,12 @@ def run_vman_ml(
     if ood_threshold is not None and 0 < ood_threshold < 1:
         predictor.ood_threshold = ood_threshold
         predictor.ood_entropy_threshold = None
-        _progress(36, "VMan ML 1.0: applying threshold overrides.",
+        _progress(36, "Applying classification thresholds...",
                   log=f"VMan ML 1.0 | OOD threshold overridden to {ood_threshold}")
 
     if dk_threshold is not None and 0 < dk_threshold <= 1:
         predictor.dk_threshold = dk_threshold
-        _progress(37, "VMan ML 1.0: applying threshold overrides.",
+        _progress(37, "Applying classification thresholds...",
                   log=f"VMan ML 1.0 | DK threshold overridden to {dk_threshold:.0%}")
 
     # ── 6. Predict — native progress callback + parallel predict_proba ──────────
@@ -247,29 +276,34 @@ def run_vman_ml(
     # runs model.predict_proba on them in a ThreadPoolExecutor, so multiple CPU
     # cores are used even though we make a single call here.
     #
-    # A heartbeat thread fires every 20 s as a last-resort safety net in case
-    # the callback stops firing (e.g. feature preparation stalls on a slow disk).
+    # A heartbeat thread fires every 5 s and gently advances the progress bar
+    # when predict_detailed hasn't emitted a callback recently, so the UI never
+    # appears stuck.  The nudge is capped at 79% to avoid overshooting the band.
     t_predict = time.perf_counter()
     _heartbeat_stop = threading.Event()
     _last_cb_time: list[float] = [time.monotonic()]
+    _last_reported_pct: list[int] = [40]
 
     def _native_predict_cb(inner_pct: int, msg: str = "") -> None:
         """Map predict_detailed's 0-100 → our 40-80% band and forward to UI."""
         _last_cb_time[0] = time.monotonic()
         outer_pct = 40 + int(inner_pct * 0.40)   # 0%→40%  100%→80%
+        _last_reported_pct[0] = outer_pct
         _progress(outer_pct,
-                  f"VMan ML 1.0: {msg}" if msg else "VMan ML 1.0: predicting...",
+                  f"Making predictions... ({inner_pct}%)" if not msg else f"Predicting: {msg}",
                   log=f"VMan ML 1.0 | predict_detailed ({inner_pct}%) — {msg}")
 
     def _heartbeat() -> None:
-        """Ping the UI every 20 s if predict_detailed hasn't called back recently."""
-        while not _heartbeat_stop.wait(20):
+        """Every 5 s: if no callback has arrived, nudge the bar by 1% (max 79%)."""
+        while not _heartbeat_stop.wait(5):
             silence = time.monotonic() - _last_cb_time[0]
-            if silence >= 18:
-                elapsed_s = (datetime.now() - start_time).seconds
-                _progress(40, "VMan ML 1.0: still predicting...",
+            if silence >= 4:
+                nudged = min(79, _last_reported_pct[0] + 1)
+                _last_reported_pct[0] = nudged
+                _progress(nudged,
+                          f"Making predictions... ",
                           log=f"VMan ML 1.0 | predict_detailed running | "
-                              f"no callback for {silence:.0f}s | elapsed {elapsed_s}s")
+                              f"no callback for {silence:.0f}s | elapsed {_elapsed()}")
 
     _hb = threading.Thread(target=_heartbeat, daemon=True)
     _hb.start()
@@ -281,8 +315,8 @@ def run_vman_ml(
     n_cpus = _os.cpu_count() or 4
     n_workers = max(1, min(4, n_cpus // 2))
 
-    _progress(40, f"VMan ML 1.0: starting predictions on {n_records} records "
-              f"({n_workers} parallel workers, {n_cpus} CPUs detected)...",
+    _progress(40, f"Making CoD predictions for {n_records:,} records "
+              f"({n_workers} workers)...",
               log=f"VMan ML 1.0 | predict start | {n_records} records | "
                   f"{n_workers} workers | {n_cpus} CPUs")
 
@@ -302,14 +336,14 @@ def run_vman_ml(
 
     t_predict = time.perf_counter() - t_predict
     throughput = n_records / t_predict if t_predict > 0 else 0
-    _progress(80, f"VMan ML 1.0: predictions complete ({n_records} records in {t_predict:.1f}s).",
+    _progress(80, "Compiling CoD results...",
               log=f"VMan ML 1.0 | predict done | {t_predict:.1f}s | "
                   f"{throughput:.0f} records/s | {n_workers} parallel workers")
 
     # ── 7. Log OOD / DK / classified counts ──────────────────────────────────
     n_ood = int((pred_df["prediction"] == "out_of_distribution").sum())
     n_classified = int((pred_df["prediction"] != "out_of_distribution").sum())
-    _progress(82, "VMan ML 1.0: formatting results...",
+    _progress(82, "Mapping CoD codes...",
               log=(f"VMan ML 1.0 | {n_classified} classified | "
                    f"{n_ood} out-of-distribution | {n_records} total | "
                    f"predict wall-clock {t_predict:.1f}s ({throughput:.0f} rec/s)"))
@@ -329,9 +363,9 @@ def run_vman_ml(
 
         records.append({
             "ID":                      va_id,
-            "CAUSE1":                  pred,
+            "CAUSE1":                  _display_cause(pred),
             "LIK1":                    round(prob * 100, 2),
-            "CAUSE2":                  row.get("pred_second_prediction") or "",
+            "CAUSE2":                  _display_cause(row.get("pred_second_prediction") or ""),
             "LIK2":                    None,
             "pred_probability":        prob,
             "pred_confidence_lower":   row.get("pred_confidence_lower"),
@@ -343,7 +377,7 @@ def run_vman_ml(
         })
 
     logger.info(f"VMan ML produced {len(records)} predictions for task {file_id}")
-    _progress(90, f"VMan ML 1.0: complete ({len(records)} predictions).",
+    _progress(90, f"Finalizing {len(records):,} predictions...",
               log=(f"VMan ML 1.0 | pipeline complete | "
                    f"{len(records)} predictions | elapsed {_elapsed()}"))
     return records
