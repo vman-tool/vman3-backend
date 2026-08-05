@@ -106,7 +106,10 @@ zipp==3.19.2
 celery[redis]>=5.3.0,<6.0.0
 flower>=2.0.0
 
-# VMan ML 1.0 — installed from GitHub; ML deps (sklearn, xgboost, shap, etc.)
+# VMan ML — installed from GitHub; ML deps (sklearn, xgboost, shap, etc.)
 # are declared in vman_ml's install_requires and installed transitively.
-git+https://github.com/vman-tool/vman3_ml.git@v1.0.3
+# vman_ml is pinned at v1.2.1 or later: earlier tags ship the mislabeled
+# va_instr_2016.xlsx, which actually contained the 2022 Tanzania form, so
+# they resolve the "2016" instrument to the wrong field structure.
+git+https://github.com/vman-tool/vman3_ml.git@v1.2.1
 git+https://github.com/vman-tool/vman3_dq.git@v1.2.1
