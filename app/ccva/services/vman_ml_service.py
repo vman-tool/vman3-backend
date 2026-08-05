@@ -41,7 +41,11 @@ def _ensure_vman_ml_resource_dictionaries() -> None:
     resource_dir = Path(instrument_dictionary.__file__).resolve().parent / "resources" / "dictionaries"
     resource_dir.mkdir(parents=True, exist_ok=True)
 
-    for version in ("2016", "2022"):
+    # Derived from WORKBOOKS rather than a hardcoded tuple, so this stays in
+    # sync automatically if instrument versions/countries are added or
+    # renamed (a hardcoded ("2016", "2022") here is what let stale/mislabeled
+    # workbooks go unnoticed previously).
+    for version in instrument_dictionary.WORKBOOKS:
         json_path = resource_dir / f"va_instr_{version}.json"
         if json_path.exists():
             continue
