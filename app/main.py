@@ -95,8 +95,12 @@ async def lifespan(app: FastAPI):
     # Start background initialization tasks without blocking
     asyncio.create_task(run_background_initialization())
     
-    # Initialize Redis for caching
-    redis_password = config('REDIS_PASSWORD', default=None)
+    # Initialize Redis for caching.
+    # Default must match celery_app.py and docker-compose.dev.yml, which
+    # starts redis with --requirepass vman@1029. Defaulting to None here
+    # made every cache get/set fail with AuthenticationError - silently,
+    # since fastapi_cache only logs a warning and serves uncached.
+    redis_password = config('REDIS_PASSWORD', default='vman@1029')
     redis = aioredis.from_url(
         config('REDIS_URL', default="redis://localhost:6370"),
         password=redis_password
