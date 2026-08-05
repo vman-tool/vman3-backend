@@ -92,3 +92,5 @@ vmanenv
 ./deployment/.env
 
 results.csv
+# macOS Finder metadata
+.DS_Store
