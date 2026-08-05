@@ -37,6 +37,19 @@ pip3 install -r requirements.txt
 pip freeze > requirements.txt
 ```
 
+### 2.1 if you run in development environment, install vman_ml and vman_dq manually
+```bash
+.venv/bin/pip install -e ../vman_dq --no-deps
+.venv/bin/pip install -e ../vman_ml --no-deps
+```
+These editable installs point the venv at your local working copies, so
+changes to vman_dq/vman_ml take effect without reinstalling. Production and
+Docker are unaffected — they install the git tags pinned in requirements.txt.
+
+Install vman_dq first, and keep `--no-deps`: vman_ml declares
+`vman_dq @ git+...@v1.2.1` plus sentence-transformers (which pulls torch),
+so without the flag pip would re-resolve that whole stack and overwrite the
+editable vman_dq you just installed.
 
 ### 3. Configure Environment Variables
 
