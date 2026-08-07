@@ -21,6 +21,7 @@ from fastapi import (
 from app.ccva.services.ccva_upload import insert_all_csv_data
 from app.settings.models.settings import ImagesConfigData, SettingsConfigData, SyncStatus
 from app.settings.services.cron import BackupSettings, CronSettings, fetch_backup_settings, fetch_cron_settings, save_backup_settings, save_cron_settings
+from app.settings.services.xform_dictionary import enrich_questions_from_xform, get_data_dictionary, update_question_label
 from app.settings.services.odk_configs import (
     add_configs_settings,
     fetch_configs_settings,
@@ -644,3 +645,58 @@ async def upload_ml_model(
         _json.dump(new_registry, f, indent=2)
 
     return ResponseMainModel(data=new_registry, message="Model updated successfully", error=False)
+
+@settings_router.post("/xform/upload", status_code=status.HTTP_200_OK, response_model=ResponseMainModel)
+async def upload_xform_dictionary(
+    file: UploadFile = File(...),
+    override_labels: bool = Form(False),
+    current_user=Depends(get_current_user),
+    required_privs: List[str] = Depends(check_privileges([AccessPrivileges.SETTINGS_CREATE_SYSTEM_CONFIGS])),
+    db: StandardDatabase = Depends(get_arangodb_session),
+):
+    """Enrich the VA question dictionary from an uploaded XLSForm (xForm).
+
+    Non-destructive: questions are matched to existing records by name and a
+    field is only written when the stored value is blank. Names absent from the
+    dictionary are reported back, never inserted - ODK sync stays the source of
+    truth for which questions exist.
+    """
+    if not (file.filename or "").lower().endswith((".xlsx", ".xls")):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="An xForm must be an XLSForm workbook (.xlsx or .xls).",
+        )
+
+    content = await file.read()
+    if not content:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="The uploaded file is empty.",
+        )
+
+    return await enrich_questions_from_xform(content, file.filename, db, override_labels)
+
+
+@settings_router.get("/dictionary", status_code=status.HTTP_200_OK, response_model=ResponseMainModel)
+async def get_dictionary(
+    include_options: bool = Query(
+        False, description="Also return each question's choice list, with per-language answer text"
+    ),
+    current_user=Depends(get_current_user),
+    db: StandardDatabase = Depends(get_arangodb_session),
+):
+    """Return the stored VA data dictionary (read-only, does not contact ODK)."""
+    return await get_data_dictionary(db, include_options=include_options)
+
+
+@settings_router.patch("/dictionary/{name}/label", status_code=status.HTTP_200_OK, response_model=ResponseMainModel)
+async def patch_dictionary_label(
+    name: str,
+    language: str = Body(..., embed=True),
+    label: str = Body(..., embed=True),
+    current_user=Depends(get_current_user),
+    required_privs: List[str] = Depends(check_privileges([AccessPrivileges.SETTINGS_CREATE_SYSTEM_CONFIGS])),
+    db: StandardDatabase = Depends(get_arangodb_session),
+):
+    """Edit one question's label for one language, from the dictionary table."""
+    return await update_question_label(name, language, label, db)

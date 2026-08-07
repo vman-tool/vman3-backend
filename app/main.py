@@ -64,6 +64,26 @@ async def initialize_default_account():
     except Exception as e:
         logger.error(f"❌ Failed to initialize default account: {e}")
 
+async def initialize_data_dictionary():
+    """Seed the VA data dictionary from the bundled WHO xForm when it is empty.
+
+    Guarantees a fresh deployment has an English dictionary before ODK is ever
+    contacted. No-op once any questions exist, so an established dictionary is
+    never touched.
+    """
+    try:
+        from app.settings.services.xform_dictionary import seed_dictionary_if_empty
+        from app.shared.configs.arangodb import get_arangodb_client
+
+        client = await get_arangodb_client()
+        db = client.db if hasattr(client, "db") else client
+        created = await seed_dictionary_if_empty(db)
+        if created:
+            logger.info(f"✅ Data dictionary seeded with {created} questions")
+    except Exception as e:
+        logger.error(f"❌ Failed to seed data dictionary: {e}")
+
+
 async def run_background_initialization():
     """Run all initialization tasks concurrently"""
     # Small delay to ensure server is fully ready
@@ -76,6 +96,7 @@ async def run_background_initialization():
         initialize_db_logger(),
         initialize_scheduler(),
         initialize_default_account(),
+        initialize_data_dictionary(),
         return_exceptions=True  # Don't fail if one task fails
     )
     
