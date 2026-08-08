@@ -103,12 +103,20 @@ async def get_unassigned_va_records(
     page_number: Optional[int] = Query(1, alias="page_number"),
     limit: Optional[int] = Query(10, alias="limit"),
     coder: Optional[str] = Query(None, alias="coder"),
+    location: Optional[str] = Query(None, alias="location", description="Value of the configured level-1 location field"),
+    start_date: Optional[str] = Query(None, alias="start_date", description="ISO date, inclusive"),
+    end_date: Optional[str] = Query(None, alias="end_date", description="ISO date, inclusive"),
+    data_source: Optional[str] = Query(None, alias="data_source", description="odk_api or uploaded_csv"),
+    assigned_to: Optional[str] = Query(None, alias="assigned_to", description="uuid of a coder whose assigned records to show"),
     db: StandardDatabase = Depends(get_arangodb_session)) -> ResponseMainModel:
 
     try:
         allowPaging = paging if paging is not None else True
-        
-        return await get_unassigned_va_service(paging = allowPaging, page_number = page_number, limit = limit, coder = coder, db=db)
+
+        return await get_unassigned_va_service(
+            paging=allowPaging, page_number=page_number, limit=limit, coder=coder,
+            location=location, start_date=start_date, end_date=end_date,
+            data_source=data_source, assigned_to=assigned_to, db=db)
         
     except Exception as e:
         raise e

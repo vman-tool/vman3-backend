@@ -9,7 +9,7 @@ from fastapi.responses import StreamingResponse
 from app.pcva.models.pcva_models import ICD10, AssignedVA, PCVAConfigurations, PCVAMessages, PCVAResults
 from app.pcva.requests.va_request_classes import AssignVARequestClass, PCVAResultsRequestClass
 from app.pcva.responses.va_response_classes import AssignVAResponseClass, CoderResponseClass, PCVAResultsResponseClass, VAQuestionResponseClass
-from app.shared.configs.constants import AccessPrivileges, db_collections
+from app.shared.configs.constants import AccessPrivileges, data_sources, db_collections
 from app.shared.utils.database_utilities import record_exists, replace_object_values
 from app.users.models.user import User
 from app.pcva.utilities.va_records_utils import format_va_record, get_categorised_pcva_results
@@ -25,11 +25,41 @@ from app.shared.utils.response import populate_user_fields
    
 
 
-async def get_unassigned_va_service(paging: bool = True, page_number: int = 0, limit: int = 10, format_records: bool = True, coder: str = None, db: StandardDatabase = None):
+async def get_unassigned_va_service(
+    paging: bool = True,
+    page_number: int = 0,
+    limit: int = 10,
+    format_records: bool = True,
+    coder: str = None,
+    location: str = None,
+    start_date: str = None,
+    end_date: str = None,
+    data_source: str = None,
+    assigned_to: str = None,
+    db: StandardDatabase = None,
+):
+    """Unassigned VA records, optionally narrowed before assignment.
+
+    The filters exist so a coder can be given a meaningful batch - one
+    district, one week, one import, or the workload of another coder - rather
+    than whatever happens to sit on the first page. All are optional; omitting
+    them returns everything, which is the previous behaviour.
+
+    Location and date filter on the fields named in the ODK field mapping, not
+    on hard-coded column names, so they follow whatever the deployment has
+    configured.
+
+    :param coder: the coder being assigned to. Records they already hold are
+        excluded regardless of any filter, which is what stops the same VA
+        being given to one coder twice.
+    :param assigned_to: keep only records already assigned to this *other*
+        coder. A VA may be held by several coders, so this supports handing
+        one coder's batch to a second reviewer.
+    """
     try:
         config = await fetch_odk_config(db)
         pcva_config = await fetch_pcva_settings(db)
-        
+
         offset = (page_number - 1) * limit if paging else 0
 
         query = ""
@@ -42,7 +72,42 @@ async def get_unassigned_va_service(paging: bool = True, page_number: int = 0, l
                 "limit": limit
             })
 
-        
+        location_field = config.field_mapping.location_level1
+        date_field = config.field_mapping.date
+
+        record_filters = ""
+        if location:
+            record_filters += f"\n                    FILTER doc.{location_field} == @location"
+            bind_vars["location"] = location
+        # Dates are stored as ISO-8601 strings, for which a lexical comparison
+        # is also a chronological one.
+        if start_date:
+            record_filters += f"\n                    FILTER doc.{date_field} >= @start_date"
+            bind_vars["start_date"] = start_date
+        if end_date:
+            record_filters += f"\n                    FILTER doc.{date_field} <= @end_date"
+            bind_vars["end_date"] = end_date
+        if data_source:
+            # Records stored before provenance was tracked carry no marker at
+            # all; they came from ODK, so treat a missing value as odk_api.
+            if data_source == data_sources.ODK_API:
+                record_filters += (
+                    "\n                    FILTER doc.vman_data_source == @data_source"
+                    " OR doc.vman_data_source == null"
+                )
+            else:
+                record_filters += "\n                    FILTER doc.vman_data_source == @data_source"
+            bind_vars["data_source"] = data_source
+        if assigned_to:
+            # agg.coders holds every coder currently assigned to this VA, so
+            # this narrows to one coder's workload. Records the target coder
+            # already holds stay excluded by the under_assigned filter above -
+            # reassigning coder 1's batch to coder 2 therefore skips whatever
+            # coder 2 already has rather than duplicating it.
+            record_filters += "\n                    FILTER agg != null AND @assigned_to IN agg.coders"
+            bind_vars["assigned_to"] = assigned_to
+
+
         # TODO: Every instanceid field used has to come from settings since it's the unique VA ID identified in the VA Data records
 
         query = f"""
@@ -53,16 +118,24 @@ async def get_unassigned_va_service(paging: bool = True, page_number: int = 0, l
                     RETURN {{ vaId, coder, assignmentCount: count }}
             )
 
-            LET va_map = (
+            // Two corrections here, both of which had silently emptied this
+            // lookup. MERGE, not [0]: the subquery yields one single-key
+            // object per VA, so taking element [0] kept exactly one of them.
+            // And `INTO groups = a`, not a bare `INTO groups`: the bare form
+            // makes each element {{ a: {{...}} }}, so groups[*].coder read null
+            // and the map came out as {{assignmentCount: 0, coders: [null]}}.
+            // Between them the Coders column was always blank, the assignment
+            // count always 0, and any filter on agg.coders matched nothing.
+            LET va_map = MERGE(
                 FOR a IN assigned_agg
-                    COLLECT vaId = a.vaId INTO groups
+                    COLLECT vaId = a.vaId INTO groups = a
                     RETURN {{
                         [vaId]: {{
                             assignmentCount: SUM(groups[*].assignmentCount),
                             coders: UNIQUE(groups[*].coder)
                         }}
                     }}
-            )[0]
+            )
 
             LET under_assigned = (
                 FOR a IN assigned_agg
@@ -74,9 +147,10 @@ async def get_unassigned_va_service(paging: bool = True, page_number: int = 0, l
                 FOR doc IN {db_collections.VA_TABLE}
                     LET vaId = doc.{config.field_mapping.instance_id}
                     LET agg = va_map[vaId]
-                    
+
                     FILTER vaId NOT IN under_assigned
-                    
+                    {record_filters}
+
                     LET coders = (
                         FOR user IN {db_collections.USERS}
                             FILTER user.uuid IN (agg ? agg.coders : [])
