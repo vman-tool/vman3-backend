@@ -84,6 +84,28 @@ async def initialize_data_dictionary():
         logger.error(f"❌ Failed to seed data dictionary: {e}")
 
 
+async def initialize_target_cause_list():
+    """Seed the WHO target cause list when it is empty.
+
+    PCVA coding has nothing to assign without it, and a database created from
+    scratch had none: the list had to be copied from another instance by hand.
+    No-op once the collections hold anything, so a deployment that has edited
+    or extended its list is never touched.
+    """
+    try:
+        from app.pcva.services.target_cause_seed import seed_target_cause_list_if_empty
+        from app.shared.configs.arangodb import get_arangodb_client
+
+        client = await get_arangodb_client()
+        db = client.db if hasattr(client, "db") else client
+        created = await seed_target_cause_list_if_empty(db)
+        if created:
+            total = sum(created.values())
+            logger.info(f"✅ Target cause list seeded ({total} entries)")
+    except Exception as e:
+        logger.error(f"❌ Failed to seed target cause list: {e}")
+
+
 async def run_background_initialization():
     """Run all initialization tasks concurrently"""
     # Small delay to ensure server is fully ready
@@ -97,6 +119,7 @@ async def run_background_initialization():
         initialize_scheduler(),
         initialize_default_account(),
         initialize_data_dictionary(),
+        initialize_target_cause_list(),
         return_exceptions=True  # Don't fail if one task fails
     )
     
