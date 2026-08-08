@@ -65,6 +65,11 @@ logs/
 */*.log
 *.log
 *.json
+# ...but resources shipped with the application are data, not local state.
+# The target cause list must reach the image: without it the startup seed
+# finds no file and silently does nothing, leaving a fresh deployment with
+# nothing to code against.
+!app/resources/*.json
 */session.json
 session.json
 */.env
