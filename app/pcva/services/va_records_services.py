@@ -558,31 +558,51 @@ async def get_coded_va_service(paging: bool, page_number: int = None, limit: int
                 "limit": limit
             })
         if coder:
+            # Each row carries the coding this coder made for it, so the list
+            # can show the underlying cause without a second round trip.
+            #
+            # The underlying cause is the last completed line of Frame A
+            # (d, else c, else b, else a) - the same rule the concordance
+            # calculation in va_records_utils.get_categorised_pcva_results
+            # uses, so the two can never disagree about what was coded.
+            #
+            # This list means "VAs I have coded", regardless of who else coded
+            # them. It used to filter on `coder_count == 1`, which was not a
+            # concordance test but a count of coders: raising vaAssignmentLimit
+            # above 1 would have made any VA a second coder touched vanish from
+            # the first coder's list. Agreement between coders is a separate
+            # question, answered by the Concordant VA view.
             query = f"""
                 FOR va_record IN {db_collections.VA_TABLE}
-                FILTER va_record.{config.field_mapping.instance_id} IN (
-                    LET coders_coded = (
-                        FOR coded IN {db_collections.PCVA_RESULTS}
-                        FILTER coded.created_by == @coder AND coded.is_deleted == false
-                        SORT coded.datetime DESC
-                        COLLECT assigned_va = coded.assigned_va INTO latest
-                        RETURN FIRST(latest[*].coded)
+                    LET vaId = va_record.{config.field_mapping.instance_id}
+
+                    LET latest = FIRST(
+                        FOR r IN {db_collections.PCVA_RESULTS}
+                            FILTER r.assigned_va == vaId
+                               AND r.created_by == @coder
+                               AND r.is_deleted == false
+                            SORT r.datetime DESC
+                            LIMIT 1
+                            RETURN r
+                    )
+                    FILTER latest != null
+
+                    LET ucod_id = latest.frameA.d != null ? latest.frameA.d :
+                                  latest.frameA.c != null ? latest.frameA.c :
+                                  latest.frameA.b != null ? latest.frameA.b :
+                                  latest.frameA.a
+                    LET ucod = FIRST(
+                        FOR icd IN {db_collections.ICD10}
+                            FILTER icd.uuid == ucod_id
+                            RETURN CONCAT(icd.code, " - ", icd.name)
                     )
 
-                    FOR va IN coders_coded
-                    LET coder_count = LENGTH(
-                        UNIQUE(
-                            FOR r IN {db_collections.PCVA_RESULTS}
-                            FILTER r.assigned_va == va.assigned_va
-                            RETURN r.created_by
-                        )
-                    )
-                    FILTER coder_count == 1
                     {paginator}
-                    RETURN va.assigned_va
-                    
-                )
-                RETURN va_record
+                    RETURN MERGE(va_record, {{
+                        underlyingCause: ucod,
+                        mlCause: latest.ml_analysis.cause,
+                        mlProbability: latest.ml_analysis.probability
+                    }})
             """
 
             bind_vars.update({
@@ -604,7 +624,14 @@ async def get_coded_va_service(paging: bool, page_number: int = None, limit: int
             """
         coded_vas = await VManBaseModel.run_custom_query(query = query, bind_vars = bind_vars, db = db)
 
-        coded_data = [format_va_record(va, config) for va in coded_vas]
+        coded_data = []
+        for va in coded_vas:
+            row = format_va_record(va, config)
+            row.underlyingCause = va.get("underlyingCause")
+            row.mlCause = va.get("mlCause")
+            row.mlProbability = va.get("mlProbability")
+            coded_data.append(row)
+
         return ResponseMainModel(data = coded_data, total=len(coded_data), message="Coded VAs fetched successfully!", pager=Pager(page=page_number, limit=limit)) 
     
     except Exception as e:
@@ -663,36 +690,6 @@ async def get_coded_va_details(paging: bool, page_number: int = None, limit: int
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to get coded vas: {e}")
     
-
-async def get_concordants_va_service(
-        paging: bool = None,
-        page_number: int = None,
-        limit: int = None, 
-        coder: str = None, 
-        db: StandardDatabase = None):
-    try:
-        config = await fetch_odk_config(db)
-        results = await get_categorised_pcva_results(coder_uuid = coder, paging = paging, page_number = page_number, limit = limit,  db=db)
-        concordants = results.get("concordants", "")
-        vas = [va[0].get("assigned_va", "") for va in concordants]
-        
-        query = f"""
-            FOR va IN {db_collections.VA_TABLE}
-            FILTER va.{config.field_mapping.instance_id} IN @concordants
-            RETURN va
-        """
-
-        bind_vars = {
-            "concordants": vas
-        }
-        va_data = VManBaseModel.run_custom_query(query=query, bind_vars=bind_vars, db=db)
-        
-        total_concordants = results.get("total_concordants", "")
-
-        return ResponseMainModel(data=[format_va_record(va, config) for va in va_data], message="Concordants VAs fetched successfully", total=total_concordants, pager=Pager(page=page_number, limit=limit) if paging else None)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to get concordants: {e}")
-
 
 async def get_discordants_va_service(
         paging: bool = None,
@@ -1172,3 +1169,120 @@ async def save_configurations_service(configs: PCVAConfigurationsRequest = None,
         raise HTTPException(status_code=500, detail=f"Failed to read message: {e}")
 
 
+
+
+async def get_concordant_va_service(
+    paging: bool = True,
+    page_number: int = 1,
+    limit: int = 10,
+    db: StandardDatabase = None,
+):
+    """VA records where the physicians agree on the underlying cause.
+
+    Agreement is measured exactly as PCVA Configuration defines it: a VA is
+    concordant when at least `concordanceLevel` coders arrived at the same
+    underlying cause - the last completed line of Frame A (d, else c, else b,
+    else a), the same rule the Coded VA list and get_categorised_pcva_results
+    use.
+
+    This scales with the configuration rather than assuming two coders. With
+    the assignment limit at 1 and concordance at 1, a single coder's cause
+    trivially reaches the threshold, so this list matches Coded VA - which is
+    the correct answer, not a special case. Raise the limit to 3 and set
+    concordance to 3, and a VA appears here only once three physicians have
+    independently landed on the same cause.
+
+    Only each coder's *latest* coding counts, so re-coding corrects an earlier
+    disagreement instead of being counted twice.
+    """
+    try:
+        config = await fetch_odk_config(db)
+        pcva_config = await fetch_pcva_settings(db)
+
+        offset = (page_number - 1) * limit if paging else 0
+        bind_vars = {"concordance_level": pcva_config.concordanceLevel}
+        if paging:
+            bind_vars.update({"offset": offset, "limit": limit})
+
+        query = f"""
+            LET agreements = (
+                FOR result IN {db_collections.PCVA_RESULTS}
+                    FILTER result.is_deleted == false
+                    SORT result.datetime DESC
+                    // one entry per (VA, coder): the coder's most recent coding
+                    COLLECT va = result.assigned_va, coder = result.created_by
+                    INTO codings = result
+                    LET latest = FIRST(codings)
+                    LET cause = latest.frameA.d != null ? latest.frameA.d :
+                                latest.frameA.c != null ? latest.frameA.c :
+                                latest.frameA.b != null ? latest.frameA.b :
+                                latest.frameA.a
+                    FILTER cause != null
+
+                    COLLECT vaId = va INTO perCoder = {{ cause: cause, coder: coder }}
+
+                    LET tallies = (
+                        FOR entry IN perCoder
+                            COLLECT c = entry.cause WITH COUNT INTO n
+                            SORT n DESC
+                            RETURN {{ cause: c, agreeing: n }}
+                    )
+                    LET top = FIRST(tallies)
+                    FILTER top.agreeing >= @concordance_level
+
+                    RETURN {{
+                        vaId: vaId,
+                        cause: top.cause,
+                        agreeing: top.agreeing,
+                        coders: LENGTH(perCoder)
+                    }}
+            )
+
+            LET page = {'SLICE(agreements, @offset, @limit)' if paging else 'agreements'}
+
+            LET rows = (
+                FOR a IN page
+                    LET va_record = FIRST(
+                        FOR doc IN {db_collections.VA_TABLE}
+                            FILTER doc.{config.field_mapping.instance_id} == a.vaId
+                            LIMIT 1
+                            RETURN doc
+                    )
+                    FILTER va_record != null
+                    LET cause_name = FIRST(
+                        FOR icd IN {db_collections.ICD10}
+                            FILTER icd.uuid == a.cause
+                            RETURN CONCAT(icd.code, " - ", icd.name)
+                    )
+                    RETURN MERGE(va_record, {{
+                        underlyingCause: cause_name,
+                        agreeingCoders: a.agreeing,
+                        totalCoders: a.coders
+                    }})
+            )
+
+            RETURN {{ total: LENGTH(agreements), data: rows }}
+        """
+
+        cursor = await VManBaseModel.run_custom_query(query=query, bind_vars=bind_vars, db=db)
+        result = cursor.next()
+
+        rows = []
+        for va in result["data"]:
+            row = format_va_record(va, config)
+            row.underlyingCause = va.get("underlyingCause")
+            row.agreeingCoders = va.get("agreeingCoders")
+            row.totalCoders = va.get("totalCoders")
+            rows.append(row)
+
+        return ResponseMainModel(
+            data=rows,
+            total=result["total"],
+            message=(
+                f"{result['total']} concordant VA(s) at a concordance level of "
+                f"{pcva_config.concordanceLevel}"
+            ),
+            pager=Pager(page=page_number, limit=limit),
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get concordant vas: {e}")
