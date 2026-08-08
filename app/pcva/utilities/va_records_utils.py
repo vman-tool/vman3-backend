@@ -39,14 +39,21 @@ def format_va_record(raw_data: dict, config: SettingsConfigData = None) -> DataR
     interview_name_field = config.field_mapping.interviewer_name
     today_field = config.field_mapping.date
 
+    # Fall back to None, not to the field's name. These defaults used to be the
+    # literal strings "id10005r", "today", "id10007" and so on, so a record
+    # missing the mapped field displayed the field id as though it were the
+    # value - 9,886 records with no interviewer name each showed "id10007".
+    # Worse, those literals assume one country's form: the mapping exists
+    # precisely because location_level1 may be a Region in Tanzania and a
+    # Division in Kenya, and every field here is Optional already.
     return DataResponse(
         id=raw_data.get("_key", ""),
-        vaId=raw_data.get(f"{instance_field}", vaid_field),
-        region=raw_data.get(f"{region_field}", "id10005r"),
-        district=raw_data.get(f"{district_field}", "id10005d"),
-        interviewDay=raw_data.get(f"{today_field}", "today"),
-        interviewerName=raw_data.get(f"{interview_name_field}", "id10007"),
-        instanceid=raw_data.get(f"{instance_field}", ""),
+        vaId=raw_data.get(instance_field),
+        region=raw_data.get(region_field),
+        district=raw_data.get(district_field),
+        interviewDay=raw_data.get(today_field),
+        interviewerName=raw_data.get(interview_name_field),
+        instanceid=raw_data.get(instance_field, ""),
         assignments=assignments,
         coders = datacoders
     )
