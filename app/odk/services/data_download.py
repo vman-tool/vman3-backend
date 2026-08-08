@@ -20,7 +20,7 @@ from app.settings.services.odk_configs import fetch_odk_config, add_configs_sett
 from app.settings.models.settings import SettingsConfigData, SyncStatus
 from app.shared.configs.arangodb import (ArangoDBClient, get_arangodb_client,
                                          remove_null_values, sanitize_document, clean_document)
-from app.shared.configs.constants import db_collections
+from app.shared.configs.constants import data_sources, db_collections
 from app.shared.configs.models import ResponseMainModel
 
 
@@ -330,22 +330,35 @@ async def fetch_form_questions(db: StandardDatabase, override_labels: bool = Fal
     except Exception as e:
         raise e
 
-async def insert_data_to_arangodb(data: dict,data_source:str=None):
+def _stamp_data_source(document: dict, source: str = data_sources.ODK_API) -> dict:
+    """Record where a submission came from, without overwriting a known origin.
+
+    Everything synced from ODK Central funnels through the two insert helpers
+    below, and nothing on that path was setting `vman_data_source` - only CSV
+    uploads set it, so "from the API" could not be expressed as a query, just
+    as the absence of a value. setdefault rather than assignment keeps that
+    true for any caller that already knows its own origin.
+    """
+    if document is not None and not document.get('vman_data_source'):
+        document['vman_data_source'] = source
+    return document
+
+
+async def insert_data_to_arangodb(data: dict, data_source: str = None):
 
     try:
         data = clean_document(data)
-        
-        
+        data = _stamp_data_source(data, data_source or data_sources.ODK_API)
 
         db:ArangoDBClient = await get_arangodb_client()
         await db.replace_one(collection_name=db_collections.VA_TABLE, document=data)
     except Exception as e:
         raise e
-    
-    
+
+
 async def insert_many_data_to_arangodb(data: List[dict], overwrite_mode: str = 'ignore'):
     try:
-        data = [clean_document(item) for item in data]
+        data = [_stamp_data_source(clean_document(item)) for item in data]
         db: ArangoDBClient = await get_arangodb_client()
 
         if overwrite_mode == 'replace':
