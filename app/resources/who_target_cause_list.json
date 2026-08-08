@@ -1,0 +1,586 @@
+{
+ "_comment": "WHO target cause list used by PCVA coding and by the vman_ml package: Broad group (category type) -> Major cause (category) -> Specific cause (ICD-10 entry). uuids are part of the data, not incidental: coded VAs store an icd10 uuid in frameA, and the two lower levels reference the level above by uuid. Regenerating them would orphan existing codings.",
+ "icd10_category_type": [
+  {
+   "uuid": "297a3113-f6d4-4f99-b023-ba6ae9c42c04",
+   "name": "Group I: Communicable",
+   "description": "Communicable",
+   "is_deleted": false
+  },
+  {
+   "uuid": "5eef3ee0-6e3a-4e1a-ad07-56e26903f1a7",
+   "name": "Group II: Non-Communicable",
+   "description": "Non-communicable",
+   "is_deleted": false
+  },
+  {
+   "uuid": "53e797f6-bf37-4ef0-8b94-41403670cf57",
+   "name": "Group III: Injuries",
+   "description": "Injuries",
+   "is_deleted": false
+  },
+  {
+   "uuid": "546bd38f-03dd-4305-966d-dca43ed0107f",
+   "name": "Unusable",
+   "description": "Unusable",
+   "is_deleted": false
+  }
+ ],
+ "icd10_category": [
+  {
+   "uuid": "1ee405bb-e51e-473e-8186-debe1dc8b13b",
+   "name": "Diabetes and kidney diseases",
+   "type": "5eef3ee0-6e3a-4e1a-ad07-56e26903f1a7",
+   "description": "Diabetes and kidney diseases",
+   "is_deleted": false
+  },
+  {
+   "uuid": "f22d9d12-75be-4ce8-ab87-2c8275f21d3d",
+   "name": "Diseases of the circulatory system",
+   "type": "5eef3ee0-6e3a-4e1a-ad07-56e26903f1a7",
+   "description": "Diseases of the circulatory system",
+   "is_deleted": false
+  },
+  {
+   "uuid": "477c712c-e33a-4c6c-96ba-0f7b701f206c",
+   "name": "External causes of death",
+   "type": "53e797f6-bf37-4ef0-8b94-41403670cf57",
+   "description": "External causes of death",
+   "is_deleted": false
+  },
+  {
+   "uuid": "1bf10971-a032-42f7-8a69-22a90c191b3f",
+   "name": "Gastrointestinal disorders",
+   "type": "5eef3ee0-6e3a-4e1a-ad07-56e26903f1a7",
+   "description": "Gastrointestinal disorders",
+   "is_deleted": false
+  },
+  {
+   "uuid": "c9084642-1c24-43a9-81b5-51956eb77d27",
+   "name": "Infectious and parasitic diseases",
+   "type": "297a3113-f6d4-4f99-b023-ba6ae9c42c04",
+   "description": "Infectious and parasitic diseases",
+   "is_deleted": false
+  },
+  {
+   "uuid": "ed8107ae-028e-421f-874a-77314bd48550",
+   "name": "Mental and nervous system disorders",
+   "type": "5eef3ee0-6e3a-4e1a-ad07-56e26903f1a7",
+   "description": "Mental and nervous system disorders",
+   "is_deleted": false
+  },
+  {
+   "uuid": "b81f8651-78ba-41bb-ba92-56f8ac525e84",
+   "name": "Neonatal causes of death",
+   "type": "297a3113-f6d4-4f99-b023-ba6ae9c42c04",
+   "description": "Neonatal causes of death",
+   "is_deleted": false
+  },
+  {
+   "uuid": "b90d9745-a22a-4106-9cc3-2df55e4b83f1",
+   "name": "Neoplasms",
+   "type": "5eef3ee0-6e3a-4e1a-ad07-56e26903f1a7",
+   "description": "Neoplasms",
+   "is_deleted": false
+  },
+  {
+   "uuid": "0d06bbdb-3db6-4f85-92bc-cd71b0a90345",
+   "name": "Nutritional deficiencies",
+   "type": "297a3113-f6d4-4f99-b023-ba6ae9c42c04",
+   "description": "Nutritional deficiencies",
+   "is_deleted": false
+  },
+  {
+   "uuid": "06a6feb1-0344-4e5f-ba8e-9dadd0ef73c5",
+   "name": "Other NCD",
+   "type": "5eef3ee0-6e3a-4e1a-ad07-56e26903f1a7",
+   "description": "Other NCD",
+   "is_deleted": false
+  },
+  {
+   "uuid": "6a811074-40f8-4020-9d5b-15da69d29299",
+   "name": "Pregnancy childbirth and puerperium-related disorders",
+   "type": "297a3113-f6d4-4f99-b023-ba6ae9c42c04",
+   "description": "Pregnancy childbirth and puerperium-related disorders",
+   "is_deleted": false
+  },
+  {
+   "uuid": "3edefda7-ecd9-45b4-bce7-920c6c3a874b",
+   "name": "Renal disorders",
+   "type": "5eef3ee0-6e3a-4e1a-ad07-56e26903f1a7",
+   "description": "Renal disorders",
+   "is_deleted": false
+  },
+  {
+   "uuid": "7ae65a03-c038-457e-8111-5ec93ce286f7",
+   "name": "Respiratory disorders",
+   "type": "5eef3ee0-6e3a-4e1a-ad07-56e26903f1a7",
+   "description": "Respiratory disorders",
+   "is_deleted": false
+  },
+  {
+   "uuid": "3f578e79-d91e-4a4c-aa3a-bb0bcb3a4f16",
+   "name": "Stillbirths",
+   "type": "297a3113-f6d4-4f99-b023-ba6ae9c42c04",
+   "description": "Stillbirths",
+   "is_deleted": false
+  },
+  {
+   "uuid": "23e6b61d-3c98-4353-b16b-1550251e79a1",
+   "name": "Unusable",
+   "type": "546bd38f-03dd-4305-966d-dca43ed0107f",
+   "description": "Unusable",
+   "is_deleted": false
+  }
+ ],
+ "icd10": [
+  {
+   "uuid": "398d9286-0a65-414d-8825-91c485066910",
+   "code": "VAs-01.01",
+   "name": "Sepsis",
+   "category": "c9084642-1c24-43a9-81b5-51956eb77d27",
+   "is_deleted": false
+  },
+  {
+   "uuid": "cd6aa390-e27a-43c6-8d7c-5c1f58d798f4",
+   "code": "VAs-01.02",
+   "name": "Acute respiratory infection, including pneumonia",
+   "category": "c9084642-1c24-43a9-81b5-51956eb77d27",
+   "is_deleted": false
+  },
+  {
+   "uuid": "b8cd18dc-b85f-4ac2-a46a-c5e811ad3741",
+   "code": "VAs-01.03",
+   "name": "HIV/AIDS related death",
+   "category": "c9084642-1c24-43a9-81b5-51956eb77d27",
+   "is_deleted": false
+  },
+  {
+   "uuid": "cba7456b-e816-4c7c-afa3-d4753c3b363c",
+   "code": "VAs-01.04",
+   "name": "Diarrheal diseases",
+   "category": "c9084642-1c24-43a9-81b5-51956eb77d27",
+   "is_deleted": false
+  },
+  {
+   "uuid": "0b5e029f-a07a-447c-a01d-c74b97c87dc5",
+   "code": "VAs-01.05",
+   "name": "Malaria",
+   "category": "c9084642-1c24-43a9-81b5-51956eb77d27",
+   "is_deleted": false
+  },
+  {
+   "uuid": "b13f740a-84af-4bc6-85e5-aea153232c45",
+   "code": "VAs-01.06",
+   "name": "Measles",
+   "category": "c9084642-1c24-43a9-81b5-51956eb77d27",
+   "is_deleted": false
+  },
+  {
+   "uuid": "fc532b02-1cba-4c86-b9c0-009c989d2dd1",
+   "code": "VAs-01.07",
+   "name": "Meningitis and encephalitis",
+   "category": "c9084642-1c24-43a9-81b5-51956eb77d27",
+   "is_deleted": false
+  },
+  {
+   "uuid": "56a9a9b6-9389-449b-83d1-72c48093883c",
+   "code": "VAs-01.08",
+   "name": "Tetanus",
+   "category": "c9084642-1c24-43a9-81b5-51956eb77d27",
+   "is_deleted": false
+  },
+  {
+   "uuid": "6e620328-c04c-4da4-b95d-c768b6d3071b",
+   "code": "VAs-01.09",
+   "name": "Pulmonary tuberculosis",
+   "category": "c9084642-1c24-43a9-81b5-51956eb77d27",
+   "is_deleted": false
+  },
+  {
+   "uuid": "9b0ebc8b-ab1d-48de-9533-bece674b32e9",
+   "code": "VAs-01.10",
+   "name": "Pertussis",
+   "category": "c9084642-1c24-43a9-81b5-51956eb77d27",
+   "is_deleted": false
+  },
+  {
+   "uuid": "02d9bd80-1cc7-4fa0-aab2-77831ce6c54d",
+   "code": "VAs-01.11",
+   "name": "Haemorrhagic fever",
+   "category": "c9084642-1c24-43a9-81b5-51956eb77d27",
+   "is_deleted": false
+  },
+  {
+   "uuid": "f7593241-f40a-47bd-bd01-1458a34c2a8c",
+   "code": "VAs-01.12",
+   "name": "Dengue fever",
+   "category": "c9084642-1c24-43a9-81b5-51956eb77d27",
+   "is_deleted": false
+  },
+  {
+   "uuid": "8dc4cccd-97d2-435e-b838-63aab2c093b8",
+   "code": "VAs-01.13",
+   "name": "COVID-19",
+   "category": "c9084642-1c24-43a9-81b5-51956eb77d27",
+   "is_deleted": false
+  },
+  {
+   "uuid": "29340ab3-2451-4a40-975a-4b36c7a9bba4",
+   "code": "VAs-01.99",
+   "name": "Unspecified infectious",
+   "category": "c9084642-1c24-43a9-81b5-51956eb77d27",
+   "is_deleted": false
+  },
+  {
+   "uuid": "f2ce1e51-124c-4d0d-bee3-4e41acf8f1ef",
+   "code": "VAs-02.01 ",
+   "name": "Oral neoplasms",
+   "category": "b90d9745-a22a-4106-9cc3-2df55e4b83f1",
+   "is_deleted": false
+  },
+  {
+   "uuid": "4f868f8a-a225-414d-a182-e7019c67a889",
+   "code": "VAs-02.02",
+   "name": "Digestive neoplasms",
+   "category": "b90d9745-a22a-4106-9cc3-2df55e4b83f1",
+   "is_deleted": false
+  },
+  {
+   "uuid": "34fa35eb-c189-4065-af26-d3bcb2ba6e10",
+   "code": "VAs-02.03",
+   "name": "Respiratory neoplasms",
+   "category": "b90d9745-a22a-4106-9cc3-2df55e4b83f1",
+   "is_deleted": false
+  },
+  {
+   "uuid": "43a7932b-25f6-49fb-b039-7eb05cfd33df",
+   "code": "VAs-02.04",
+   "name": "Breast neoplasms",
+   "category": "b90d9745-a22a-4106-9cc3-2df55e4b83f1",
+   "is_deleted": false
+  },
+  {
+   "uuid": "95c22ac2-d5f9-48fb-8011-9006f07b34cd",
+   "code": "VAs-02.05",
+   "name": "Female reproductive neoplasms",
+   "category": "b90d9745-a22a-4106-9cc3-2df55e4b83f1",
+   "is_deleted": false
+  },
+  {
+   "uuid": "6d5955ce-7733-40f6-b1df-7e13dd160d68",
+   "code": "VAs-02.06",
+   "name": "Male reproductive neoplasms",
+   "category": "b90d9745-a22a-4106-9cc3-2df55e4b83f1",
+   "is_deleted": false
+  },
+  {
+   "uuid": "20eab50c-f5bc-4012-a2d2-e131b7d81dc8",
+   "code": "VAs-02.99 ",
+   "name": "Other and unspecified neoplasms",
+   "category": "b90d9745-a22a-4106-9cc3-2df55e4b83f1",
+   "is_deleted": false
+  },
+  {
+   "uuid": "afa465f5-77e8-4402-a8ab-31fdfe533a81",
+   "code": "VAs-03.01 ",
+   "name": "Severe anaemia (iron deficiency)",
+   "category": "0d06bbdb-3db6-4f85-92bc-cd71b0a90345",
+   "is_deleted": false
+  },
+  {
+   "uuid": "52933455-89d7-4b2a-b7e5-10c80e3872f9",
+   "code": "VAs-03.02",
+   "name": "Severe malnutrition",
+   "category": "0d06bbdb-3db6-4f85-92bc-cd71b0a90345",
+   "is_deleted": false
+  },
+  {
+   "uuid": "74b343a4-9b7b-45e8-ae6f-be420a6f90f0",
+   "code": "VAs-03.03",
+   "name": "Diabetes mellitus",
+   "category": "1ee405bb-e51e-473e-8186-debe1dc8b13b",
+   "is_deleted": false
+  },
+  {
+   "uuid": "db4010ac-00ad-496d-b936-9989bcad92ac",
+   "code": "VAs-04.01 ",
+   "name": "Acute cardiac disease",
+   "category": "f22d9d12-75be-4ce8-ab87-2c8275f21d3d",
+   "is_deleted": false
+  },
+  {
+   "uuid": "ea601db8-f947-48f0-9c2a-e62c767a1916",
+   "code": "VAs-04.02",
+   "name": "Stroke",
+   "category": "f22d9d12-75be-4ce8-ab87-2c8275f21d3d",
+   "is_deleted": false
+  },
+  {
+   "uuid": "5227ee8f-f667-428d-91d5-d966f0684331",
+   "code": "VAs-04.03",
+   "name": "Sickle cell with crisis",
+   "category": "f22d9d12-75be-4ce8-ab87-2c8275f21d3d",
+   "is_deleted": false
+  },
+  {
+   "uuid": "e40ae9da-95cd-4592-9d3a-11d8d1971b95",
+   "code": "VAs-04.99",
+   "name": "Other and unspecified cardiac disease",
+   "category": "f22d9d12-75be-4ce8-ab87-2c8275f21d3d",
+   "is_deleted": false
+  },
+  {
+   "uuid": "06313fdb-5402-4ed0-8de7-05c0617e384d",
+   "code": "VAs-05.01",
+   "name": "Chronic obstructive (COPD)",
+   "category": "7ae65a03-c038-457e-8111-5ec93ce286f7",
+   "is_deleted": false
+  },
+  {
+   "uuid": "dec704a8-f7b6-4d59-819d-33d3c2c2d4e8",
+   "code": "VAs-05.02",
+   "name": "Asthma",
+   "category": "7ae65a03-c038-457e-8111-5ec93ce286f7",
+   "is_deleted": false
+  },
+  {
+   "uuid": "a1d47964-b5fe-47ad-91b1-720daac27bc6",
+   "code": "VAs-06.01 ",
+   "name": "Acute abdomen",
+   "category": "1bf10971-a032-42f7-8a69-22a90c191b3f",
+   "is_deleted": false
+  },
+  {
+   "uuid": "0d5a4ad4-7f04-465f-9b0d-68dfcd30ef61",
+   "code": "VAs-06.02",
+   "name": "Liver cirrhosis",
+   "category": "1bf10971-a032-42f7-8a69-22a90c191b3f",
+   "is_deleted": false
+  },
+  {
+   "uuid": "8bf47e18-e286-4bbc-a8f0-f623ab68d007",
+   "code": "VAs-07.01 ",
+   "name": "Renal failure",
+   "category": "3edefda7-ecd9-45b4-bce7-920c6c3a874b",
+   "is_deleted": false
+  },
+  {
+   "uuid": "28b63709-cd1b-4ecb-bcd7-11bbe87e5b7f",
+   "code": "VAs-08.01 ",
+   "name": "Epilepsy",
+   "category": "ed8107ae-028e-421f-874a-77314bd48550",
+   "is_deleted": false
+  },
+  {
+   "uuid": "77878f46-779b-4a6a-870a-a0251ce5da0a",
+   "code": "VAs-09.01",
+   "name": "Ectopic pregnancy",
+   "category": "6a811074-40f8-4020-9d5b-15da69d29299",
+   "is_deleted": false
+  },
+  {
+   "uuid": "8fc5bb56-a3e6-40af-ba8b-28b7e1acbe18",
+   "code": "VAs-09.02",
+   "name": "Abortion-related death",
+   "category": "6a811074-40f8-4020-9d5b-15da69d29299",
+   "is_deleted": false
+  },
+  {
+   "uuid": "957adfcf-d5cd-4629-9a84-5e2488d783ac",
+   "code": "VAs-09.03",
+   "name": "Pregnancy-induced hypertension",
+   "category": "6a811074-40f8-4020-9d5b-15da69d29299",
+   "is_deleted": false
+  },
+  {
+   "uuid": "1eae7133-7cf6-4051-a709-055e55d73ef7",
+   "code": "VAs-09.04",
+   "name": "Obstetric haemorrhage",
+   "category": "6a811074-40f8-4020-9d5b-15da69d29299",
+   "is_deleted": false
+  },
+  {
+   "uuid": "f4229e8e-ee39-4323-bf68-3f9d2c97bc5e",
+   "code": "VAs-09.05",
+   "name": "Obstructed labour",
+   "category": "6a811074-40f8-4020-9d5b-15da69d29299",
+   "is_deleted": false
+  },
+  {
+   "uuid": "daf28203-69d3-42fd-a524-8cbcc810f38c",
+   "code": "VAs-09.06",
+   "name": "Pregnancy-related sepsis",
+   "category": "6a811074-40f8-4020-9d5b-15da69d29299",
+   "is_deleted": false
+  },
+  {
+   "uuid": "6958a437-b375-492d-a250-af11e16542ca",
+   "code": "VAs-09.07",
+   "name": "Anaemia of pregnancy",
+   "category": "6a811074-40f8-4020-9d5b-15da69d29299",
+   "is_deleted": false
+  },
+  {
+   "uuid": "552460d0-3b55-4d6e-b396-2d6b2f3bc8b9",
+   "code": "VAs-09.08",
+   "name": "Ruptured uterus",
+   "category": "6a811074-40f8-4020-9d5b-15da69d29299",
+   "is_deleted": false
+  },
+  {
+   "uuid": "d38922f9-f305-4cd5-a28f-7063d46bead5",
+   "code": "VAs-10.01",
+   "name": "Prematurity or low birth weight",
+   "category": "b81f8651-78ba-41bb-ba92-56f8ac525e84",
+   "is_deleted": false
+  },
+  {
+   "uuid": "a5cbcca6-49dc-475d-9a72-1df48e6e3e44",
+   "code": "VAs-10.02",
+   "name": "Birth asphyxia",
+   "category": "b81f8651-78ba-41bb-ba92-56f8ac525e84",
+   "is_deleted": false
+  },
+  {
+   "uuid": "18dbede9-bec8-46f9-9b34-97cec858023d",
+   "code": "VAs-10.03",
+   "name": "Neonatal pneumonia",
+   "category": "b81f8651-78ba-41bb-ba92-56f8ac525e84",
+   "is_deleted": false
+  },
+  {
+   "uuid": "6fe69dd1-3926-49cd-b183-ce0773f3d8ae",
+   "code": "VAs-10.04",
+   "name": "Neonatal sepsis",
+   "category": "b81f8651-78ba-41bb-ba92-56f8ac525e84",
+   "is_deleted": false
+  },
+  {
+   "uuid": "ec16804e-9113-440b-9cd1-4d614f4cf7cc",
+   "code": "VAs-10.05",
+   "name": "Neonatal tetanus",
+   "category": "b81f8651-78ba-41bb-ba92-56f8ac525e84",
+   "is_deleted": false
+  },
+  {
+   "uuid": "81da4f90-5a50-4b72-ab72-4b25e09ee83b",
+   "code": "VAs-10.06",
+   "name": "Congenital malformation",
+   "category": "b81f8651-78ba-41bb-ba92-56f8ac525e84",
+   "is_deleted": false
+  },
+  {
+   "uuid": "e0240300-9883-4a1d-acf0-f20f2d47ca53",
+   "code": "VAs-10.99",
+   "name": "Other and unspecified perinatal cause of death",
+   "category": "b81f8651-78ba-41bb-ba92-56f8ac525e84",
+   "is_deleted": false
+  },
+  {
+   "uuid": "d9d336c7-f18f-43b9-aae6-c2a3c02d6b59",
+   "code": "VAs-11.01 ",
+   "name": "Fresh stillbirth",
+   "category": "3f578e79-d91e-4a4c-aa3a-bb0bcb3a4f16",
+   "is_deleted": false
+  },
+  {
+   "uuid": "6eecdf3d-25db-4a20-afa5-a5061eb8df45",
+   "code": "VAs-11.02",
+   "name": "Macerated stillbirth",
+   "category": "3f578e79-d91e-4a4c-aa3a-bb0bcb3a4f16",
+   "is_deleted": false
+  },
+  {
+   "uuid": "2d3348da-27bd-45cf-8f1c-dea4f38b3988",
+   "code": "VAs-12.01",
+   "name": "Road traffic accident",
+   "category": "477c712c-e33a-4c6c-96ba-0f7b701f206c",
+   "is_deleted": false
+  },
+  {
+   "uuid": "6d325724-72b3-477d-830e-32e4b3d32cbf",
+   "code": "VAs-12.02",
+   "name": "Other transport accident",
+   "category": "477c712c-e33a-4c6c-96ba-0f7b701f206c",
+   "is_deleted": false
+  },
+  {
+   "uuid": "960b2a03-ab63-4e10-8182-59f4098732ef",
+   "code": "VAs-12.03",
+   "name": "Accidental fall",
+   "category": "477c712c-e33a-4c6c-96ba-0f7b701f206c",
+   "is_deleted": false
+  },
+  {
+   "uuid": "ea3cb8fc-8509-42a1-aa7e-24c50a1227ee",
+   "code": "VAs-12.04",
+   "name": "Accidental drowning and submersion",
+   "category": "477c712c-e33a-4c6c-96ba-0f7b701f206c",
+   "is_deleted": false
+  },
+  {
+   "uuid": "05abd243-88b5-4ecb-ae5d-2944ae74788a",
+   "code": "VAs-12.05",
+   "name": "Accidental exposure to smoke, fire and flames",
+   "category": "477c712c-e33a-4c6c-96ba-0f7b701f206c",
+   "is_deleted": false
+  },
+  {
+   "uuid": "686453fa-94ce-4a51-adc6-2f2b9165385f",
+   "code": "VAs-12.06",
+   "name": "Contact with venomous animals and plants",
+   "category": "477c712c-e33a-4c6c-96ba-0f7b701f206c",
+   "is_deleted": false
+  },
+  {
+   "uuid": "ca019acd-aafa-4206-9697-4077f33398ac",
+   "code": "VAs-12.07",
+   "name": "Accidental poisoning and exposure to noxious substance",
+   "category": "477c712c-e33a-4c6c-96ba-0f7b701f206c",
+   "is_deleted": false
+  },
+  {
+   "uuid": "fd2f09ea-91a2-4bf9-9dbd-0564f5ffb40c",
+   "code": "VAs-12.08",
+   "name": "Intentional self-harm",
+   "category": "477c712c-e33a-4c6c-96ba-0f7b701f206c",
+   "is_deleted": false
+  },
+  {
+   "uuid": "98e589cc-6df6-4fce-87e7-cf96c34b0191",
+   "code": "VAs-12.09",
+   "name": "Assault",
+   "category": "477c712c-e33a-4c6c-96ba-0f7b701f206c",
+   "is_deleted": false
+  },
+  {
+   "uuid": "445754e0-f0b9-4fa8-9e3b-370173b2eccb",
+   "code": "VAs-12.10",
+   "name": "Exposure to force of nature",
+   "category": "477c712c-e33a-4c6c-96ba-0f7b701f206c",
+   "is_deleted": false
+  },
+  {
+   "uuid": "8a21811e-2bc4-4dbf-96b9-f5fab102420e",
+   "code": "VAs-12.99",
+   "name": "Other and unspecified external cause of death",
+   "category": "477c712c-e33a-4c6c-96ba-0f7b701f206c",
+   "is_deleted": false
+  },
+  {
+   "uuid": "e9cf95bb-113b-43a9-8e98-fead1ee6d128",
+   "code": "VAs-98 ",
+   "name": "Other and unspecified non- communicable disease",
+   "category": "06a6feb1-0344-4e5f-ba8e-9dadd0ef73c5",
+   "is_deleted": false
+  },
+  {
+   "uuid": "b23d703e-2f75-401b-9bd8-e0770c2d6535",
+   "code": "VAs-99 ",
+   "name": "Cause of death unknown",
+   "category": "23e6b61d-3c98-4353-b16b-1550251e79a1",
+   "is_deleted": false
+  }
+ ]
+}

@@ -29,7 +29,6 @@ from typing import Any, Dict, Optional
 
 import pandas as pd
 from arango.database import StandardDatabase
-from fastapi.concurrency import run_in_threadpool
 
 from app.ccva.services.vman_ml_service import (
     _DEFAULT_MODEL,
@@ -37,7 +36,6 @@ from app.ccva.services.vman_ml_service import (
     _get_cached_predictor,
 )
 from app.shared.configs.constants import db_collections
-from app.shared.configs.models import ResponseMainModel
 from app.shared.middlewares.exceptions import BadRequestException
 
 
@@ -225,36 +223,53 @@ def _predict(record: dict, question_names: list, labels_by_name: Dict[str, str])
     return row
 
 
-async def analyse_va_with_ml(va_id: str, db: StandardDatabase) -> ResponseMainModel:
-    """Predict the cause of death for one VA record."""
+def analyse_va_with_ml_sync(va_id: str, db: StandardDatabase, progress=None) -> Dict[str, Any]:
+    """Predict the cause of death for one VA record. Blocking.
+
+    Runs in a Celery worker, not in the API process. Inference takes 20-30
+    seconds on a developer machine and around five times that on a modest
+    server - beyond gunicorn's --timeout 120, which killed the request outright
+    with no traceback. The worker also pre-warms the predictor at process init,
+    so there it is already in memory.
+
+    :param progress: optional callback(pct, message) for the caller to report
+        against; `predict_detailed` drives it through the real stages rather
+        than a made-up clock.
+    """
     if not (va_id or "").strip():
         raise BadRequestException("A VA record id is required.")
 
-    record = await run_in_threadpool(_fetch_record, db, va_id)
+    def _report(pct, message):
+        if progress:
+            progress(pct, message)
+
+    _report(5, "Loading the VA record...")
+    record = _fetch_record(db, va_id)
     if not record:
         raise BadRequestException(f"No VA record was found for {va_id}.")
 
     # Arango bookkeeping keys are not model features.
     record = {k: v for k, v in record.items() if not k.startswith("_")}
 
-    question_names, labels_by_name = await run_in_threadpool(_fetch_dictionary, db)
-    row = await run_in_threadpool(_predict, record, question_names, labels_by_name)
+    _report(10, "Preparing the record...")
+    question_names, labels_by_name = _fetch_dictionary(db)
 
+    _report(20, "Running the model...")
+    row = _predict(record, question_names, labels_by_name)
+
+    _report(95, "Summarising...")
     cause = _display_cause(row.get("prediction"))
-    return ResponseMainModel(
-        data={
-            "va_id": va_id,
-            "cause": cause,
-            "raw_label": row.get("prediction"),
-            "probability": row.get("pred_probability"),
-            "confidence_lower": row.get("pred_confidence_lower"),
-            "confidence_upper": row.get("pred_confidence_upper"),
-            "margin": row.get("pred_margin"),
-            "entropy": row.get("pred_entropy"),
-            "second_cause": _display_cause(row.get("pred_second_prediction")),
-            "summary": _build_summary(row),
-            "contributions": row.get("_contributions") or [],
-            "model": _DEFAULT_MODEL.name,
-        },
-        message=f"Probable cause of death: {cause}",
-    )
+    return {
+        "va_id": va_id,
+        "cause": cause,
+        "raw_label": row.get("prediction"),
+        "probability": row.get("pred_probability"),
+        "confidence_lower": row.get("pred_confidence_lower"),
+        "confidence_upper": row.get("pred_confidence_upper"),
+        "margin": row.get("pred_margin"),
+        "entropy": row.get("pred_entropy"),
+        "second_cause": _display_cause(row.get("pred_second_prediction")),
+        "summary": _build_summary(row),
+        "contributions": row.get("_contributions") or [],
+        "model": _DEFAULT_MODEL.name,
+    }

@@ -32,7 +32,6 @@ from app.pcva.services.icd10_services import (
     update_icd10_category_types_service,
     update_icd10_codes,
 )
-from app.pcva.services.ml_analysis_service import analyse_va_with_ml
 from app.pcva.services.va_records_services import get_concordant_va_service
 from app.pcva.services.va_records_services import (
     assign_va_service,
@@ -621,14 +620,51 @@ async def get_configurations(
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@pcva_router.post("/ml-analysis", status_code=status.HTTP_200_OK)
+@pcva_router.post("/ml-analysis", status_code=status.HTTP_202_ACCEPTED)
 async def analyse_va_with_ml_route(
     va_id: str = Body(..., embed=True),
     current_user: User = Depends(get_current_user),
     db: StandardDatabase = Depends(get_arangodb_session),
 ) -> ResponseMainModel:
-    """Run the VMan ML model against a single VA record, for the coding window."""
-    return await analyse_va_with_ml(va_id, db)
+    """Queue an ML analysis for one VA record and return its task id.
+
+    Dispatched rather than computed here: inference runs well past gunicorn's
+    --timeout 120 on a modest server, so doing it inline killed the request
+    silently. The worker already holds the model in memory.
+    """
+    from app.tasks.pcva_tasks import analyse_va_with_ml_task
+
+    if not (va_id or "").strip():
+        raise HTTPException(status_code=400, detail="A VA record id is required.")
+
+    task = analyse_va_with_ml_task.delay(va_id, (current_user or {}).get("uuid"))
+    return ResponseMainModel(
+        data={"task_id": task.id, "status": "queued"},
+        message="ML analysis started",
+    )
+
+
+@pcva_router.get("/ml-analysis/{task_id}", status_code=status.HTTP_200_OK)
+async def get_ml_analysis_status(
+    task_id: str,
+    current_user: User = Depends(get_current_user),
+    db: StandardDatabase = Depends(get_arangodb_session),
+) -> ResponseMainModel:
+    """Progress and, once finished, the result of a queued ML analysis."""
+    from app.shared.services.task_progress_service import TaskProgressService
+
+    progress = await TaskProgressService.get_progress(db, task_id)
+    if not progress:
+        # Not yet picked up, or expired out of the 24h TTL.
+        return ResponseMainModel(
+            data={"status": "pending", "progress": 0, "message": "Waiting for a worker..."},
+            message="pending",
+        )
+
+    return ResponseMainModel(
+        data={k: v for k, v in progress.items() if not k.startswith("_")},
+        message=progress.get("message", ""),
+    )
 
 
 @pcva_router.get("/concordant-va", status_code=status.HTTP_200_OK)
