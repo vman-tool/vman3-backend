@@ -12,6 +12,14 @@ from app.pcva.utilities.pcva_utils import fetch_pcva_settings
 
 class DataResponse(BaseModel):
     id: str
+    # Populated only by the Coded VA list, which joins each record to the
+    # coding made for it. Optional so every other caller is unaffected.
+    underlyingCause: Optional[str] = None
+    mlCause: Optional[str] = None
+    mlProbability: Optional[float] = None
+    # Concordant VA list only: how many coders agreed, out of how many coded it.
+    agreeingCoders: Optional[int] = None
+    totalCoders: Optional[int] = None
     vaId: Optional[str] = None
     region: Optional[str] = None
     district: Optional[str] = None
