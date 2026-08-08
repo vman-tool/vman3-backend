@@ -86,7 +86,8 @@ def _count_scope(db: StandardDatabase, sources: List[str]) -> Dict[str, int]:
                 FOR c IN {db_collections.CCVA_RESULTS} FILTER c.ID IN targets RETURN 1),
             assigned_va: LENGTH(assigned),
             pcva_results: LENGTH(
-                FOR p IN {db_collections.PCVA_RESULTS} FILTER p.assigned_va IN assigned RETURN 1),
+                FOR p IN {db_collections.PCVA_RESULTS}
+                    FILTER p.assigned_va IN targets OR p.assigned_va IN assigned RETURN 1),
             pcva_messages: LENGTH(
                 FOR m IN {db_collections.PCVA_MESSAGES} FILTER m.va IN targets RETURN 1),
             ccva_corrections: LENGTH(
@@ -145,13 +146,20 @@ def _run_reset(db: StandardDatabase, sources: List[str]) -> Dict[str, int]:
     ).next() or []
 
     # ── Derived records first ────────────────────────────────────────────────
+    # Despite its name, pcva_results.assigned_va holds the VA instanceid, not
+    # an assigned_va.uuid - measured 9/9 against assigned_va.vaId and 0/9
+    # against assigned_va.uuid on a real database. Matching it against
+    # assignment uuids, as the field name suggests, never fired at all and
+    # would have left coding results orphaned by every reset. Both forms are
+    # accepted so a deployment that stored the uuid is still cleaned up; each
+    # set derives from the same targets, so neither can reach unrelated rows.
     removed["pcva_results"] = run(f"""
         {_TARGETS}
         LET assigned = (
             FOR a IN {db_collections.ASSIGNED_VA} FILTER a.vaId IN targets RETURN a.uuid)
         RETURN LENGTH(
             FOR p IN {db_collections.PCVA_RESULTS}
-                FILTER p.assigned_va IN assigned
+                FILTER p.assigned_va IN targets OR p.assigned_va IN assigned
                 REMOVE p IN {db_collections.PCVA_RESULTS}
                 RETURN 1)
     """, bind)
