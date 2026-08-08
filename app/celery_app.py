@@ -45,6 +45,7 @@ celery_app = Celery(
         'app.tasks.ccva_tasks',
         'app.tasks.odk_tasks',
         'app.tasks.dqa_tasks',
+        'app.tasks.pcva_tasks',
     ]
 )
 
