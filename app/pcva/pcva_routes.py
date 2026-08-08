@@ -3,7 +3,7 @@ import json
 from typing import Dict, List, Optional
 
 from arango.database import StandardDatabase
-from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
+from fastapi import APIRouter, Body, Depends, File, HTTPException, Query, UploadFile, status
 import pandas as pd
 import numpy as np
 
@@ -32,6 +32,8 @@ from app.pcva.services.icd10_services import (
     update_icd10_category_types_service,
     update_icd10_codes,
 )
+from app.pcva.services.ml_analysis_service import analyse_va_with_ml
+from app.pcva.services.va_records_services import get_concordant_va_service
 from app.pcva.services.va_records_services import (
     assign_va_service,
     code_assigned_va_service,
@@ -39,7 +41,6 @@ from app.pcva.services.va_records_services import (
     get_coded_va_details,
     get_coded_va_service,
     get_coders,
-    get_concordants_va_service,
     get_configurations_service,
     get_discordant_messages_service,
     get_discordants_va_service,
@@ -54,7 +55,8 @@ from app.pcva.services.va_records_services import (
 )
 from app.shared.configs.arangodb import get_arangodb_session
 from app.shared.configs.models import ResponseMainModel
-from app.users.decorators.user import get_current_user, oauth2_scheme
+from app.shared.configs.constants import AccessPrivileges
+from app.users.decorators.user import check_privileges, get_current_user, oauth2_scheme
 from app.users.models.user import User
 from app.shared.services.va_records import shared_fetch_va_records
 from app.pcva.requests.configurations_request_classes import PCVAConfigurationsRequest
@@ -103,12 +105,20 @@ async def get_unassigned_va_records(
     page_number: Optional[int] = Query(1, alias="page_number"),
     limit: Optional[int] = Query(10, alias="limit"),
     coder: Optional[str] = Query(None, alias="coder"),
+    location: Optional[str] = Query(None, alias="location", description="Value of the configured level-1 location field"),
+    start_date: Optional[str] = Query(None, alias="start_date", description="ISO date, inclusive"),
+    end_date: Optional[str] = Query(None, alias="end_date", description="ISO date, inclusive"),
+    data_source: Optional[str] = Query(None, alias="data_source", description="odk_api or uploaded_csv"),
+    assigned_to: Optional[str] = Query(None, alias="assigned_to", description="uuid of a coder whose assigned records to show"),
     db: StandardDatabase = Depends(get_arangodb_session)) -> ResponseMainModel:
 
     try:
         allowPaging = paging if paging is not None else True
-        
-        return await get_unassigned_va_service(paging = allowPaging, page_number = page_number, limit = limit, coder = coder, db=db)
+
+        return await get_unassigned_va_service(
+            paging=allowPaging, page_number=page_number, limit=limit, coder=coder,
+            location=location, start_date=start_date, end_date=end_date,
+            data_source=data_source, assigned_to=assigned_to, db=db)
         
     except Exception as e:
         raise e
@@ -513,19 +523,6 @@ async def code_assigned_va(
     except Exception as e:
         raise e
 
-@pcva_router.get("/get-concordants", status_code=status.HTTP_200_OK)
-async def get_concordants(
-    paging: bool = Query(None, alias='paging'),
-    page_number: int = Query(1, alias='page_number'),
-    limit: int = Query(10, alias='limit'),
-    coder: str = Query(None, alias="coder"),
-    current_user: User = Depends(get_current_user),
-    db: StandardDatabase = Depends(get_arangodb_session)):
-    try:
-        return  await get_concordants_va_service(paging = paging, page_number = page_number, limit = limit, coder = coder, db = db)
-    except Exception as e:
-        raise e
-
 @pcva_router.get("/get-discordants", status_code=status.HTTP_200_OK)
 async def get_discordants(
     paging: bool = Query(None, alias='paging'),
@@ -623,3 +620,26 @@ async def get_configurations(
         return await get_configurations_service(db=db)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+@pcva_router.post("/ml-analysis", status_code=status.HTTP_200_OK)
+async def analyse_va_with_ml_route(
+    va_id: str = Body(..., embed=True),
+    current_user: User = Depends(get_current_user),
+    db: StandardDatabase = Depends(get_arangodb_session),
+) -> ResponseMainModel:
+    """Run the VMan ML model against a single VA record, for the coding window."""
+    return await analyse_va_with_ml(va_id, db)
+
+
+@pcva_router.get("/concordant-va", status_code=status.HTTP_200_OK)
+async def get_concordant_va(
+    paging: Optional[bool] = Query(None, alias="paging"),
+    page_number: Optional[int] = Query(1, alias="page_number"),
+    limit: Optional[int] = Query(10, alias="limit"),
+    current_user: User = Depends(get_current_user),
+    required_privs: List[str] = Depends(check_privileges([AccessPrivileges.PCVA_VIEW_CONCORDANT_VA])),
+    db: StandardDatabase = Depends(get_arangodb_session),
+) -> ResponseMainModel:
+    """VA records the physicians agree on, at the configured concordance level."""
+    allowPaging = paging if paging is not None else True
+    return await get_concordant_va_service(allowPaging, page_number, limit, db)

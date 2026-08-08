@@ -1,4 +1,5 @@
 import io
+import time
 import uuid
 from datetime import date
 from typing import List, Optional
@@ -21,6 +22,8 @@ from fastapi import (
 from app.ccva.services.ccva_upload import insert_all_csv_data
 from app.settings.models.settings import ImagesConfigData, SettingsConfigData, SyncStatus
 from app.settings.services.cron import BackupSettings, CronSettings, fetch_backup_settings, fetch_cron_settings, save_backup_settings, save_cron_settings
+from app.settings.services.data_reset import preview_reset, reset_va_data
+from app.settings.services.xform_dictionary import enrich_questions_from_xform, get_data_dictionary, update_question_label
 from app.settings.services.odk_configs import (
     add_configs_settings,
     fetch_configs_settings,
@@ -31,7 +34,7 @@ from app.settings.services.odk_configs import (
 from app.shared.utils.cache import invalidate_cache_pattern
 from datetime import datetime, timezone
 from app.shared.configs.arangodb import get_arangodb_session
-from app.shared.configs.constants import AccessPrivileges, db_collections
+from app.shared.configs.constants import AccessPrivileges, data_sources, db_collections
 from app.shared.configs.models import ResponseMainModel
 from app.shared.services.va_records import get_field_value_from_va_records
 from app.users.decorators.user import check_privileges, get_current_user
@@ -45,11 +48,59 @@ async def get_current_total_data_count(db: StandardDatabase):
     """Get current total data count from VA records collection"""
     try:
         query = f"RETURN LENGTH(FOR doc IN {db_collections.VA_TABLE} RETURN 1)"
-        result = db.aql.execute(query=query, cache=True).next()
+        result = db.aql.execute(query=query, cache=False).next()
         return result if result is not None else 0
     except Exception as e:
         print(f"Error getting total data count: {e}")
         return 0
+
+def _sync_user_name(current_user) -> str:
+    """Best-effort display name for the history row.
+
+    get_current_user returns a dict on some paths and a model on others, so
+    both are handled rather than assuming one.
+    """
+    if isinstance(current_user, dict):
+        return current_user.get("name") or current_user.get("email") or "System"
+    return (
+        getattr(current_user, "name", None)
+        or getattr(current_user, "email", None)
+        or "System"
+    )
+
+
+async def _record_upload_history(
+    db: StandardDatabase,
+    records_added: int,
+    rows_in_file: int,
+    user_name: str,
+    duration_seconds: float,
+    status_text: str,
+):
+    """Add a file upload to the shared synchronization history.
+
+    Reuses the ODK sync helper so uploads and API syncs land in one collection
+    with the same shape; `method="csv"` is what the history table renders as
+    "File Upload". `records_added` is what actually landed, not the row count
+    of the file - re-uploading a file whose records already exist adds nothing,
+    and the history should say so. Never allowed to break the upload itself:
+    the helper swallows its own errors, and this guards the import as well.
+    """
+    try:
+        from app.tasks.odk_tasks import _save_sync_history
+
+        await _save_sync_history(
+            db,
+            records_synced=records_added,
+            total_records=rows_in_file,
+            user_name=user_name,
+            duration_seconds=duration_seconds,
+            method="csv",
+            status=status_text,
+        )
+    except Exception as exc:
+        print(f"Failed to record upload history: {exc}")
+
 
 async def update_csv_sync_status(db: StandardDatabase, uploaded_records_count: int):
     """Update sync status after CSV upload"""
@@ -260,11 +311,17 @@ async def upload_csv(
 ):
 
 
+    # A file upload is a data synchronization like any other, so it belongs in
+    # the same history as the ODK API syncs - previously only those were
+    # recorded and manual uploads left no trace at all.
+    started_at = time.monotonic()
+    user_name = _sync_user_name(current_user)
+
     try:
 
         # # Generate task ID
         task_id = str(uuid.uuid4())
-        
+
 
         # Read CSV file
         contents = await file.read()
@@ -279,7 +336,7 @@ async def upload_csv(
         if unique_id not in df.columns:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Unique ID not found in the uploaded CSV")
        # Add additional fields to the DataFrame
-        df['vman_data_source'] = 'uploaded_csv'
+        df['vman_data_source'] = data_sources.CSV_UPLOAD
         df['vman_data_name'] = 't'
         df['__id'] =df[unique_id]
 
@@ -291,20 +348,66 @@ async def upload_csv(
 
         # Convert DataFrame back to a list of dictionaries
         recordsDF = df.to_dict(orient='records')
-        print('before insert_all_csv_data', len(recordsDF))
-        
+        rows_in_file = len(recordsDF)
+
+        # insert_all_csv_data inserts with overwrite_mode='ignore' and
+        # silent=True, so rows whose __id already exists are dropped without
+        # comment and the driver reports nothing per document. Counting either
+        # side of the write is the only way to know how many rows actually
+        # landed - reporting the file's row count instead made a re-upload of
+        # the same file look like a successful import of everything in it,
+        # while the record total on screen correctly did not move.
+        count_before = await get_current_total_data_count(db)
         await insert_all_csv_data(recordsDF)
-        print('after insert_all_csv_data')
+        count_after = await get_current_total_data_count(db)
+
+        inserted = max(count_after - count_before, 0)
+        skipped = max(rows_in_file - inserted, 0)
 
         # Update sync status after successful CSV upload
-        await update_csv_sync_status(db, len(recordsDF))
+        await update_csv_sync_status(db, inserted)
 
         # Invalidate regions cache as data has changed
         await invalidate_cache_pattern("unique_regions:*")
 
-        return ResponseMainModel(data={"task_id": task_id, "total_records": len(recordsDF),}, message="CSV data uploaded successfully and sync status updated")
+        await _record_upload_history(
+            db, inserted, rows_in_file, user_name, time.monotonic() - started_at, "completed"
+        )
 
+        if inserted == 0:
+            message = (
+                f"No new records were added - all {rows_in_file} rows already "
+                "exist in the database."
+            )
+        elif skipped:
+            message = (
+                f"Added {inserted} new record(s); {skipped} row(s) already existed "
+                "and were skipped."
+            )
+        else:
+            message = f"Added {inserted} new record(s)."
+
+        return ResponseMainModel(
+            data={
+                "task_id": task_id,
+                "total_records": rows_in_file,
+                "inserted": inserted,
+                "skipped": skipped,
+            },
+            message=message,
+        )
+
+    except HTTPException:
+        # Rejected before any data was written - a validation failure, recorded
+        # so the history explains why an expected upload never appeared.
+        await _record_upload_history(
+            db, 0, 0, user_name, time.monotonic() - started_at, "failed"
+        )
+        raise
     except Exception as e:
+        await _record_upload_history(
+            db, 0, 0, user_name, time.monotonic() - started_at, "failed"
+        )
         # Raising the error so FastAPI can handle it
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
    
@@ -644,3 +747,98 @@ async def upload_ml_model(
         _json.dump(new_registry, f, indent=2)
 
     return ResponseMainModel(data=new_registry, message="Model updated successfully", error=False)
+
+@settings_router.post("/xform/upload", status_code=status.HTTP_200_OK, response_model=ResponseMainModel)
+async def upload_xform_dictionary(
+    file: UploadFile = File(...),
+    override_labels: bool = Form(False),
+    current_user=Depends(get_current_user),
+    required_privs: List[str] = Depends(check_privileges([AccessPrivileges.SETTINGS_CREATE_SYSTEM_CONFIGS])),
+    db: StandardDatabase = Depends(get_arangodb_session),
+):
+    """Enrich the VA question dictionary from an uploaded XLSForm (xForm).
+
+    Non-destructive: questions are matched to existing records by name and a
+    field is only written when the stored value is blank. Names absent from the
+    dictionary are reported back, never inserted - ODK sync stays the source of
+    truth for which questions exist.
+    """
+    if not (file.filename or "").lower().endswith((".xlsx", ".xls")):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="An xForm must be an XLSForm workbook (.xlsx or .xls).",
+        )
+
+    content = await file.read()
+    if not content:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="The uploaded file is empty.",
+        )
+
+    return await enrich_questions_from_xform(content, file.filename, db, override_labels)
+
+
+@settings_router.get("/dictionary", status_code=status.HTTP_200_OK, response_model=ResponseMainModel)
+async def get_dictionary(
+    include_options: bool = Query(
+        False, description="Also return each question's choice list, with per-language answer text"
+    ),
+    current_user=Depends(get_current_user),
+    db: StandardDatabase = Depends(get_arangodb_session),
+):
+    """Return the stored VA data dictionary (read-only, does not contact ODK)."""
+    return await get_data_dictionary(db, include_options=include_options)
+
+
+@settings_router.patch("/dictionary/{name}/label", status_code=status.HTTP_200_OK, response_model=ResponseMainModel)
+async def patch_dictionary_label(
+    name: str,
+    language: str = Body(..., embed=True),
+    label: str = Body(..., embed=True),
+    current_user=Depends(get_current_user),
+    required_privs: List[str] = Depends(check_privileges([AccessPrivileges.SETTINGS_CREATE_SYSTEM_CONFIGS])),
+    db: StandardDatabase = Depends(get_arangodb_session),
+):
+    """Edit one question's label for one language, from the dictionary table."""
+    return await update_question_label(name, language, label, db)
+
+
+# ── Danger zone: deleting VA data ────────────────────────────────────────────
+
+@settings_router.get("/reset-data/preview", status_code=status.HTTP_200_OK, response_model=ResponseMainModel)
+async def preview_reset_data(
+    sources: str = Query(..., description="Comma-separated: odk_api, uploaded_csv"),
+    current_user=Depends(get_current_user),
+    required_privs: List[str] = Depends(check_privileges([
+        AccessPrivileges.SETTINGS_CREATE_SYSTEM_CONFIGS,
+        AccessPrivileges.ODK_DATA_SYNC,
+    ])),
+    db: StandardDatabase = Depends(get_arangodb_session),
+):
+    """Report exactly what a reset would delete, without deleting anything."""
+    return await preview_reset([s.strip() for s in sources.split(",") if s.strip()], db)
+
+
+@settings_router.post("/reset-data", status_code=status.HTTP_200_OK, response_model=ResponseMainModel)
+async def reset_data(
+    sources: List[str] = Body(..., embed=True),
+    confirm: str = Body(..., embed=True),
+    current_user=Depends(get_current_user),
+    required_privs: List[str] = Depends(check_privileges([
+        AccessPrivileges.SETTINGS_CREATE_SYSTEM_CONFIGS,
+        AccessPrivileges.ODK_DATA_SYNC,
+    ])),
+    db: StandardDatabase = Depends(get_arangodb_session),
+):
+    """Delete VA records of the given sources, and everything derived from them.
+
+    The typed confirmation is checked here as well as in the dialog: the UI can
+    be bypassed, and this endpoint destroys data irreversibly.
+    """
+    if (confirm or "").strip() != "DELETE":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Type DELETE to confirm this action.",
+        )
+    return await reset_va_data(sources, db)

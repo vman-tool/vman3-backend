@@ -107,6 +107,13 @@ class PCVAResults(VManBaseModel):
     fetalOrInfant: Union[FetalOrInfant, Dict, None] = None
     pregnantDeceased: Union[PregnantDeceased, Dict, None] = None
     clinicalNotes: Union[str, None] = None
+    # What the ML model said at the moment this VA was coded, if the coder ran
+    # it: the cause, its confidence, the contributing inputs, and who ran it
+    # when. Kept as an audit trail - an ML-assisted coding decision should be
+    # distinguishable afterwards from an unassisted one, and the model's output
+    # can change as the model is retrained, so it is recorded rather than
+    # recomputed.
+    ml_analysis: Union[Dict, None] = None
     datetime: Union[str, None] = Field(default_factory=lambda: datetime.now().isoformat())
 
     class Config:
@@ -131,6 +138,9 @@ class PCVAConfigurations(VManBaseModel):
     vaAssignmentLimit: int
     concordanceLevel: int
     showOtherCodersWork: bool
+    # Off by default: a deployment must opt in before coders are shown a
+    # machine-generated cause alongside their own coding.
+    enableMLIntegration: bool = False
 
     @classmethod
     def get_collection_name(cls) -> str:

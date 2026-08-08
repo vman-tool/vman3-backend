@@ -20,7 +20,7 @@ from app.settings.services.odk_configs import fetch_odk_config, add_configs_sett
 from app.settings.models.settings import SettingsConfigData, SyncStatus
 from app.shared.configs.arangodb import (ArangoDBClient, get_arangodb_client,
                                          remove_null_values, sanitize_document, clean_document)
-from app.shared.configs.constants import db_collections
+from app.shared.configs.constants import data_sources, db_collections
 from app.shared.configs.models import ResponseMainModel
 
 
@@ -252,9 +252,21 @@ async def fetch_odk_data_with_async(
         raise e
 
 
-async def fetch_form_questions(db: StandardDatabase):
+async def fetch_form_questions(db: StandardDatabase, override_labels: bool = False):
+    """Sync the question list from ODK Central.
+
+    :param override_labels: when False (the default) any per-language `labels`
+        and existing `label` already stored - typically contributed by an
+        uploaded xForm - are carried forward. When True, ODK's values win.
+
+    Carrying them forward is not optional bookkeeping: VManBaseModel.save()
+    writes the full model dump, and python-arango's update uses keep_none=True,
+    so the `labels: None` that ODK-sourced records produce would otherwise
+    overwrite the stored dictionary and silently discard every uploaded
+    language on each sync.
+    """
     try:
-        
+
         config = await fetch_odk_config(db)
         async with ODKClientAsync(config.odk_api_configs) as odk_client:
             questions = await odk_client.getFormQuestions()
@@ -270,11 +282,40 @@ async def fetch_form_questions(db: StandardDatabase):
             #         for field in all_questions_fields
             #     ]
             # }
+            # Snapshot what is already stored so xForm-contributed labels are
+            # not lost (see the note in this function's docstring).
+            existing = {
+                (row.get("name") or "").lower(): row
+                for row in await VA_Question.get_many(paging=False, db=db)
+            }
+
             count = 0
             for question in [
                     assign_questions_options(field, formated_questions)
                     for field in all_questions_fields
                 ]:
+                if not override_labels:
+                    prior = existing.get((question.get("name") or "").lower())
+                    if prior:
+                        if prior.get("labels"):
+                            question["labels"] = prior["labels"]
+                        # keep a richer stored label over a blank/absent one
+                        if not (question.get("label") or "").strip() and prior.get("label"):
+                            question["label"] = prior["label"]
+                        # ODK returns answer text in one language only, so its
+                        # options carry no `labels`. Carry the stored ones over
+                        # by value or a sync would discard every translated
+                        # answer, exactly as it used to do for question labels.
+                        prior_option_labels = {
+                            str(o.get("value")): o.get("labels")
+                            for o in (prior.get("options") or [])
+                            if o.get("labels")
+                        }
+                        if prior_option_labels:
+                            for option in question.get("options") or []:
+                                carried = prior_option_labels.get(str(option.get("value")))
+                                if carried and not option.get("labels"):
+                                    option["labels"] = carried
                 await VA_Question(**question).save(db, "name")
                 count += 1
 
@@ -289,22 +330,35 @@ async def fetch_form_questions(db: StandardDatabase):
     except Exception as e:
         raise e
 
-async def insert_data_to_arangodb(data: dict,data_source:str=None):
+def _stamp_data_source(document: dict, source: str = data_sources.ODK_API) -> dict:
+    """Record where a submission came from, without overwriting a known origin.
+
+    Everything synced from ODK Central funnels through the two insert helpers
+    below, and nothing on that path was setting `vman_data_source` - only CSV
+    uploads set it, so "from the API" could not be expressed as a query, just
+    as the absence of a value. setdefault rather than assignment keeps that
+    true for any caller that already knows its own origin.
+    """
+    if document is not None and not document.get('vman_data_source'):
+        document['vman_data_source'] = source
+    return document
+
+
+async def insert_data_to_arangodb(data: dict, data_source: str = None):
 
     try:
         data = clean_document(data)
-        
-        
+        data = _stamp_data_source(data, data_source or data_sources.ODK_API)
 
         db:ArangoDBClient = await get_arangodb_client()
         await db.replace_one(collection_name=db_collections.VA_TABLE, document=data)
     except Exception as e:
         raise e
-    
-    
+
+
 async def insert_many_data_to_arangodb(data: List[dict], overwrite_mode: str = 'ignore'):
     try:
-        data = [clean_document(item) for item in data]
+        data = [_stamp_data_source(clean_document(item)) for item in data]
         db: ArangoDBClient = await get_arangodb_client()
 
         if overwrite_mode == 'replace':

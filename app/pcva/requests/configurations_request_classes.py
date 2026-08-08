@@ -7,3 +7,4 @@ class PCVAConfigurationsRequest(BaseModel):
     vaAssignmentLimit: int
     concordanceLevel: int
     showOtherCodersWork: Union[bool, None] = None
+    enableMLIntegration: Union[bool, None] = None
