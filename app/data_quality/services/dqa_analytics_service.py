@@ -6,7 +6,7 @@ as a single snapshot document in `dqa_analytics` so the frontend can load
 them from a pre-computed cache instead of running live AQL on every page visit.
 """
 
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Optional
 
 from arango.database import StandardDatabase
@@ -17,6 +17,18 @@ from app.shared.configs.models import ResponseMainModel
 
 _SNAPSHOT_KEY = "snapshot"
 _CONFIG_KEY = "dqa_analytics_schedule"
+
+# A run is marked 'running' before the work starts and 'completed'/'failed'
+# after it. Nothing writes that final state if the worker dies mid-run - an
+# OOM kill, a container restart, a redeploy - so the document stays 'running'
+# for ever. The UI polls while it says running and refuses to start a new run
+# while it does, so a single dead worker leaves the page spinning with no way
+# out of it from the browser.
+#
+# Anything still 'running' after this long is therefore treated as abandoned.
+# The DQA compute takes about 100 seconds on a modest server, so half an hour
+# is far beyond a slow run and still short enough to recover the same day.
+_STALE_RUN_AFTER = timedelta(minutes=30)
 
 
 # ── Snapshot helpers ──────────────────────────────────────────────────────────
@@ -29,6 +41,21 @@ def _upsert_doc_sync(db: StandardDatabase, collection: str, doc: dict) -> None:
         col.insert(doc)
 
 
+def _is_stale_run(snapshot: dict) -> bool:
+    """True when a 'running' snapshot has been running implausibly long."""
+    if not snapshot or snapshot.get("status") != "running":
+        return False
+    started = snapshot.get("computed_at")
+    if not started:
+        return True
+    try:
+        # Stored as an ISO string with a trailing Z.
+        began = datetime.fromisoformat(str(started).rstrip("Z"))
+    except ValueError:
+        return True
+    return datetime.utcnow() - began > _STALE_RUN_AFTER
+
+
 async def fetch_dqa_analytics_snapshot(db: StandardDatabase) -> Optional[dict]:
     def _read():
         try:
@@ -36,7 +63,21 @@ async def fetch_dqa_analytics_snapshot(db: StandardDatabase) -> Optional[dict]:
             return col.get(_SNAPSHOT_KEY)
         except Exception:
             return None
-    return await run_in_threadpool(_read)
+
+    snapshot = await run_in_threadpool(_read)
+
+    if _is_stale_run(snapshot):
+        # Report it as failed rather than leaving the caller to poll for ever.
+        # Reported, not rewritten: if the worker is somehow still alive it will
+        # finish and overwrite this itself, and a read should not destroy state.
+        snapshot = dict(snapshot)
+        snapshot["status"] = "failed"
+        snapshot["error"] = (
+            "The previous computation did not finish - the worker most likely "
+            "stopped part-way. Start it again."
+        )
+
+    return snapshot
 
 
 # ── Full recompute ────────────────────────────────────────────────────────────
