@@ -158,11 +158,17 @@ async def fetch_odk_data_with_async_endpoint(
 #@log_to_db(context="get_form_questions", log_args=True)
 @odk_router.post("/fetch_form_questions", status_code=status.HTTP_200_OK)
 async def get_form_questions(
+    override_labels: bool = Query(False, alias="override_labels"),
     db: StandardDatabase = Depends(get_arangodb_session),
     required_privs: List[str] = Depends(check_privileges([AccessPrivileges.ODK_QUESTIONS_SYNC]))
 ) -> ResponseMainModel:
+    """Sync questions from ODK Central.
+
+    override_labels=false (default) preserves labels contributed by an
+    uploaded xForm; true lets ODK's values replace them.
+    """
     try:
-        return await data_download.fetch_form_questions(db=db)
+        return await data_download.fetch_form_questions(db=db, override_labels=override_labels)
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

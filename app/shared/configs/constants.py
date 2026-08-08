@@ -32,6 +32,20 @@ class db_collections():
     SYNC_HISTORY: str = 'sync_history'
     DQA_ANALYTICS: str = 'dqa_analytics'
 
+class data_sources():
+    """Where a VA record came from, stored on every submission as
+    `vman_data_source` and indexed, so records can later be queried or reported
+    on by origin.
+
+    ODK_API was previously never written - API-synced records simply had no
+    such field, which made "everything that is not an upload" the only way to
+    express "came from ODK". Records stored before that was fixed still carry
+    no value; treat a missing marker as ODK_API.
+    """
+    ODK_API: str = 'odk_api'
+    CSV_UPLOAD: str = 'uploaded_csv'
+
+
 class Special_Constants():
     UPLOAD_FOLDER: str = '/uploads'
     FILE_URL: str = '/vman/api/v1/uploads'
@@ -180,6 +194,7 @@ class AccessPrivileges():
     PCVA_VIEW_CODERS: str = 'PCVA_VIEW_CODERS'
     PCVA_CODE_VA: str = 'PCVA_CODE_VA'
     PCVA_ASSIGN_VA: str = 'PCVA_ASSIGN_VA'
+    PCVA_VIEW_CONCORDANT_VA: str = 'PCVA_VIEW_CONCORDANT_VA'
 
     # USERS PRIVILEGES
     USERS_MODULE_VIEW: str = 'USERS_MODULE_VIEW'

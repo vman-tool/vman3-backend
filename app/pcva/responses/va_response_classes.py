@@ -241,6 +241,7 @@ class Option(BaseModel):
     path: str
     value: str
     label: str
+    labels: Optional[Dict[str, str]] = None
 
 class VAQuestionResponseClass(BaseModel):
     path: str
@@ -249,6 +250,9 @@ class VAQuestionResponseClass(BaseModel):
     binary: Optional[bool] = None
     selectMultiple: Optional[bool] = None
     label: str
+    # Carried through so consumers (e.g. the VA record viewer) can render the
+    # dictionary in a language other than the primary one.
+    labels: Optional[Dict[str, str]] = None
     options: Optional[List[Option]] = None
 
 

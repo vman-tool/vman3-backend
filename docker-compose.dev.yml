@@ -55,6 +55,9 @@ services:
       PYTHONUNBUFFERED: "1"
       # Redis — same default compose network, use service name
       REDIS_URL: "redis://redis:6379"
+      # Overrides the host value in .env: inside the network the
+      # broker is reached by service name, not localhost:6370.
+      REDIS_CELERY_URL: "redis://redis:6379"
       REDIS_PASSWORD: "vman@1029"
       # ArangoDB — use explicit container name to avoid conflict with deployment
       # arangodb (deployment) and backend-arangodb-1 (dev) both live on vman3-net;
@@ -93,6 +96,9 @@ services:
     environment:
       PYTHONUNBUFFERED: "1"
       REDIS_URL: "redis://redis:6379"
+      # Overrides the host value in .env: inside the network the
+      # broker is reached by service name, not localhost:6370.
+      REDIS_CELERY_URL: "redis://redis:6379"
       REDIS_PASSWORD: "vman@1029"
       DB_URL: "http://backend-arangodb-1:8529"
       DB_NAME: "vman3"
@@ -124,6 +130,9 @@ services:
     environment:
       PYTHONUNBUFFERED: "1"
       REDIS_URL: "redis://redis:6379"
+      # Overrides the host value in .env: inside the network the
+      # broker is reached by service name, not localhost:6370.
+      REDIS_CELERY_URL: "redis://redis:6379"
       REDIS_PASSWORD: "vman@1029"
     depends_on:
       - redis
