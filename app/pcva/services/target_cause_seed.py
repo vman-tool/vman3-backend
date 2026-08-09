@@ -54,7 +54,12 @@ def _seed_sync(db: StandardDatabase) -> dict:
             continue
 
         if not db.has_collection(collection_name):
-            db.create_collection(collection_name)
+            try:
+                db.create_collection(collection_name)
+            except Exception:
+                # The other worker created it between the check and here.
+                # Harmless, and not worth a stack trace on every boot.
+                pass
         collection = db.collection(collection_name)
 
         # Only ever seed an empty level. An established deployment may have
@@ -62,8 +67,14 @@ def _seed_sync(db: StandardDatabase) -> dict:
         if collection.count():
             continue
 
-        collection.insert_many(rows, overwrite=False)
-        created[collection_name] = len(rows)
+        # Keyed by the entry's own uuid, and duplicates ignored rather than
+        # inserted. gunicorn runs two workers and each runs this startup task,
+        # so "count it, then fill it" is a race both can win: without a stable
+        # key a fresh deployment would end up with the list twice over. With
+        # one, the second writer's rows collide and are dropped.
+        keyed = [dict(row, _key=row["uuid"]) for row in rows if row.get("uuid")]
+        collection.insert_many(keyed, overwrite=True, overwrite_mode="ignore")
+        created[collection_name] = len(keyed)
 
     return created
 
