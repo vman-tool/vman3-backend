@@ -49,10 +49,58 @@ async def default_account_creation( ):
         current_user['id'] = current_user['_key'] if '_key' in current_user else current_user['id'] if "id" in current_user else None
         await create_default_roles(User(**current_user))
 
+        # gunicorn runs two workers, each of which runs this initialisation.
+        # Against an empty database both check for the account, both find
+        # nothing, and both create one - so a fresh deployment ends up with two
+        # identical superusers. An established database hides it, because the
+        # account already exists by the time either check runs.
+        await _remove_duplicate_accounts(email, db)
+
     except Exception as e:
         logger.error(f"Error in default account creation: {e}")
         return
     
+async def _remove_duplicate_accounts(email: str, db):
+    """Collapse duplicate accounts for one email down to the earliest.
+
+    Both workers run this, so the record kept has to be chosen the same way by
+    each of them - the earliest created_at, and the lowest uuid to break a tie.
+    Whichever process gets there first wins and the other finds nothing to do.
+
+    The duplicate's role assignments go with it: leaving them behind would put
+    user_roles rows in the same orphaned state this codebase has had to clean
+    up elsewhere.
+    """
+    try:
+        duplicates = list(db.aql.execute(
+            """
+            FOR u IN users
+                FILTER u.email == @email
+                SORT u.created_at ASC, u.uuid ASC
+                RETURN u
+            """,
+            bind_vars={"email": email},
+        ))
+        if len(duplicates) < 2:
+            return
+
+        keep, extras = duplicates[0], duplicates[1:]
+        for extra in extras:
+            db.aql.execute(
+                "FOR r IN user_roles FILTER r.user == @uuid REMOVE r IN user_roles",
+                bind_vars={"uuid": extra["uuid"]},
+            )
+            db.collection("users").delete(extra["_key"], ignore_missing=True)
+
+        logger.warning(
+            f"Removed {len(extras)} duplicate account(s) for {email}; "
+            f"kept {keep['uuid']}"
+        )
+    except Exception as exc:
+        # Never let cleanup stop the application from starting.
+        logger.error(f"Could not de-duplicate accounts for {email}: {exc}")
+
+
 async def create_default_roles(current_user: User = None):
     try:
         db = None
