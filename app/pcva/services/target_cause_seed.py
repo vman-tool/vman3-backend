@@ -48,22 +48,59 @@ def _seed_sync(db: StandardDatabase) -> dict:
     payload = json.loads(TARGET_CAUSE_LIST.read_text(encoding="utf-8"))
     created = {}
 
+    # Each level is seeded independently. They used to share one try block, so
+    # a failure on any level abandoned the ones after it and reported a single
+    # unattributed line - which is how a deployment ended up with the two upper
+    # levels present and the specific causes missing, with nothing in the log
+    # saying which level had failed or why.
     for key, collection_name in _LEVELS:
         rows = payload.get(key) or []
         if not rows:
+            print(f"Target cause list: '{key}' is empty in the resource file")
             continue
 
-        if not db.has_collection(collection_name):
-            db.create_collection(collection_name)
-        collection = db.collection(collection_name)
+        try:
+            if not db.has_collection(collection_name):
+                try:
+                    db.create_collection(collection_name)
+                except Exception:
+                    # The other worker created it between the check and here.
+                    # Harmless, and not worth a stack trace on every boot.
+                    pass
+            collection = db.collection(collection_name)
 
-        # Only ever seed an empty level. An established deployment may have
-        # edited or extended its list, and a startup task must not touch it.
-        if collection.count():
-            continue
+            # Only ever seed an empty level. An established deployment may have
+            # edited or extended its list, and a startup task must not touch
+            # it. A level that is empty is filled even when the others are
+            # already populated, so a partially seeded install repairs itself
+            # on the next restart.
+            existing = collection.count()
+            if existing:
+                print(f"Target cause list: {collection_name} already has {existing} entries, left alone")
+                continue
 
-        collection.insert_many(rows, overwrite=False)
-        created[collection_name] = len(rows)
+            # Keyed by the entry's own uuid, and duplicates ignored rather than
+            # inserted. gunicorn runs two workers and each runs this startup
+            # task, so "count it, then fill it" is a race both can win: without
+            # a stable key a fresh deployment would end up with the list twice
+            # over. With one, the second writer's rows collide and are dropped.
+            keyed = [dict(row, _key=row["uuid"]) for row in rows if row.get("uuid")]
+            if len(keyed) != len(rows):
+                print(f"Target cause list: {len(rows) - len(keyed)} entries in '{key}' have no uuid and were skipped")
+
+            collection.insert_many(keyed, overwrite=True, overwrite_mode="ignore")
+
+            stored = collection.count()
+            created[collection_name] = stored
+            if stored != len(keyed):
+                print(
+                    f"Target cause list: {collection_name} expected {len(keyed)} "
+                    f"entries but holds {stored} after seeding"
+                )
+        except Exception as exc:
+            # Report the level that failed and carry on to the next one, rather
+            # than abandoning the rest of the list.
+            print(f"Target cause list: FAILED to seed {collection_name}: {type(exc).__name__}: {exc}")
 
     return created
 
