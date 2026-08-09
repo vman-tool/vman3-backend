@@ -110,6 +110,22 @@ from celery.signals import worker_process_init
 
 @worker_process_init.connect
 def _prewarm_vman_ml_predictor(**kwargs):
+    # Off by default. This hook runs in *every* fork worker, so at
+    # --concurrency=4 it loaded four independent copies of XGBoost and the
+    # SentenceTransformer - about 2.2 GB resident before any task started. On
+    # an 8 GB host that left too little headroom, and the DQA compute over
+    # 38,000 records was SIGKILLed by the OOM killer ten seconds in. Because
+    # the process dies outright, the snapshot is never marked failed and the
+    # analytics page polls a run that will never finish.
+    #
+    # Without prewarming, the first CCVA or ML task in a process pays the
+    # 10-30 s load and every later one reuses it - the cache is per process
+    # either way. Set VMAN_ML_PREWARM=true to trade that latency back for
+    # memory on a host that has it to spare.
+    if not config("VMAN_ML_PREWARM", default="false").lower() in ("true", "1", "yes"):
+        print("[prewarm] disabled (set VMAN_ML_PREWARM=true to load the model at worker start)")
+        return
+
     def _load():
         try:
             from app.ccva.services.vman_ml_service import _get_cached_predictor, _DEFAULT_MODEL
