@@ -26,9 +26,12 @@ _CONFIG_KEY = "dqa_analytics_schedule"
 # out of it from the browser.
 #
 # Anything still 'running' after this long is therefore treated as abandoned.
-# The DQA compute takes about 100 seconds on a modest server, so half an hour
-# is far beyond a slow run and still short enough to recover the same day.
-_STALE_RUN_AFTER = timedelta(minutes=30)
+# A healthy recompute measures 13-25 seconds now that ICS is chunked, so ten
+# minutes is roughly thirty times a normal run - long enough to absorb a much
+# larger dataset, short enough that a stuck page recovers while someone is
+# still looking at it. It was thirty minutes, which is a long time to sit in
+# front of a spinner.
+_STALE_RUN_AFTER = timedelta(minutes=10)
 
 
 # ── Snapshot helpers ──────────────────────────────────────────────────────────
@@ -103,10 +106,18 @@ async def compute_and_store_dqa_analytics(db: StandardDatabase) -> dict:
     )
 
     try:
-        rrs_result = await fetch_rrs_stats(db)
-        ics_result = await fetch_ics_stats(db)
-        aid_result = await fetch_interview_duration_stats(db)
-        ici_result = await fetch_ici_stats(db)
+        # One load, shared by all four indicators. Each used to fetch the whole
+        # VA table itself, so a recompute pulled 38,000 documents four times
+        # over - four peaks instead of one, and on an 8 GB host the worker was
+        # SIGKILLed by the OOM killer partway through.
+        from app.data_quality.services.general_dqa import _fetch_va_dataframe
+
+        df = await _fetch_va_dataframe(db)
+
+        rrs_result = await fetch_rrs_stats(db, df)
+        ics_result = await fetch_ics_stats(db, df)
+        aid_result = await fetch_interview_duration_stats(db, df)
+        ici_result = await fetch_ici_stats(db, df)
 
         snapshot = {
             "_key": _SNAPSHOT_KEY,
