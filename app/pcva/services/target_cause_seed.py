@@ -20,6 +20,7 @@ comparison between deployments. They are inserted exactly as shipped.
 """
 
 import json
+from datetime import datetime
 from pathlib import Path
 
 from arango.database import StandardDatabase
@@ -84,7 +85,27 @@ def _seed_sync(db: StandardDatabase) -> dict:
             # task, so "count it, then fill it" is a race both can win: without
             # a stable key a fresh deployment would end up with the list twice
             # over. With one, the second writer's rows collide and are dropped.
-            keyed = [dict(row, _key=row["uuid"]) for row in rows if row.get("uuid")]
+            # Stamp the bookkeeping fields the API expects. ICD10ResponseClass
+            # declares `created_at: str` and `updated_at: Optional[str]` with no
+            # default, so in pydantic v2 both must be *present* - a document
+            # without them makes /pcva/get-icd10 fail validation and return 500,
+            # which is indistinguishable in the UI from an empty cause list.
+            # The resource file deliberately carries no timestamps: they belong
+            # to the deployment that seeded the rows, not to the list itself.
+            stamped_at = datetime.utcnow().isoformat()
+            keyed = [
+                dict(
+                    row,
+                    _key=row["uuid"],
+                    created_at=row.get("created_at") or stamped_at,
+                    updated_at=row.get("updated_at") or stamped_at,
+                    created_by=row.get("created_by"),
+                    updated_by=row.get("updated_by"),
+                    deleted_by=row.get("deleted_by"),
+                    deleted_at=row.get("deleted_at"),
+                )
+                for row in rows if row.get("uuid")
+            ]
             if len(keyed) != len(rows):
                 print(f"Target cause list: {len(rows) - len(keyed)} entries in '{key}' have no uuid and were skipped")
 
