@@ -34,7 +34,15 @@ from app.ccva.services.vman_ml_service import (
     _DEFAULT_MODEL,
     _display_cause,
     _get_cached_predictor,
+    predictor_thresholds,
 )
+
+# Matches the CCVA "Run CCVA" form's own default (run-ccva.component.ts) so a
+# single-record analysis here and a bulk run use the same missing-data
+# cutoff. Previously this path applied no threshold at all, silently
+# inheriting whatever state the shared cached predictor happened to be in -
+# including, briefly, a concurrent bulk run's overridden thresholds.
+_DK_THRESHOLD = 0.60
 from app.shared.configs.constants import db_collections
 from app.shared.middlewares.exceptions import BadRequestException
 
@@ -200,7 +208,8 @@ def _predict(record: dict, question_names: list, labels_by_name: Dict[str, str])
     frame = pd.DataFrame([padded])
     cleaned = DataPreprocessor(verbose=False)._preprocess_data(frame.copy())
 
-    detailed = predictor.predict_detailed(cleaned)
+    with predictor_thresholds(predictor, dk_threshold=_DK_THRESHOLD):
+        detailed = predictor.predict_detailed(cleaned)
     if detailed is None or not len(detailed):
         raise BadRequestException("The model returned no prediction for this record.")
 
