@@ -181,6 +181,12 @@ async def save_configs_settings(
     try:
         response = await add_configs_settings( configData, db=db)
         return response
+    except HTTPException:
+        # Preserve validation errors (e.g. BadRequestException, 400) raised by
+        # add_configs_settings - the blanket handler below used to catch these
+        # too and flatten them into a 500, losing both the status code and
+        # the specific "which fields are missing" message.
+        raise
     except Exception as e:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
 

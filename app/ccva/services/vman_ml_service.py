@@ -13,6 +13,7 @@ To update the model, copy the new .pkl into ml_models/ and update model_registry
 
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 import platform
@@ -138,6 +139,52 @@ def _get_cached_predictor(model_path: Path) -> "CCVAPredictor":
     return _predictor_cache[key]
 
 
+# Guards the "mutate predictor thresholds -> predict -> restore" critical
+# section below. _predictor_lock (above) only protects cache population -
+# without this second lock, a bulk CCVA run (run_vman_ml) and a single-record
+# PCVA ML analysis (ml_analysis_service.py) happening concurrently in the
+# same worker process could interleave, since both call predict_detailed on
+# the *same* cached CCVAPredictor instance and this is the only place either
+# of them mutates its threshold attributes. This serializes all VMan ML
+# predictions (bulk and individual) against each other; acceptable since
+# predict_detailed is itself already thread-pool-parallelised internally and
+# an individual prediction is a single record, not a bottleneck.
+_prediction_lock = threading.Lock()
+
+
+@contextlib.contextmanager
+def predictor_thresholds(
+    predictor: "CCVAPredictor",
+    dk_threshold: Optional[float] = None,
+    ood_threshold: Optional[float] = None,
+):
+    """Temporarily override predictor.dk_threshold / .ood_threshold for one
+    predict_detailed call, then restore whatever the predictor had before -
+    shared by both the bulk (run_vman_ml) and individual (PCVA ML analysis)
+    prediction paths so they apply thresholds the same way instead of one of
+    them silently defaulting to whatever state the shared predictor happens
+    to be in.
+
+    ood_threshold only ever *adds* a confidence-based OOD check alongside the
+    model's own calibrated entropy threshold (see vman_ml's predict_detailed,
+    which OR's an entropy_mask and confidence_mask together) - it no longer
+    zeroes out predictor.ood_entropy_threshold to force entropy off, which is
+    what silently discarded the model's better-calibrated check before.
+    """
+    with _prediction_lock:
+        orig_dk = predictor.dk_threshold
+        orig_ood = predictor.ood_threshold
+        try:
+            if dk_threshold is not None and 0 < dk_threshold <= 1:
+                predictor.dk_threshold = dk_threshold
+            if ood_threshold is not None and 0 < ood_threshold < 1:
+                predictor.ood_threshold = ood_threshold
+            yield
+        finally:
+            predictor.dk_threshold = orig_dk
+            predictor.ood_threshold = orig_ood
+
+
 # Human-readable display names for cluster and special prediction labels.
 # Applied post-prediction — no retraining needed to change these.
 _CAUSE_DISPLAY_NAMES: dict[str, str] = {
@@ -255,19 +302,14 @@ def run_vman_ml(
                    f"OOD entropy > {predictor.ood_entropy_threshold:.3f}"))
 
     # ── 5. Apply threshold overrides ─────────────────────────────────────────
-    # Save originals so the cached predictor isn't left in a modified state.
-    _orig_ood = predictor.ood_threshold
-    _orig_ood_entropy = predictor.ood_entropy_threshold
-    _orig_dk = predictor.dk_threshold
-
+    # Actual override + restore happens in predictor_thresholds() around the
+    # predict_detailed call below - this just logs what's about to change.
     if ood_threshold is not None and 0 < ood_threshold < 1:
-        predictor.ood_threshold = ood_threshold
-        predictor.ood_entropy_threshold = None
         _progress(36, "Applying classification thresholds...",
-                  log=f"VMan ML 1.0 | OOD threshold overridden to {ood_threshold}")
+                  log=(f"VMan ML 1.0 | OOD confidence threshold overridden to {ood_threshold} "
+                       f"(added alongside, not instead of, the model's own entropy threshold)"))
 
     if dk_threshold is not None and 0 < dk_threshold <= 1:
-        predictor.dk_threshold = dk_threshold
         _progress(37, "Applying classification thresholds...",
                   log=f"VMan ML 1.0 | DK threshold overridden to {dk_threshold:.0%}")
 
@@ -325,18 +367,15 @@ def run_vman_ml(
                   f"{n_workers} workers | {n_cpus} CPUs")
 
     try:
-        pred_df = predictor.predict_detailed(
-            df,
-            progress_callback=_native_predict_cb,
-            n_parallel_workers=n_workers,
-        )
+        with predictor_thresholds(predictor, dk_threshold, ood_threshold):
+            pred_df = predictor.predict_detailed(
+                df,
+                progress_callback=_native_predict_cb,
+                n_parallel_workers=n_workers,
+            )
     finally:
         _heartbeat_stop.set()
         _hb.join(timeout=1)
-        # Restore thresholds so the cached predictor is unmodified for next task.
-        predictor.ood_threshold = _orig_ood
-        predictor.ood_entropy_threshold = _orig_ood_entropy
-        predictor.dk_threshold = _orig_dk
 
     t_predict = time.perf_counter() - t_predict
     throughput = n_records / t_predict if t_predict > 0 else 0

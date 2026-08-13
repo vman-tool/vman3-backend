@@ -12,17 +12,39 @@ from app.shared.middlewares.exceptions import BadRequestException
 from app.shared.utils.database_utilities import replace_object_values
 from app.shared.utils.cache import ttl_cache, invalidate_cache
 
-def validate_configs(config: SettingsConfigData):
-    if (config.field_mapping.submitted_date is None or 
-        config.field_mapping.death_date is None or 
-        config.field_mapping.interview_date is None):
-        raise BadRequestException("Either Submitted, Death, or Interview date field is not set in the configuration")
+# Fields the app depends on across CCVA, PCVA, statistics, and DQA - an
+# empty mapping here doesn't fail at save time (they're typed as plain str,
+# not Optional, so "" satisfies pydantic) but breaks downstream AQL queries
+# that interpolate the mapped field name directly, and that failure surfaces
+# far from here (e.g. mid-CCVA-run) with no indication it's a config gap.
+REQUIRED_FIELD_MAPPING_LABELS = {
+    'location_level1': 'Location Level 1',
+    'is_adult': 'Is Adult',
+    'is_child': 'Is Child',
+    'is_neonate': 'Is Neonate',
+}
 
-    if (config.field_mapping.location_level1 is None or 
-        config.field_mapping.is_adult is None or 
-        config.field_mapping.is_child is None or 
-        config.field_mapping.is_neonate is None):
-        raise BadRequestException("One or more required fields are not set in the configuration")
+
+def _is_blank(value) -> bool:
+    return value is None or (isinstance(value, str) and value.strip() == '')
+
+
+def validate_configs(config: SettingsConfigData):
+    fm = config.field_mapping
+    if fm is None:
+        raise BadRequestException("Field mapping configuration is missing.")
+
+    if _is_blank(fm.submitted_date) and _is_blank(fm.death_date) and _is_blank(fm.interview_date):
+        raise BadRequestException(
+            "At least one of Submitted Date, Death Date, or Interview Date must be mapped."
+        )
+
+    missing = [label for field, label in REQUIRED_FIELD_MAPPING_LABELS.items() if _is_blank(getattr(fm, field))]
+    if missing:
+        raise BadRequestException(
+            f"The following required fields are not mapped: {', '.join(missing)}. "
+            "These are used across CCVA, PCVA, and Data Quality analysis and must be set before saving."
+        )
     
 #@log_to_db(context="fetch_odk_config", log_args=True)
 async def fetch_odk_config(db: StandardDatabase, is_validate_configs: bool = False) -> SettingsConfigData:
@@ -115,6 +137,7 @@ async def add_configs_settings(configData: SettingsConfigData, db: StandardDatab
             
 
         elif configData.type == 'field_mapping' and configData.field_mapping:
+            validate_configs(configData)
             data['field_mapping'] = configData.field_mapping.model_dump()
         
         elif configData.type == 'va_summary' and configData.va_summary:
@@ -180,6 +203,12 @@ async def add_configs_settings(configData: SettingsConfigData, db: StandardDatab
             message="Config saved successfully"
         )
 
+    except HTTPException:
+        # Preserve validation errors raised above (e.g. BadRequestException
+        # from validate_configs) as-is - the blanket handler below stringifies
+        # everything it catches, and str() on an HTTPException produces
+        # "<status_code>: <detail>", duplicating the code into the message.
+        raise
     except Exception as e:
         print(e)
         # Handle any exceptions and return an HTTP error response
