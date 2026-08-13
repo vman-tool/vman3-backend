@@ -218,16 +218,37 @@ def _predict(record: dict, question_names: list, labels_by_name: Dict[str, str])
     # Feature attribution for this one record. Affordable here in a way it is
     # not for a whole dataset, and the reason the panel can say *why* rather
     # than only *how confident*.
+    #
+    # class_index must come from the plausibility-constrained distribution,
+    # not raw predict_proba - otherwise a class the guard has already zeroed
+    # out for this record (e.g. Neonatal sepsis for a confirmed adult) could
+    # still be the one "explained", which would be actively wrong rather than
+    # just uninformative. It also won't always match the record's *displayed*
+    # cause: predict_detailed can additionally override to "Undetermined" via
+    # the OOD/entropy check, which _apply_plausibility_constraints doesn't
+    # touch - in that case the contributions below explain the model's
+    # strongest concrete-class signal, not literally "why Undetermined" (that
+    # would mean explaining high entropy across every class at once, a
+    # different and much harder question). row["_contributions_for"] records
+    # which class that actually is, so the caller can tell the two apart
+    # instead of silently implying the contributions justify the shown cause.
     try:
         import numpy as np
         x_scaled, _ = predictor._prepare_features(cleaned)
-        class_index = int(np.argmax(predictor.model.predict_proba(x_scaled)[0]))
+        raw_probs = predictor.model.predict_proba(x_scaled)
+        adjusted_probs = predictor._apply_plausibility_constraints(raw_probs, cleaned)
+        class_index = int(np.argmax(adjusted_probs[0]))
         row["_contributions"] = _top_contributions(
             predictor, x_scaled, class_index, labels_by_name
         )
+        explained_label = predictor.label_encoder.inverse_transform(
+            [predictor.model.classes_[class_index]]
+        )[0]
+        row["_contributions_for"] = _display_cause(explained_label)
     except Exception as exc:
         print(f"ML explanation unavailable: {exc}")
         row["_contributions"] = []
+        row["_contributions_for"] = None
 
     return row
 
@@ -268,6 +289,7 @@ def analyse_va_with_ml_sync(va_id: str, db: StandardDatabase, progress=None) -> 
 
     _report(95, "Summarising...")
     cause = _display_cause(row.get("prediction"))
+    contributions_for = row.get("_contributions_for")
     return {
         "va_id": va_id,
         "cause": cause,
@@ -280,5 +302,14 @@ def analyse_va_with_ml_sync(va_id: str, db: StandardDatabase, progress=None) -> 
         "second_cause": _display_cause(row.get("pred_second_prediction")),
         "summary": _build_summary(row),
         "contributions": row.get("_contributions") or [],
+        # Which cause the contributions above actually explain - usually the
+        # same as `cause`, but not when the record got flagged "Undetermined"
+        # (contributions still explain the model's underlying best concrete
+        # guess, not the OOD override itself, which has no per-feature
+        # explanation of its own). The frontend uses this to caveat the panel
+        # instead of implying these factors justify the displayed cause when
+        # they explain a different one.
+        "contributions_for": contributions_for,
+        "contributions_mismatch": bool(contributions_for) and contributions_for != cause,
         "model": _DEFAULT_MODEL.name,
     }
