@@ -7,7 +7,7 @@ from fastapi.concurrency import run_in_threadpool
 from app.settings.services.odk_configs import fetch_odk_config
 from app.shared.configs.constants import db_collections
 from app.shared.configs.models import ResponseMainModel
-from app.shared.configs.security import get_location_limit_values
+from app.shared.configs.security import build_location_limit_filter
 
 
 async def fetch_va_map_records(
@@ -32,8 +32,6 @@ async def fetch_va_map_records(
 
         today_field = config.field_mapping.date
 
-        locationKey, locationLimitValues = get_location_limit_values(current_user)
-
         query = f"""
             FOR doc IN {collection.name}
             FILTER doc.coordinates != null AND LENGTH(doc.coordinates) == 3 
@@ -43,9 +41,9 @@ async def fetch_va_map_records(
         bind_vars = {}
         filters = []
         ## filter by location limits
-        if locationLimitValues and locationKey:
-            filters.append(f"doc.{locationKey} IN @locationValues")
-            bind_vars["locationValues"] = locationLimitValues
+        location_limit_filter = build_location_limit_filter(current_user, bind_vars)
+        if location_limit_filter:
+            filters.append(location_limit_filter)
         ##
         if start_date:
             filters.append(f"doc.{today_field} >= @start_date")

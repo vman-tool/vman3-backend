@@ -7,7 +7,7 @@ from fastapi.concurrency import run_in_threadpool
 from app.settings.services.odk_configs import fetch_odk_config
 from app.shared.configs.constants import db_collections
 from app.shared.configs.models import ResponseMainModel
-from app.shared.configs.security import get_location_limit_values
+from app.shared.configs.security import build_location_limit_filter
 
 
 from app.shared.utils.cache import ttl_cache
@@ -46,17 +46,14 @@ async def fetch_charts_statistics( current_user: dict,paging: bool = True, page_
         deceased_gender = config.field_mapping.deceased_gender
 
         print(date_type, today_field, 'today_field')
-        # locationLimitValues =current_user['access_limit']['limit_by'] or None ## [{value: "value", label: "label"}]
-        locationKey, locationLimitValues = get_location_limit_values(current_user)
 
-        
         collection = db.collection(db_collections.VA_TABLE)   # Use the actual collection name here
         bind_vars = {}
         filters = []
         ## filter by location limits
-        if locationLimitValues and locationKey:
-            filters.append(f"doc.{locationKey} IN @locationValues")
-            bind_vars["locationValues"] = locationLimitValues
+        location_limit_filter = build_location_limit_filter(current_user, bind_vars)
+        if location_limit_filter:
+            filters.append(location_limit_filter)
         ##
         if start_date:
             filters.append(f"doc.{today_field} >= @start_date")

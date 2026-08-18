@@ -10,7 +10,7 @@ from fastapi.security import OAuth2PasswordRequestForm
 from app.shared.configs.arangodb import ArangoDBClient, get_arangodb_session
 from app.shared.configs.constants import AccessPrivileges
 from app.shared.configs.models import ResponseMainModel
-from app.users.decorators.user import check_privileges, get_current_user, oauth2_scheme
+from app.users.decorators.user import check_privileges, get_current_user, get_current_user_privileges, oauth2_scheme
 from app.users.responses.user import LoginResponse, UserResponse
 from app.users.schemas.user import (AssignRolesRequest, EmailRequest, RegisterUserRequest,
                                     ResetRequest, RoleRequest, VerifyUserRequest)
@@ -195,12 +195,13 @@ async def delete_roles(
 @user_router.post("/assign-roles", status_code=status.HTTP_200_OK, response_model=ResponseMainModel | Any, description="Use uuid's for user as well as roles, roles not included in roles list will be automatically unsassigned")
 async def assign_roles(
         data: AssignRolesRequest,
-        current_user = Depends(get_current_user), 
+        current_user = Depends(get_current_user),
         session = Depends(get_arangodb_session),
         required_privs: List[str] = Depends(check_privileges([AccessPrivileges.USERS_ASSIGN_ROLES])),
+        current_user_privileges: List[str] = Depends(get_current_user_privileges),
     ):
     try:
-        return await user.assign_roles(data = data, current_user = current_user, db=session)
+        return await user.assign_roles(data = data, current_user = current_user, current_user_privileges = current_user_privileges, db=session)
     except HTTPException as e:
         raise e
 

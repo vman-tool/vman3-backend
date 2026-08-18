@@ -11,7 +11,7 @@ from fastapi.concurrency import run_in_threadpool
 
 from app.settings.services.odk_configs import fetch_odk_config
 from app.shared.configs.constants import db_collections
-from app.shared.configs.security import get_location_limit_values
+from app.shared.configs.security import build_location_limit_filter
 
 
 def _strip_workbook_formatting(workbook) -> None:
@@ -123,10 +123,9 @@ async def export_va_records_multi_sheet(
             filter_conditions.append(f"va.{region_field} IN @locations")
             bind_vars['locations'] = locations
 
-        locationKey, locationLimitValues = get_location_limit_values(current_user)
-        if locationKey and locationLimitValues:
-            filter_conditions.append(f"va.{locationKey} IN @access_limit_values")
-            bind_vars['access_limit_values'] = locationLimitValues
+        location_limit_filter = build_location_limit_filter(current_user, bind_vars, alias='va', param_prefix='access_limit_values')
+        if location_limit_filter:
+            filter_conditions.append(location_limit_filter)
 
         filter_clause = " AND ".join(filter_conditions) if filter_conditions else "true"
 
