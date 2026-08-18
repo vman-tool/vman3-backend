@@ -1,5 +1,6 @@
 import base64
 import logging
+import re
 from datetime import datetime, timedelta
 
 import jwt
@@ -139,15 +140,66 @@ async def get_token_user(token: str, db:StandardDatabase ):
                 }
     return None
 
-def get_location_limit_values(current_user):
+def get_location_limit_groups(current_user):
+    """Groups a user's access_limit.limit_by entries by admin-level field.
+
+    Returns [(field, [values, ...]), ...] - one group per field the user's
+    access is restricted to, or [] for no restriction (full access). A user
+    can now be limited to a combination of values spanning several admin
+    levels at once (e.g. district_a OR ward_b), not just one level.
+
+    Supports both the legacy shape (a single top-level `field` shared by all
+    `limit_by` items) and the current shape (each `limit_by` item carries its
+    own `field`), so previously-saved users keep working unchanged.
+    """
     try:
         access_limit = current_user.get('access_limit', {}) or {}
-        locationKey = access_limit.get('field', '')
-        locationLimitValues = [item.get('value') for item in access_limit.get('limit_by', [])]
-        return locationKey, locationLimitValues
+        legacy_field = access_limit.get('field', '')
+        groups: dict = {}
+        for item in access_limit.get('limit_by', []) or []:
+            field = item.get('field') or legacy_field
+            value = item.get('value')
+            # Field names are interpolated directly into AQL below by callers;
+            # only allow identifier-shaped values (they come from configured
+            # location_level1-4 field mappings, not free user input, but this
+            # is cheap insurance against a malformed/malicious config value).
+            if not field or value is None or not re.fullmatch(r'[A-Za-z0-9_]+', field):
+                continue
+            groups.setdefault(field, []).append(value)
+        return list(groups.items())
     except Exception as e:
         print(f"Error processing location limit values: {e}")
-        return None, None
+        return []
+
+
+def build_location_limit_filter(
+    current_user,
+    bind_vars: dict,
+    alias: str = "doc",
+    param_prefix: str = "locationValues",
+    case_insensitive: bool = False,
+):
+    """Appends one bind var per restricted field and returns an AQL filter
+    fragment ORing them together (`(doc.field1 IN @p0) OR (doc.field2 IN @p1)`),
+    or None when the user has no location restriction. Mutates `bind_vars` in
+    place, matching how callers already build up their AQL bind_vars dict.
+    `alias` is the AQL document variable each caller's query already uses
+    (`doc`, `va`, `dt`, `_fs`, ...); `case_insensitive` matches the LOWER()
+    comparisons a couple of call sites used before this was a single field.
+    """
+    groups = get_location_limit_groups(current_user)
+    if not groups:
+        return None
+    clauses = []
+    for i, (field, values) in enumerate(groups):
+        key = f"{param_prefix}{i}"
+        if case_insensitive:
+            bind_vars[key] = [v.lower() for v in values]
+            clauses.append(f"LOWER({alias}.{field}) IN @{key}")
+        else:
+            bind_vars[key] = values
+            clauses.append(f"{alias}.{field} IN @{key}")
+    return "(" + " OR ".join(clauses) + ")"
 
 async def load_user(email: str, db:StandardDatabase):
     collection = db.collection(db_collections.USERS)

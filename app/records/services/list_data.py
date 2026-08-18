@@ -9,7 +9,7 @@ from app.records.responses.data import map_to_data_response
 from app.settings.services.odk_configs import fetch_odk_config
 from app.shared.configs.constants import db_collections
 from app.shared.configs.models import ResponseMainModel
-from app.shared.configs.security import get_location_limit_values
+from app.shared.configs.security import build_location_limit_filter
 from app.shared.middlewares.exceptions import BadRequestException
 from app.utilits.logger import app_logger
 
@@ -21,8 +21,6 @@ async def fetch_va_records(current_user:dict,paging: bool = True, page_number: i
         district_field = config.field_mapping.location_level2
         va_id_field = config.field_mapping.va_id
         interviewer_field = config.field_mapping.interviewer_name
-        locationKey, locationLimitValues = get_location_limit_values(current_user)
-
 
         death_date = config.field_mapping.death_date 
         submitted_date = config.field_mapping.submitted_date 
@@ -45,9 +43,9 @@ async def fetch_va_records(current_user:dict,paging: bool = True, page_number: i
         bind_vars = {}
         filters = []
        ## filter by location limits
-        if locationLimitValues and locationKey:
-            filters.append(f"doc.{locationKey} IN @locationValues")
-            bind_vars["locationValues"] = locationLimitValues
+        location_limit_filter = build_location_limit_filter(current_user, bind_vars)
+        if location_limit_filter:
+            filters.append(location_limit_filter)
         ##
         if start_date:
             filters.append(f"doc.{today_field} >= @start_date")

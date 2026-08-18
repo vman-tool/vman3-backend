@@ -205,10 +205,12 @@ async def get_questioner_fileds(
 # @cache(namespace='get_field_unique_value',expire=6000)
 async def get_field_unique_value(
     field: Optional[str] = Query(None, alias="field"),
+    parent_field: Optional[str] = Query(None, alias="parent_field"),
+    parent_value: Optional[str] = Query(None, alias="parent_value"),
     current_user = Depends(get_current_user),
     db: StandardDatabase = Depends(get_arangodb_session)):
 
-    response = await get_field_value_from_va_records(field=field, db=db)
+    response = await get_field_value_from_va_records(field=field, db=db, parent_field=parent_field, parent_value=parent_value)
     return response
 
 @settings_router.post("/system_images/")

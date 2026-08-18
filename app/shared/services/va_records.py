@@ -1,3 +1,4 @@
+import re
 from typing import Dict
 
 from arango.database import StandardDatabase
@@ -175,25 +176,45 @@ async def shared_fetch_va_records(paging: bool = True,  page_number: int = 1, li
         raise HTTPException(status_code=500, detail=f"Failed to fetch data: {e}")
     
 
-async def get_field_value_from_va_records(field: str, db: StandardDatabase = None):
-
+async def get_field_value_from_va_records(
+    field: str,
+    db: StandardDatabase = None,
+    parent_field: str = None,
+    parent_value: str = None,
+):
+    """Distinct values of `field`, optionally scoped to records where
+    `parent_field` equals `parent_value` - e.g. the districts that actually
+    occur within one specific region, for building a real drill-down
+    location tree instead of a flat, unscoped value list.
+    """
     try:
+        for name in (field, parent_field):
+            if name is not None and not re.fullmatch(r'[A-Za-z0-9_]+', name):
+                raise HTTPException(status_code=400, detail="Invalid field name.")
+
+        bind_vars = {}
+        filters = [f"doc.{field} != null"]
+        if parent_field and parent_value is not None:
+            filters.append(f"doc.{parent_field} == @parent_value")
+            bind_vars["parent_value"] = parent_value
 
         query = f"""
                 FOR doc IN {db_collections.VA_TABLE}
-                FILTER doc.{field} != null
+                FILTER {' AND '.join(filters)}
                 COLLECT unique = doc.{field}
                 RETURN unique
         """
 
         def execute_field_query():
-            cursor = db.aql.execute(query)
-            return [document for document in cursor]        
+            cursor = db.aql.execute(query, bind_vars=bind_vars)
+            return [document for document in cursor]
 
         data = await run_in_threadpool(execute_field_query)
 
         return ResponseMainModel(data=data, message="Unique data fetched successfully!", total = len(data))
-    
+
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to fetch data: {e}")
  
