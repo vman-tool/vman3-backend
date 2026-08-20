@@ -207,10 +207,11 @@ async def get_field_unique_value(
     field: Optional[str] = Query(None, alias="field"),
     parent_field: Optional[str] = Query(None, alias="parent_field"),
     parent_value: Optional[str] = Query(None, alias="parent_value"),
+    scope_to_user: bool = Query(True, alias="scope_to_user"),
     current_user = Depends(get_current_user),
     db: StandardDatabase = Depends(get_arangodb_session)):
 
-    response = await get_field_value_from_va_records(field=field, db=db, parent_field=parent_field, parent_value=parent_value)
+    response = await get_field_value_from_va_records(field=field, db=db, parent_field=parent_field, parent_value=parent_value, current_user=current_user, scope_to_user=scope_to_user)
     return response
 
 @settings_router.post("/system_images/")

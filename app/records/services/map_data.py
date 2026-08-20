@@ -1,5 +1,5 @@
 from datetime import date
-from typing import List, Optional
+from typing import Optional
 
 from arango.database import StandardDatabase
 from fastapi.concurrency import run_in_threadpool
@@ -7,7 +7,7 @@ from fastapi.concurrency import run_in_threadpool
 from app.settings.services.odk_configs import fetch_odk_config
 from app.shared.configs.constants import db_collections
 from app.shared.configs.models import ResponseMainModel
-from app.shared.configs.security import build_location_limit_filter
+from app.shared.configs.security import build_location_limit_filter, build_locations_query_filter
 
 
 async def fetch_va_map_records(
@@ -17,7 +17,7 @@ async def fetch_va_map_records(
     limit: int = 1000000,
     start_date: Optional[date] = None,
     end_date: Optional[date] = None,
-    locations: Optional[List[str]] = None,
+    locations: Optional[str] = None,
     date_type: Optional[str] = None,
     db: StandardDatabase = None
 ) -> ResponseMainModel:
@@ -53,9 +53,9 @@ async def fetch_va_map_records(
             filters.append(f"doc.{today_field} <= @end_date")
             bind_vars["end_date"] = str(end_date)
 
-        if locations:
-            filters.append(f"doc.{region_field} IN @locations")
-            bind_vars["locations"] = locations
+        locations_filter = build_locations_query_filter(locations, bind_vars)
+        if locations_filter:
+            filters.append(locations_filter)
 
         if filters:
             query += " AND " + " AND ".join(filters) + " "

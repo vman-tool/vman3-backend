@@ -1,5 +1,5 @@
 from datetime import date
-from typing import List, Optional
+from typing import Optional
 
 from arango.database import StandardDatabase
 from fastapi.concurrency import run_in_threadpool
@@ -7,7 +7,7 @@ from fastapi.concurrency import run_in_threadpool
 from app.settings.services.odk_configs import fetch_odk_config
 from app.shared.configs.constants import db_collections
 from app.shared.configs.models import ResponseMainModel
-from app.shared.configs.security import build_location_limit_filter
+from app.shared.configs.security import build_location_limit_filter, build_locations_query_filter
 
 
 from app.shared.utils.cache import ttl_cache
@@ -15,7 +15,7 @@ from fastapi_cache.decorator import cache
 
 
 # @cache(namespace="charts_statistics", expire=3000) # Cache for 5 minutes
-async def fetch_charts_statistics( current_user: dict,paging: bool = True, page_number: int = 1, limit: int = 10, start_date: Optional[date] = None, end_date: Optional[date] = None, locations: Optional[List[str]] = None,  date_type:Optional[str]=None, db: StandardDatabase = None) -> ResponseMainModel:
+async def fetch_charts_statistics( current_user: dict,paging: bool = True, page_number: int = 1, limit: int = 10, start_date: Optional[date] = None, end_date: Optional[date] = None, locations: Optional[str] = None,  date_type:Optional[str]=None, db: StandardDatabase = None) -> ResponseMainModel:
     try:
         print("Fetching charts statistics")
         config = await fetch_odk_config(db, True)
@@ -65,9 +65,9 @@ async def fetch_charts_statistics( current_user: dict,paging: bool = True, page_
             
             print(bind_vars)
 
-        if locations:
-            filters.append(f"doc.{region_field} IN @locations")
-            bind_vars["locations"] = locations
+        locations_filter = build_locations_query_filter(locations, bind_vars)
+        if locations_filter:
+            filters.append(locations_filter)
 
         filter_query = "FILTER " + " AND ".join(filters) + " " if filters else ""
 

@@ -292,7 +292,7 @@ async def get_processed_ccva_graphs(
                 limit=limit,
                 start_date=start_date,
                 end_date=end_date,
-                locations=locations.split(",") if locations else None,
+                locations=locations,
                 date_type=date_type,
                 db=db
             )
@@ -305,7 +305,7 @@ async def get_processed_ccva_graphs(
                 limit=limit,
                 start_date=start_date,
                 end_date=end_date,
-                locations=locations.split(",") if locations else None,
+                locations=locations,
                 date_type=date_type,
                 db=db
             )

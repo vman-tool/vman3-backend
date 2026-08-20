@@ -1,5 +1,5 @@
 from datetime import date
-from typing import List, Optional
+from typing import Optional
 
 from arango import ArangoError
 from arango.database import StandardDatabase
@@ -9,12 +9,12 @@ from app.records.responses.data import map_to_data_response
 from app.settings.services.odk_configs import fetch_odk_config
 from app.shared.configs.constants import db_collections
 from app.shared.configs.models import ResponseMainModel
-from app.shared.configs.security import build_location_limit_filter
+from app.shared.configs.security import build_location_limit_filter, build_locations_query_filter
 from app.shared.middlewares.exceptions import BadRequestException
 from app.utilits.logger import app_logger
 
 
-async def fetch_va_records(current_user:dict,paging: bool = True, page_number: int = 1, limit: int = 10, start_date: Optional[date] = None, end_date: Optional[date] = None, locations: Optional[List[str]] = None, date_type:Optional[str]=None, search_by: Optional[str] = None, search_value: Optional[str] = None, db: StandardDatabase = None) -> ResponseMainModel:
+async def fetch_va_records(current_user:dict,paging: bool = True, page_number: int = 1, limit: int = 10, start_date: Optional[date] = None, end_date: Optional[date] = None, locations: Optional[str] = None, date_type:Optional[str]=None, search_by: Optional[str] = None, search_value: Optional[str] = None, db: StandardDatabase = None) -> ResponseMainModel:
     try:
         config = await fetch_odk_config(db)
         region_field = config.field_mapping.location_level1
@@ -55,9 +55,9 @@ async def fetch_va_records(current_user:dict,paging: bool = True, page_number: i
             filters.append(f"doc.{today_field} <= @end_date")
             bind_vars["end_date"] = str(end_date)
 
-        if locations:
-            filters.append(f"doc.{region_field} IN @locations")
-            bind_vars["locations"] = locations
+        locations_filter = build_locations_query_filter(locations, bind_vars)
+        if locations_filter:
+            filters.append(locations_filter)
 
         if search_by and search_value:
             search_field_map = {
@@ -125,7 +125,7 @@ async def fetch_va_records(current_user:dict,paging: bool = True, page_number: i
 
 
 
-async def fetch_va_records_json(current_user:dict,paging: bool = True,data_source:Optional[str]=None, task_id:Optional[str]=None, page_number: int = 1, limit: int = 10, start_date: Optional[date] = None, end_date: Optional[date] = None, locations: Optional[List[str]] = None,date_type:Optional[str]=None, db: StandardDatabase = None, top:Optional[int]=None) -> ResponseMainModel:
+async def fetch_va_records_json(current_user:dict,paging: bool = True,data_source:Optional[str]=None, task_id:Optional[str]=None, page_number: int = 1, limit: int = 10, start_date: Optional[date] = None, end_date: Optional[date] = None, locations: Optional[str] = None,date_type:Optional[str]=None, db: StandardDatabase = None, top:Optional[int]=None) -> ResponseMainModel:
     try:
         config = await fetch_odk_config(db)
         region_field = config.field_mapping.location_level1
@@ -158,9 +158,9 @@ async def fetch_va_records_json(current_user:dict,paging: bool = True,data_sourc
             filters.append(f"doc.{today_field} <= @end_date")
             bind_vars["end_date"] = str(end_date)
 
-        if locations:
-            filters.append(f"doc.{region_field} IN @locations")
-            bind_vars["locations"] = locations
+        locations_filter = build_locations_query_filter(locations, bind_vars)
+        if locations_filter:
+            filters.append(locations_filter)
         # filter by data source and task id, THIS ID CASE WHEN WE IMPORT DATA FROM CSV, AND WE WANT THEM ONLY
         if data_source is  None : 
             filters.append('doc.vman_data_source !="data_source"')
@@ -212,7 +212,7 @@ async def fetch_va_records_json(current_user:dict,paging: bool = True,data_sourc
         print(e)
         raise BadRequestException(f"Failed to fetch records: {str(e)}",str(e))
     
-async def fetch_va_records_count(current_user:dict, start_date: Optional[date] = None, end_date: Optional[date] = None, locations: Optional[List[str]] = None,date_type:Optional[str]=None, db: StandardDatabase = None, top:Optional[int]=None, data_source:Optional[str]=None) -> int:
+async def fetch_va_records_count(current_user:dict, start_date: Optional[date] = None, end_date: Optional[date] = None, locations: Optional[str] = None,date_type:Optional[str]=None, db: StandardDatabase = None, top:Optional[int]=None, data_source:Optional[str]=None) -> int:
     try:
         config = await fetch_odk_config(db)
         region_field = config.field_mapping.location_level1
@@ -244,11 +244,11 @@ async def fetch_va_records_count(current_user:dict, start_date: Optional[date] =
             filters.append(f"doc.{today_field} <= @end_date")
             bind_vars["end_date"] = str(end_date)
 
-        if locations:
-            filters.append(f"doc.{region_field} IN @locations")
-            bind_vars["locations"] = locations
-            
-        if data_source is None: 
+        locations_filter = build_locations_query_filter(locations, bind_vars)
+        if locations_filter:
+            filters.append(locations_filter)
+
+        if data_source is None:
             filters.append('doc.vman_data_source !="data_source"')
         if data_source:
             filters.append(f'doc.vman_data_source =="{data_source}"')

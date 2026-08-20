@@ -1,5 +1,5 @@
 from datetime import date
-from typing import List, Optional
+from typing import Optional
 
 from arango import ArangoError
 from arango.database import StandardDatabase
@@ -9,7 +9,7 @@ from fastapi.concurrency import run_in_threadpool
 from app.settings.services.odk_configs import fetch_odk_config
 from app.shared.configs.constants import db_collections
 from app.shared.configs.models import ResponseMainModel
-from app.shared.configs.security import build_location_limit_filter
+from app.shared.configs.security import build_location_limit_filter, build_locations_query_filter
 from app.shared.middlewares.exceptions import BadRequestException
 from app.shared.utils.cache import ttl_cache
 
@@ -25,7 +25,7 @@ async def fetch_db_processed_ccva_graphs(
     limit: int = 30, 
     start_date: Optional[date] = None, 
     end_date: Optional[date] = None, 
-    locations: Optional[List[str]] = None,
+    locations: Optional[str] = None,
     date_type: Optional[str] = None,
 
     db: StandardDatabase = None
@@ -41,7 +41,6 @@ async def fetch_db_processed_ccva_graphs(
         # elif locationKey == 'id10005d':
         #     locationKey = 'locationLevel2'
         config = await fetch_odk_config(db)
-        region_field = config.field_mapping.location_level1
         instance_id_field = config.field_mapping.instance_id or 'instanceid'
 
         # Do NOT convert the restricted field(s) to 'locationLevel1'/'locationLevel2'.
@@ -97,9 +96,6 @@ async def fetch_db_processed_ccva_graphs(
         # total_records= defaultsCr[0].get('total_records')
         elapsed_time= defaultsCr[0].get('elapsed_time')
         range= defaultsCr[0].get('range')
-        # Normalise to lowercase
-        locations = [loc.lower() for loc in locations] if locations else None
-
         # bind_vars is built up here (rather than at the bottom, as before)
         # because build_location_limit_filter needs to populate it before the
         # subquery string below is assembled.
@@ -123,11 +119,14 @@ LET _accessIds = (
             access_ids_subquery = "LET _accessIds = []"
             access_filter = ""
 
-        if locations:
+        locations_filter = build_locations_query_filter(
+            locations, bind_vars, alias='_fs', case_insensitive=True, param_prefix='userLocations'
+        )
+        if locations_filter:
             loc_ids_subquery = f"""
 LET _locIds = (
     FOR _fs IN form_submissions
-        FILTER LOWER(_fs.{region_field}) IN @locations
+        FILTER {locations_filter}
         RETURN DISTINCT _fs.{instance_id_field}
 )"""
             loc_filter = "AND (cc.ID IN _locIds OR cc.uid IN _locIds)"
@@ -337,9 +336,6 @@ LET _locIds = (
             "total_records": totalRecords
         }}
         """
-
-        if locations:
-            bind_vars["locations"] = locations
 
         # print(query, 'query',ccva_task_id)
         def execute_query():

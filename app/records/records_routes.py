@@ -53,7 +53,7 @@ async def get_va_records(
         limit=limit,
         start_date=start_date,
         end_date=end_date,
-        locations=locations.split(",") if locations else None,
+        locations=locations,
         date_type=date_type,
         search_by=search_by,
         search_value=search_value,
@@ -81,7 +81,7 @@ async def get_fetch_va_map_records(
         limit=limit,   
         start_date=start_date,
         end_date=end_date,
-        locations=locations.split(",") if locations else None,
+        locations=locations,
         date_type=date_type,
         db=db)
 
@@ -130,7 +130,7 @@ async def export_va_records_endpoint(
         db=db,
         start_date=start_date,
         end_date=end_date,
-        locations=locations.split(",") if locations else None,
+        locations=locations,
         date_type=date_type,
         include_pcva=include_pcva,
         include_ccva=include_ccva,
