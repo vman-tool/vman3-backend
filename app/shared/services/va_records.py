@@ -9,6 +9,7 @@ from app.pcva.utilities.va_records_utils import format_va_record
 from app.settings.services.odk_configs import fetch_odk_config
 from app.shared.configs.constants import db_collections
 from app.shared.configs.models import Pager, ResponseMainModel
+from app.shared.configs.security import build_location_limit_filter
 from app.shared.utils.database_utilities import add_query_filters
 
 
@@ -181,11 +182,27 @@ async def get_field_value_from_va_records(
     db: StandardDatabase = None,
     parent_field: str = None,
     parent_value: str = None,
+    current_user: dict = None,
+    scope_to_user: bool = True,
 ):
     """Distinct values of `field`, optionally scoped to records where
     `parent_field` equals `parent_value` - e.g. the districts that actually
     occur within one specific region, for building a real drill-down
     location tree instead of a flat, unscoped value list.
+
+    Also scoped to `current_user`'s own access_limit when they have one and
+    `scope_to_user` is true (the default) - without this, a location-
+    restricted user could browse (and filter dashboard content by) areas
+    outside their own permission, even though the underlying data queries
+    were already correctly restricted.
+
+    `scope_to_user=False` is for admin-configuration screens - e.g.
+    re-labelling raw ODK values into friendlier display names - where the
+    caller needs the full universe of values that exist in the system to
+    manage, regardless of their own data-access boundary. Restricting that
+    picker to the admin's own locations doesn't protect anything (they are
+    not being shown other people's data, just field values to rename) and
+    only hides values they need to fix.
     """
     try:
         for name in (field, parent_field):
@@ -197,6 +214,11 @@ async def get_field_value_from_va_records(
         if parent_field and parent_value is not None:
             filters.append(f"doc.{parent_field} == @parent_value")
             bind_vars["parent_value"] = parent_value
+
+        if current_user and scope_to_user:
+            location_limit_filter = build_location_limit_filter(current_user, bind_vars)
+            if location_limit_filter:
+                filters.append(location_limit_filter)
 
         query = f"""
                 FOR doc IN {db_collections.VA_TABLE}

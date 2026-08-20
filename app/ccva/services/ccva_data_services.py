@@ -93,14 +93,14 @@ async def fetch_ccva_records(paging: bool = True, page_number: int = 1, limit: i
 # @ttl_cache(ttl=300, key_prefix="ccva_processed_graphs")
 # @cache(expire=6000, namespace="ccva_processed_graphs")
 async def fetch_processed_ccva_graphs(
-    ccva_id: Optional[str] = None, 
-    is_default: Optional[bool] = None, 
-    paging: bool = True, 
-    page_number: int = 1, 
-    limit: int = 30, 
-    start_date: Optional[date] = None, 
-    end_date: Optional[date] = None, 
-    locations: Optional[List[str]] = None,
+    ccva_id: Optional[str] = None,
+    is_default: Optional[bool] = None,
+    paging: bool = True,
+    page_number: int = 1,
+    limit: int = 30,
+    start_date: Optional[date] = None,
+    end_date: Optional[date] = None,
+    locations: Optional[str] = None,
     date_type:Optional[str]=None,
     db: StandardDatabase = None
 ) -> ResponseMainModel:
