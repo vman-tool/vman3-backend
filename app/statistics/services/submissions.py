@@ -1,5 +1,5 @@
 from datetime import date
-from typing import List, Optional
+from typing import Optional
 
 from arango.database import StandardDatabase
 from fastapi.concurrency import run_in_threadpool
@@ -7,12 +7,12 @@ from fastapi.concurrency import run_in_threadpool
 from app.settings.services.odk_configs import fetch_odk_config
 from app.shared.configs.constants import db_collections
 from app.shared.configs.models import ResponseMainModel
-from app.shared.configs.security import get_location_limit_values
+from app.shared.configs.security import build_location_limit_filter, build_locations_query_filter
 from app.shared.utils.cache import ttl_cache
 
 
-@ttl_cache(ttl=30, key_prefix='submissions_statistics')
-async def fetch_submissions_statistics( current_user: dict,paging: bool = True, page_number: int = 1, limit: int = 10, start_date: Optional[date] = None, end_date: Optional[date] = None, locations: Optional[List[str]] = None,date_type:Optional[str]=None, db: StandardDatabase = None) -> ResponseMainModel:
+@ttl_cache(ttl=30)
+async def fetch_submissions_statistics( current_user: dict,paging: bool = True, page_number: int = 1, limit: int = 10, start_date: Optional[date] = None, end_date: Optional[date] = None, locations: Optional[str] = None,date_type:Optional[str]=None, db: StandardDatabase = None) -> ResponseMainModel:
     try:
         config = await fetch_odk_config(db, True)
         region_field = config.field_mapping.location_level1
@@ -41,8 +41,6 @@ async def fetch_submissions_statistics( current_user: dict,paging: bool = True, 
         deceased_gender = config.field_mapping.deceased_gender
 
 
-        locationKey, locationLimitValues = get_location_limit_values(current_user)
-
         collection = db.collection(db_collections.VA_TABLE)  # Use the actual collection name here
         query = f"""
             FOR doc IN {collection.name}
@@ -50,9 +48,9 @@ async def fetch_submissions_statistics( current_user: dict,paging: bool = True, 
         bind_vars = {}
         filters = []
         ## filter by location limits
-        if locationLimitValues and locationKey:
-            filters.append(f"doc.{locationKey} IN @locationValues")
-            bind_vars["locationValues"] = locationLimitValues
+        location_limit_filter = build_location_limit_filter(current_user, bind_vars)
+        if location_limit_filter:
+            filters.append(location_limit_filter)
         ##
         if start_date:
             filters.append(f"doc.{today_field} >= @start_date")
@@ -62,9 +60,9 @@ async def fetch_submissions_statistics( current_user: dict,paging: bool = True, 
             filters.append(f"doc.{today_field} <= @end_date")
             bind_vars["end_date"] = str(end_date)
 
-        if locations:
-            filters.append(f"doc.{region_field} IN @locations")
-            bind_vars["locations"] = locations
+        locations_filter = build_locations_query_filter(locations, bind_vars)
+        if locations_filter:
+            filters.append(locations_filter)
 
         if filters:
             query += "FILTER " + " AND ".join(filters) + " "

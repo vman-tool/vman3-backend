@@ -1,5 +1,7 @@
 import base64
+import json
 import logging
+import re
 from datetime import datetime, timedelta
 
 import jwt
@@ -139,15 +141,142 @@ async def get_token_user(token: str, db:StandardDatabase ):
                 }
     return None
 
-def get_location_limit_values(current_user):
+def group_field_value_pairs(pairs):
+    """Groups a flat [(field, value), ...] list into [(field, [values...]),
+    ...], one entry per distinct field - the shared core behind both a
+    user's access_limit and the dashboard's multi-level location filter,
+    since both are "a set of field=value restrictions to OR together".
+
+    Field names are interpolated directly into AQL by callers, so only
+    identifier-shaped names are kept; that's normally guaranteed by them
+    coming from configured location_level1-4 mappings, but this is cheap
+    insurance against a malformed/malicious value reaching this far.
+    """
+    groups: dict = {}
+    for field, value in pairs:
+        if not field or value is None or not re.fullmatch(r'[A-Za-z0-9_]+', field):
+            continue
+        groups.setdefault(field, []).append(value)
+    return list(groups.items())
+
+
+def build_field_value_filter(
+    pairs,
+    bind_vars: dict,
+    alias: str = "doc",
+    param_prefix: str = "locationValues",
+    case_insensitive: bool = False,
+):
+    """Appends one bind var per distinct field in `pairs` and returns an AQL
+    filter fragment ORing them together (`(doc.field1 IN @p0) OR (doc.field2
+    IN @p1)`), or None when `pairs` is empty. Mutates `bind_vars` in place,
+    matching how callers already build up their AQL bind_vars dict. `alias`
+    is the AQL document variable each caller's query already uses (`doc`,
+    `va`, `dt`, `_fs`, ...); `case_insensitive` matches the LOWER()
+    comparisons a couple of call sites need.
+    """
+    groups = group_field_value_pairs(pairs)
+    if not groups:
+        return None
+    clauses = []
+    for i, (field, values) in enumerate(groups):
+        key = f"{param_prefix}{i}"
+        if case_insensitive:
+            bind_vars[key] = [v.lower() for v in values]
+            clauses.append(f"LOWER({alias}.{field}) IN @{key}")
+        else:
+            bind_vars[key] = values
+            clauses.append(f"{alias}.{field} IN @{key}")
+    return "(" + " OR ".join(clauses) + ")"
+
+
+def get_location_limit_groups(current_user):
+    """Groups a user's access_limit.limit_by entries by admin-level field.
+
+    Returns [(field, [values, ...]), ...] - one group per field the user's
+    access is restricted to, or [] for no restriction (full access). A user
+    can now be limited to a combination of values spanning several admin
+    levels at once (e.g. district_a OR ward_b), not just one level.
+
+    Supports both the legacy shape (a single top-level `field` shared by all
+    `limit_by` items) and the current shape (each `limit_by` item carries its
+    own `field`), so previously-saved users keep working unchanged.
+    """
     try:
         access_limit = current_user.get('access_limit', {}) or {}
-        locationKey = access_limit.get('field', '')
-        locationLimitValues = [item.get('value') for item in access_limit.get('limit_by', [])]
-        return locationKey, locationLimitValues
+        legacy_field = access_limit.get('field', '')
+        pairs = [
+            (item.get('field') or legacy_field, item.get('value'))
+            for item in access_limit.get('limit_by', []) or []
+        ]
+        return group_field_value_pairs(pairs)
     except Exception as e:
         print(f"Error processing location limit values: {e}")
-        return None, None
+        return []
+
+
+def build_location_limit_filter(
+    current_user,
+    bind_vars: dict,
+    alias: str = "doc",
+    param_prefix: str = "locationValues",
+    case_insensitive: bool = False,
+):
+    """Same as build_field_value_filter, but deriving `pairs` from a user's
+    own access_limit.limit_by (see get_location_limit_groups)."""
+    groups = get_location_limit_groups(current_user)
+    if not groups:
+        return None
+    clauses = []
+    for i, (field, values) in enumerate(groups):
+        key = f"{param_prefix}{i}"
+        if case_insensitive:
+            bind_vars[key] = [v.lower() for v in values]
+            clauses.append(f"LOWER({alias}.{field}) IN @{key}")
+        else:
+            bind_vars[key] = values
+            clauses.append(f"{alias}.{field} IN @{key}")
+    return "(" + " OR ".join(clauses) + ")"
+
+
+def parse_location_query_pairs(locations_json: str):
+    """Parses the `locations` query param used by dashboard/statistics/export
+    routes - a JSON-encoded array of {"field": ..., "value": ...} objects -
+    into a flat [(field, value), ...] list. Returns [] on any malformed
+    input rather than raising: this is a display filter, not an
+    authorization boundary, so a bad filter should just show everything
+    (still correctly scoped by the user's own access_limit elsewhere) rather
+    than break the page.
+    """
+    if not locations_json:
+        return []
+    try:
+        items = json.loads(locations_json)
+        if not isinstance(items, list):
+            return []
+        return [
+            (item.get('field'), item.get('value'))
+            for item in items
+            if isinstance(item, dict) and item.get('field') and item.get('value') is not None
+        ]
+    except Exception:
+        return []
+
+
+def build_locations_query_filter(
+    locations_json: str,
+    bind_vars: dict,
+    alias: str = "doc",
+    param_prefix: str = "userLocations",
+    case_insensitive: bool = False,
+):
+    """Builds the AQL filter fragment for the `locations` query param (see
+    parse_location_query_pairs), letting the dashboard/records/CCVA views be
+    filtered by a combination of values spanning several admin levels at
+    once, the same way access_limit restrictions can be."""
+    return build_field_value_filter(
+        parse_location_query_pairs(locations_json), bind_vars, alias, param_prefix, case_insensitive
+    )
 
 async def load_user(email: str, db:StandardDatabase):
     collection = db.collection(db_collections.USERS)

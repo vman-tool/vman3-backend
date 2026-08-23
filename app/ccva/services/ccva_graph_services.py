@@ -1,5 +1,5 @@
 from datetime import date
-from typing import List, Optional
+from typing import Optional
 
 from arango import ArangoError
 from arango.database import StandardDatabase
@@ -9,7 +9,7 @@ from fastapi.concurrency import run_in_threadpool
 from app.settings.services.odk_configs import fetch_odk_config
 from app.shared.configs.constants import db_collections
 from app.shared.configs.models import ResponseMainModel
-from app.shared.configs.security import get_location_limit_values
+from app.shared.configs.security import build_location_limit_filter, build_locations_query_filter
 from app.shared.middlewares.exceptions import BadRequestException
 from app.shared.utils.cache import ttl_cache
 
@@ -25,7 +25,7 @@ async def fetch_db_processed_ccva_graphs(
     limit: int = 30, 
     start_date: Optional[date] = None, 
     end_date: Optional[date] = None, 
-    locations: Optional[List[str]] = None,
+    locations: Optional[str] = None,
     date_type: Optional[str] = None,
 
     db: StandardDatabase = None
@@ -41,11 +41,9 @@ async def fetch_db_processed_ccva_graphs(
         # elif locationKey == 'id10005d':
         #     locationKey = 'locationLevel2'
         config = await fetch_odk_config(db)
-        region_field = config.field_mapping.location_level1
         instance_id_field = config.field_mapping.instance_id or 'instanceid'
-        locationKey, locationLimitValues = get_location_limit_values(current_user)
 
-        # Do NOT convert locationKey to 'locationLevel1'/'locationLevel2'.
+        # Do NOT convert the restricted field(s) to 'locationLevel1'/'locationLevel2'.
         # We filter ccva_results via form_submissions IDs so the raw ODK field
         # name is what we need, and we are not dependent on the merge having
         # populated locationLevel* inside ccva_results.
@@ -98,18 +96,22 @@ async def fetch_db_processed_ccva_graphs(
         # total_records= defaultsCr[0].get('total_records')
         elapsed_time= defaultsCr[0].get('elapsed_time')
         range= defaultsCr[0].get('range')
-        # Normalise to lowercase
-        locations = [loc.lower() for loc in locations] if locations else None
-        locationLimitValues = [loc.lower() for loc in locationLimitValues] if locationLimitValues else None
+        # bind_vars is built up here (rather than at the bottom, as before)
+        # because build_location_limit_filter needs to populate it before the
+        # subquery string below is assembled.
+        bind_vars: dict = {"taskId": ccva_task_id}
 
         # Build subqueries that resolve allowed ccva_result IDs from form_submissions.
         # This is the same join-based approach used by the export and avoids relying
         # on locationLevel1/locationLevel2 being populated inside ccva_results.
-        if locationKey and locationLimitValues:
+        access_limit_filter = build_location_limit_filter(
+            current_user, bind_vars, alias='_fs', case_insensitive=True, param_prefix='accessLimitValues'
+        )
+        if access_limit_filter:
             access_ids_subquery = f"""
 LET _accessIds = (
     FOR _fs IN form_submissions
-        FILTER LOWER(_fs.{locationKey}) IN @locationLimitValues
+        FILTER {access_limit_filter}
         RETURN DISTINCT _fs.{instance_id_field}
 )"""
             access_filter = "AND (cc.ID IN _accessIds OR cc.uid IN _accessIds)"
@@ -117,11 +119,14 @@ LET _accessIds = (
             access_ids_subquery = "LET _accessIds = []"
             access_filter = ""
 
-        if locations:
+        locations_filter = build_locations_query_filter(
+            locations, bind_vars, alias='_fs', case_insensitive=True, param_prefix='userLocations'
+        )
+        if locations_filter:
             loc_ids_subquery = f"""
 LET _locIds = (
     FOR _fs IN form_submissions
-        FILTER LOWER(_fs.{region_field}) IN @locations
+        FILTER {locations_filter}
         RETURN DISTINCT _fs.{instance_id_field}
 )"""
             loc_filter = "AND (cc.ID IN _locIds OR cc.uid IN _locIds)"
@@ -331,12 +336,6 @@ LET _locIds = (
             "total_records": totalRecords
         }}
         """
-
-        bind_vars = {"taskId": ccva_task_id}
-        if locationKey and locationLimitValues:
-            bind_vars["locationLimitValues"] = locationLimitValues
-        if locations:
-            bind_vars["locations"] = locations
 
         # print(query, 'query',ccva_task_id)
         def execute_query():

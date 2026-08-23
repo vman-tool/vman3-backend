@@ -3,7 +3,7 @@ from fastapi.concurrency import run_in_threadpool
 
 from app.settings.services.odk_configs import fetch_odk_config
 from app.shared.configs.models import ResponseMainModel
-from app.shared.configs.security import get_location_limit_values
+from app.shared.configs.security import build_location_limit_filter
 
 
 from app.shared.utils.cache import ttl_cache
@@ -12,16 +12,13 @@ from app.shared.utils.cache import ttl_cache
 async def get_unique_regions(db: StandardDatabase, current_user:dict):
     config = await fetch_odk_config(db)
     region_field = config.field_mapping.location_level1
-    locationKey, locationLimitValues = get_location_limit_values(current_user)
 
-
-        
     try:
         bind_vars = {}
         location_filter = ''
-        if locationKey and locationLimitValues:
-            bind_vars['locationLimitValues'] = [v.lower() for v in locationLimitValues]
-            location_filter = f'FILTER LOWER(dt.{locationKey}) IN @locationLimitValues'
+        location_limit_filter = build_location_limit_filter(current_user, bind_vars, alias='dt', case_insensitive=True)
+        if location_limit_filter:
+            location_filter = f'FILTER {location_limit_filter}'
 
         query = f"""
         FOR dt IN form_submissions
