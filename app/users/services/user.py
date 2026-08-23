@@ -6,6 +6,7 @@ from typing import Dict, List
 
 from arango.database import StandardDatabase
 from fastapi import BackgroundTasks, HTTPException, UploadFile, status
+from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel
 
 from app.shared.configs.constants import db_collections
@@ -465,7 +466,7 @@ async def delete_role(data: List[str] = [], current_user: User = None, db: Stand
     except Exception as e:
         raise e
 
-async def assign_roles(data: AssignRolesRequest = None, current_user: User = None, db: StandardDatabase = None):
+async def assign_roles(data: AssignRolesRequest = None, current_user: User = None, current_user_privileges: List[str] = None, db: StandardDatabase = None):
     try:
         filters = {
             "in_conditions": [
@@ -476,10 +477,26 @@ async def assign_roles(data: AssignRolesRequest = None, current_user: User = Non
         existing_user = await record_exists(collection_name = db_collections.USERS, uuid = data.user, db = db)
         if not existing_user:
             raise HTTPException(status_code=404, detail="User does not exist.")
-        
+
         if len(existing_roles) < len(data.roles or []):
             raise HTTPException(status_code=404, detail="Some roles do not exist.")
-        
+
+        # Privileges are admin-editable data, not fixed by role name, and
+        # roles have no inherent ranking - "coder" or "read_only" could be
+        # granted USERS_ASSIGN_ROLES at any time via role management. So the
+        # only structurally sound rule is: you can only hand out a role
+        # whose privileges are entirely covered by your own, whatever those
+        # happen to be right now. A user with every privilege (e.g.
+        # superuser) always passes this trivially.
+        assigner_privileges = set(current_user_privileges or [])
+        for role in existing_roles:
+            missing = set(role.get('privileges') or []) - assigner_privileges
+            if missing:
+                raise HTTPException(
+                    status_code=403,
+                    detail=f"You cannot assign the '{role.get('name')}' role: it grants privileges you don't have ({', '.join(sorted(missing))})."
+                )
+
         existing_user_roles = await UserRole.get_many(filters={"user": data.user}, db=db)
         for user_role in existing_user_roles:
             if user_role and data.roles and 'role' in user_role and user_role['role'] not in data.roles:
@@ -497,7 +514,11 @@ async def assign_roles(data: AssignRolesRequest = None, current_user: User = Non
                     user_role = await UserRole(**user_role_json).save(db=db)
                 elif len(existing_user_role) == 1:
                     continue
-        if data.access_limit and data.access_limit.get('field') and current_user.get('access_limit') and current_user['access_limit'].get('field'):
+        if current_user.get('access_limit') and current_user['access_limit'].get('limit_by'):
+            # The creator's own access is itself restricted, so whatever they
+            # grant this user must stay within that same boundary: never
+            # broader, never a disjoint area at the same level (e.g. a
+            # different district), and never left unrestricted altogether.
             try:
                 config = await fetch_odk_config(db)
                 fm = config.field_mapping
@@ -507,13 +528,64 @@ async def assign_roles(data: AssignRolesRequest = None, current_user: User = Non
                     fm.location_level3: 3,
                     fm.location_level4: 4,
                 } if fm else {}
-                creator_level = field_to_level.get(current_user['access_limit']['field'], 0)
-                new_level = field_to_level.get(data.access_limit['field'], 0)
-                if creator_level > 0 and new_level > 0 and new_level < creator_level:
+
+                def _pairs(access_limit: dict) -> list:
+                    # limit_by items normally carry their own `field` (a user
+                    # can be restricted across several admin levels at once);
+                    # fall back to the legacy top-level `field` for records
+                    # saved before that change.
+                    legacy_field = access_limit.get('field', '')
+                    return [
+                        (item.get('field') or legacy_field, item.get('value'))
+                        for item in access_limit.get('limit_by', [])
+                        if (item.get('field') or legacy_field) and item.get('value') is not None
+                    ]
+
+                creator_pairs = _pairs(current_user['access_limit'])
+                new_pairs = _pairs(data.access_limit) if data.access_limit else []
+
+                if creator_pairs and not new_pairs:
                     raise HTTPException(
                         status_code=403,
-                        detail="You cannot assign an access level above your own organizational level."
+                        detail="Your own account is access-limited, so you must restrict this user to at least one location within your own boundary."
                     )
+
+                async def _within_creator_scope(field: str, value: str) -> bool:
+                    new_level = field_to_level.get(field, 0)
+                    if new_level == 0:
+                        return False
+                    for c_field, c_value in creator_pairs:
+                        c_level = field_to_level.get(c_field, 0)
+                        if c_level == 0 or new_level < c_level:
+                            continue
+                        if field == c_field:
+                            if value == c_value:
+                                return True
+                            continue
+                        # A level deeper than the creator's own restriction
+                        # (e.g. creator=district, new=ward) is only within
+                        # bounds if it actually occurs inside the creator's
+                        # area in real submitted records - admin levels have
+                        # no separate boundary table, so the data itself is
+                        # the only source of truth for what belongs to what.
+                        def _check_descendant():
+                            cursor = db.aql.execute(
+                                f"FOR doc IN {db_collections.VA_TABLE} "
+                                f"FILTER doc.{c_field} == @cv AND doc.{field} == @nv "
+                                f"LIMIT 1 RETURN 1",
+                                bind_vars={"cv": c_value, "nv": value},
+                            )
+                            return next(cursor, None) is not None
+                        if await run_in_threadpool(_check_descendant):
+                            return True
+                    return False
+
+                for field, value in new_pairs:
+                    if not await _within_creator_scope(field, value):
+                        raise HTTPException(
+                            status_code=403,
+                            detail="You can only grant access within your own administrative boundary."
+                        )
             except HTTPException:
                 raise
             except Exception:

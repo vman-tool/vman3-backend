@@ -1,7 +1,7 @@
 import asyncio
 from datetime import date
 from io import BytesIO
-from typing import List, Optional
+from typing import Optional
 
 import pandas as pd
 from arango.database import StandardDatabase
@@ -11,7 +11,7 @@ from fastapi.concurrency import run_in_threadpool
 
 from app.settings.services.odk_configs import fetch_odk_config
 from app.shared.configs.constants import db_collections
-from app.shared.configs.security import get_location_limit_values
+from app.shared.configs.security import build_location_limit_filter, build_locations_query_filter
 
 
 def _strip_workbook_formatting(workbook) -> None:
@@ -71,7 +71,7 @@ async def export_va_records_multi_sheet(
     db: StandardDatabase,
     start_date: Optional[date] = None,
     end_date: Optional[date] = None,
-    locations: Optional[List[str]] = None,
+    locations: Optional[str] = None,
     date_type: Optional[str] = None,
     include_pcva: bool = False,
     include_ccva: bool = False,
@@ -97,7 +97,6 @@ async def export_va_records_multi_sheet(
         fm = config.field_mapping
 
         instance_id       = (fm and fm.instance_id)       or 'instanceid'
-        region_field      = (fm and fm.location_level1)   or 'region'
         interview_date_f  = (fm and fm.interview_date)    or 'id10012'
         death_date_f      = (fm and fm.death_date)        or 'id10023'
         submission_date_f = (fm and fm.submitted_date)    or 'submissiondate'
@@ -119,14 +118,13 @@ async def export_va_records_multi_sheet(
             filter_conditions.append(f"va.{date_field} <= @end_date")
             bind_vars['end_date'] = end_date.isoformat()
 
-        if locations:
-            filter_conditions.append(f"va.{region_field} IN @locations")
-            bind_vars['locations'] = locations
+        locations_filter = build_locations_query_filter(locations, bind_vars, alias='va', param_prefix='userLocations')
+        if locations_filter:
+            filter_conditions.append(locations_filter)
 
-        locationKey, locationLimitValues = get_location_limit_values(current_user)
-        if locationKey and locationLimitValues:
-            filter_conditions.append(f"va.{locationKey} IN @access_limit_values")
-            bind_vars['access_limit_values'] = locationLimitValues
+        location_limit_filter = build_location_limit_filter(current_user, bind_vars, alias='va', param_prefix='access_limit_values')
+        if location_limit_filter:
+            filter_conditions.append(location_limit_filter)
 
         filter_clause = " AND ".join(filter_conditions) if filter_conditions else "true"
 
