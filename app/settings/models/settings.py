@@ -17,12 +17,12 @@ class OdkConfigModel(BaseModel):
 class SystemConfig(BaseModel):
     app_name: str
     page_title: str
-    page_subtitle: Optional[str] = None  # Optional field
+    page_subtitle: str
     admin_level1: str
-    admin_level2: Optional[str] = None  # Optional field
-    admin_level3: Optional[str] = None  # Optional field
-    admin_level4: Optional[str] = None  # Optional field
-    map_center: str
+    admin_level2: str
+    admin_level3: str
+    admin_level4: Optional[str] = None  # Not every deployment configures a 4th admin level
+    map_center: Optional[str] = None  # GPS map center - optional, currently unused by the map itself
     additional_fields: Optional[Dict[str, Any]] = Field(default_factory=dict)  # For additional fields
 
 
@@ -32,7 +32,6 @@ class FieldMapping(BaseModel):
     instance_id: str
     va_id: str
     consent_id: str  # Optional field
-    date: str
     location_level1: str
     location_level2: str
     location_level3: Optional[str] = None
