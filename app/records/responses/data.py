@@ -37,7 +37,7 @@ def map_to_data_response(config: SettingsConfigData, raw_data: dict) -> DataResp
         vaId=raw_data.get("instanceid", ""),
         region=raw_data.get(fm.location_level1, ""),
         district=raw_data.get(fm.location_level2, ""),
-        interviewDay=raw_data.get(fm.date, ""),
+        interviewDay=raw_data.get(fm.interview_date or 'id10012', ""),
         interviewerName=raw_data.get(fm.interviewer_name, ""),
         questionnaireType=questionnaire_type,
         gender=gender,

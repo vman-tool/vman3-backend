@@ -154,7 +154,7 @@ async def fetch_ics_value_sample(db: StandardDatabase) -> ResponseMainModel:
 
         # Reuse the same exclusion list so we only inspect response-type fields
         excluded: set = {
-            fm.instance_id, fm.va_id, fm.consent_id, fm.date,
+            fm.instance_id, fm.va_id, fm.consent_id,
             fm.location_level1, fm.location_level2, fm.deceased_gender,
             fm.is_adult, fm.is_child, fm.is_neonate,
             fm.interviewer_name, fm.interviewer_phone, fm.interviewer_sex,

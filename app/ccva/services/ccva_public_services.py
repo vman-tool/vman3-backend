@@ -110,7 +110,7 @@ async def run_ccva_public(db: StandardDatabase, records:any, task_id: str, task_
         # Fetch the  configuration
         config = await fetch_odk_config(db, True) # TODOS: the configaration should be loaded from the UI/dashboard , not store in db
         id_col = config.field_mapping.instance_id
-        date_col = config.field_mapping.date
+        date_col = config.field_mapping.interview_date or 'id10012'
         # Run the CCVA process in a thread pool, with real-time updates
         await update_callback(InterVA5Progress(
         progress=4,
@@ -653,7 +653,7 @@ async def getVADataAndMergeWithResults(db: StandardDatabase, results: list):
     death_date = config.field_mapping.death_date or 'id10023'
     submitted_date = config.field_mapping.submitted_date or 'today' or 'submissiondate'
     interview_date = config.field_mapping.interview_date or 'id10012'
-    date = config.field_mapping.date
+    date = interview_date
     instance_id = config.field_mapping.instance_id or 'instanceid'
     # results = [{key: result[key] for key in ['ID', 'CAUSE1', 'task_id']} for result in results]
     # Extract all data UIDs for a batch query
@@ -680,7 +680,7 @@ FOR doc IN {collection.name}
         date: LOWER(doc.{date}),
         age_group: age_group,
         locationLevel1: LOWER(doc.{location_level1}),
-        locationLevel2: LOWER(doc.{location_level2}),
+        {f'locationLevel2: LOWER(doc.{location_level2}),' if location_level2 else ''}
         death_date: doc.{death_date},
         submitted_date: doc.{submitted_date},
         interview_date: doc.{interview_date},

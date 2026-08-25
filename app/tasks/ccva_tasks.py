@@ -180,7 +180,7 @@ def run_ccva_task(
             loop.close()
         
         id_col = config_obj.field_mapping.instance_id
-        date_col = config_obj.field_mapping.date
+        date_col = config_obj.field_mapping.interview_date or 'id10012'
         
         # Define callback for progress updates
         def celery_update_callback(progress):
