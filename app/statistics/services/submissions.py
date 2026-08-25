@@ -12,11 +12,12 @@ from app.shared.utils.cache import ttl_cache
 
 
 @ttl_cache(ttl=30)
-async def fetch_submissions_statistics( current_user: dict,paging: bool = True, page_number: int = 1, limit: int = 10, start_date: Optional[date] = None, end_date: Optional[date] = None, locations: Optional[str] = None,date_type:Optional[str]=None, db: StandardDatabase = None) -> ResponseMainModel:
+async def fetch_submissions_statistics( current_user: dict,paging: bool = True, page_number: int = 1, limit: int = 10, start_date: Optional[date] = None, end_date: Optional[date] = None, locations: Optional[str] = None,date_type:Optional[str]=None, group_level: int = 2, db: StandardDatabase = None) -> ResponseMainModel:
     try:
         config = await fetch_odk_config(db, True)
         region_field = config.field_mapping.location_level1
         district_field = config.field_mapping.location_level2
+        ward_field = config.field_mapping.location_level3
         is_adult_field = config.field_mapping.is_adult
         is_child_field = config.field_mapping.is_child
         is_neonte_field = config.field_mapping.is_neonate
@@ -67,23 +68,37 @@ async def fetch_submissions_statistics( current_user: dict,paging: bool = True, 
         if filters:
             query += "FILTER " + " AND ".join(filters) + " "
 
+        # group_level picks how many admin levels the table drills into - 1
+        # (region only) through 3 (region/district/ward). A level is only
+        # included if its field is actually mapped, so an unconfigured
+        # location_level3 degrades to level 2 instead of interpolating an
+        # empty field name into the query.
+        group_fields = [("region", region_field)]
+        if group_level >= 2 and district_field:
+            group_fields.append(("district", district_field))
+        if group_level >= 3 and ward_field:
+            group_fields.append(("ward", ward_field))
+
+        collect_clause = ", ".join(f"{alias} = doc.{field}" for alias, field in group_fields)
+        return_group_fields = ",\n              ".join(alias for alias, _ in group_fields)
+
         query += f"""
-             COLLECT region = doc.{region_field}, district = doc.{district_field} INTO grouped
+             COLLECT {collect_clause} INTO grouped
             LET count = LENGTH(grouped)
             LET lastSubmission = MAX(grouped[*].doc.{today_field})
-           
+
             // LET adults = grouped[*].doc.{is_adult_field} ? TO_NUMBER(grouped[*].doc.{is_adult_field}) : []
             // LET children = grouped[*].doc.{is_child_field} ? TO_NUMBER(grouped[*].doc.{is_child_field}) : []
             // LET neonates = grouped[*].doc.{is_neonte_field} ? TO_NUMBER(grouped[*].doc.{is_neonte_field}) : []
 
             LET children = LENGTH(FOR sub IN grouped[*].doc
-                            FILTER sub.{is_child_field} == "1"
+                            FILTER TO_STRING(sub.{is_child_field}) == "1"
                             RETURN sub)
             LET adults = LENGTH(FOR sub IN grouped[*].doc
-                            FILTER sub.{is_adult_field} == "1"
+                            FILTER TO_STRING(sub.{is_adult_field}) == "1"
                             RETURN sub)
             LET neonates = LENGTH(FOR sub IN grouped[*].doc
-                            FILTER sub.{is_neonte_field} == "1"
+                            FILTER TO_STRING(sub.{is_neonte_field}) == "1"
                             RETURN sub)
             LET male = LENGTH(
               FOR sub IN grouped[*].doc
@@ -96,8 +111,7 @@ async def fetch_submissions_statistics( current_user: dict,paging: bool = True, 
               RETURN sub
             )
             RETURN {{
-              region,
-              district,
+              {return_group_fields},
               count,
               lastSubmission,
               adults,
