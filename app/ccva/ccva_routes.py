@@ -12,7 +12,7 @@ from fastapi import (APIRouter, BackgroundTasks, Body, Depends, File,
 
 from app.ccva.services.ccva_data_services import (
     delete_ccva_entry, fetch_all_processed_ccva_graphs,
-    fetch_processed_ccva_graphs, set_ccva_as_default)
+    fetch_processed_ccva_graphs, set_ccva_as_default, clear_ccva_default)
 from app.ccva.services.ccva_graph_services import \
     fetch_db_processed_ccva_graphs
 from app.ccva.services.ccva_services import (fetch_ccva_results_and_errors,
@@ -337,6 +337,17 @@ async def set_default_ccva(
     if not result:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="CCVA not found or could not be set as default")
     return {"message": "CCVA set as default successfully"}
+
+@ccva_router.post("/{ccva_id}/clear-default", status_code=status.HTTP_200_OK)
+async def clear_default_ccva(
+    ccva_id: str,
+    db: StandardDatabase = Depends(get_arangodb_session),
+    current_user = Depends(get_current_user)
+):
+    result = await clear_ccva_default(ccva_id, db)
+    if not result:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="CCVA not found or not currently default")
+    return {"message": "CCVA default cleared successfully"}
 
 # Service to delete a CCVA entry
 #@log_to_db(context="delete_ccva", log_args=True)       

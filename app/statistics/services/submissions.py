@@ -33,12 +33,10 @@ async def fetch_submissions_statistics( current_user: dict,paging: bool = True, 
             elif date_type == 'interview_date':
                 today_field = interview_date
             else:
-                today_field = config.field_mapping.date 
+                today_field = interview_date
         else:
-            today_field = config.field_mapping.date 
+            today_field = interview_date
 
-            
-        # today_field = config.field_mapping.date
         deceased_gender = config.field_mapping.deceased_gender
 
 

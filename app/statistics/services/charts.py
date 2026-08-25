@@ -71,6 +71,14 @@ async def fetch_charts_statistics( current_user: dict,paging: bool = True, page_
 
         filter_query = "FILTER " + " AND ".join(filters) + " " if filters else ""
 
+        # location_level2 (district) isn't always mapped - some deployments
+        # only configure admin level 1. Interpolating a blank field name as
+        # `doc.` is invalid AQL and fails this whole combined query, taking
+        # every chart on the dashboard down with it (not just the geo stats),
+        # so district is only added to the query when it's actually mapped.
+        geo_district_field = f", district: doc.{district_field}" if district_field else ""
+        distinct_districts_expr = "LENGTH(geoData)" if district_field else "0"
+
         combined_query = f"""
             LET monthlySubmissions = (
                 FOR doc IN {collection.name}
@@ -157,10 +165,10 @@ async def fetch_charts_statistics( current_user: dict,paging: bool = True, page_
             LET geoData = (
                 FOR doc IN {collection.name}
                 {filter_query}
-                RETURN DISTINCT {{ region: doc.{region_field}, district: doc.{district_field} }}
+                RETURN DISTINCT {{ region: doc.{region_field}{geo_district_field} }}
             )
             LET distinctRegions   = LENGTH(UNIQUE(geoData[*].region))
-            LET distinctDistricts = LENGTH(geoData)
+            LET distinctDistricts = {distinct_districts_expr}
 
             RETURN {{
                 monthly_submissions: monthlySubmissions,

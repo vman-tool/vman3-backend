@@ -22,10 +22,10 @@ async def fetch_va_records(current_user:dict,paging: bool = True, page_number: i
         va_id_field = config.field_mapping.va_id
         interviewer_field = config.field_mapping.interviewer_name
 
-        death_date = config.field_mapping.death_date 
-        submitted_date = config.field_mapping.submitted_date 
-        interview_date = config.field_mapping.interview_date 
-            
+        death_date = config.field_mapping.death_date
+        submitted_date = config.field_mapping.submitted_date
+        interview_date = config.field_mapping.interview_date or 'id10012'
+
         if date_type is not None:
             if date_type == 'submission_date':
                 today_field = submitted_date
@@ -34,9 +34,9 @@ async def fetch_va_records(current_user:dict,paging: bool = True, page_number: i
             elif date_type == 'interview_date':
                 today_field = interview_date
             else:
-                today_field = config.field_mapping.date 
+                today_field = interview_date
         else:
-            today_field = config.field_mapping.date 
+            today_field = interview_date
 
         collection = db.collection(db_collections.VA_TABLE)  # Use the actual collection name here
         query = f"FOR doc IN {collection.name} "
@@ -138,9 +138,9 @@ async def fetch_va_records_json(current_user:dict,paging: bool = True,data_sourc
             elif date_type == 'interview_date':
                 today_field = 'id10012'
             else:
-                today_field = config.field_mapping.date 
+                today_field = config.field_mapping.interview_date or 'id10012'
         else:
-            today_field = config.field_mapping.date 
+            today_field = config.field_mapping.interview_date or 'id10012'
         collection = db.collection(db_collections.VA_TABLE)  # Use the actual collection name here
         query = f"FOR doc IN {collection.name} "
         bind_vars = {}
@@ -225,12 +225,12 @@ async def fetch_va_records_count(current_user:dict, start_date: Optional[date] =
             elif date_type == 'interview_date':
                 today_field = 'id10012'
             else:
-                today_field = config.field_mapping.date 
+                today_field = config.field_mapping.interview_date or 'id10012'
         else:
-            today_field = config.field_mapping.date 
-            
+            today_field = config.field_mapping.interview_date or 'id10012'
+
         collection = db.collection(db_collections.VA_TABLE)
-        
+
         # Build count query with same filters
         query = f"FOR doc IN {collection.name} "
         bind_vars = {}

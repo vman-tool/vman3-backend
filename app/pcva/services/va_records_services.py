@@ -74,7 +74,7 @@ async def get_unassigned_va_service(
             })
 
         location_field = config.field_mapping.location_level1
-        date_field = config.field_mapping.date
+        date_field = config.field_mapping.interview_date or 'id10012'
 
         record_filters = ""
         if location:

@@ -151,7 +151,7 @@ async def run_ccva(db: StandardDatabase, records:ResponseMainModel, task_id: str
         # Fetch the  configuration
         config = await fetch_odk_config(db, True)
         id_col = config.field_mapping.instance_id
-        date_col = config.field_mapping.date
+        date_col = config.field_mapping.interview_date or 'id10012'
         # Run the CCVA process in a thread pool, with real-time updates
         await update_callback(InterVA5Progress(
         progress=4,
@@ -335,18 +335,48 @@ def runCCVA(odk_raw:pd.DataFrame, id_col: str = None,date_col:str =None,start_ti
         rangeDates = {"start": latest_date, "end": earliest_date}
         ## get ccva error logs to be added to the ccva_results
         error_logs = process_ccva_errorlogs(output_folder + file_id + "_", task_id=file_id)
+        # Saved here too (compile_ccva_results saves it again at the end on
+        # success, harmlessly - same upsert) so the per-record rejection
+        # reasons are preserved even if compile_ccva_results itself fails
+        # below, instead of being lost along with the crash.
+        db.collection(db_collections.CCVA_ERRORS).insert(error_logs, overwrite=True, overwrite_mode="update")
 
-        ccva_results= compile_ccva_results(iv5out,
-                                           data_processed_with_results=len(results_to_insert),
-                                           error_logs=error_logs,
-                                           top=top,
-                                           undetermined=undetermined,
-                                           task_id=file_id,
-                                           start_time= start_time,
-                                           total_records=total_records,  
-                                           rangeDates =rangeDates, 
-                                           db=db,
-                                           user_id=user_id)
+        try:
+            ccva_results= compile_ccva_results(iv5out,
+                                               data_processed_with_results=len(results_to_insert),
+                                               error_logs=error_logs,
+                                               top=top,
+                                               undetermined=undetermined,
+                                               task_id=file_id,
+                                               start_time= start_time,
+                                               total_records=total_records,
+                                               rangeDates =rangeDates,
+                                               db=db,
+                                               user_id=user_id)
+        except Exception as compile_exc:
+            # A run that got this far already produced valid individual
+            # classifications (results_to_insert was inserted above) - only
+            # the summary/CSMF compilation failed. Record that attempt in
+            # history instead of leaving no trace of it at all (the error
+            # log saved above still has the detail for anyone investigating).
+            elapsed_time = datetime.now() - start_time
+            elapsed_str = f"{elapsed_time.seconds // 3600}:{(elapsed_time.seconds // 60) % 60}:{elapsed_time.seconds % 60}"
+            empty_group = {"index": [], "values": []}
+            db.collection(db_collections.CCVA_GRAPH_RESULTS).insert({
+                "task_id": file_id,
+                "created_at": datetime.now().isoformat(),
+                "total_records": total_records,
+                "data_processed_with_results": len(results_to_insert),
+                "elapsed_time": elapsed_str,
+                "user_id": user_id,
+                "range": rangeDates,
+                "algorithm": "InterVA5",
+                "all": empty_group, "male": empty_group, "female": empty_group,
+                "adult": empty_group, "child": empty_group, "neonate": empty_group,
+                "status": "failed",
+                "error": str(compile_exc),
+            })
+            raise
         error_log_path = f"{output_folder}{file_id}_errorlogV5.txt"
         log_path = f"{output_folder}{file_id}.csv"
 
@@ -705,7 +735,7 @@ async def getVADataAndMergeWithResults(db: StandardDatabase, results: list):
     death_date = config.field_mapping.death_date or 'id10023'
     submitted_date = config.field_mapping.submitted_date or 'today' or 'submissiondate'
     interview_date = config.field_mapping.interview_date or 'id10012'
-    date = config.field_mapping.date
+    date = interview_date
     instance_id = config.field_mapping.instance_id or 'instanceid'
     # results = [{key: result[key] for key in ['ID', 'CAUSE1', 'task_id']} for result in results]
     # Extract all data UIDs for a batch query
@@ -732,7 +762,7 @@ FOR doc IN {db_collections.VA_TABLE}
         date: LOWER(doc.{date}),
         age_group: age_group,
         locationLevel1: LOWER(doc.{location_level1}),
-        locationLevel2: LOWER(doc.{location_level2}),
+        {f'locationLevel2: LOWER(doc.{location_level2}),' if location_level2 else ''}
         {f'locationLevel3: LOWER(doc.{location_level3}),' if location_level3 else ''}
         {f'locationLevel4: LOWER(doc.{location_level4}),' if location_level4 else ''}
         death_date: doc.{death_date},

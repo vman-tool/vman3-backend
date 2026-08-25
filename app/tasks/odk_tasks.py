@@ -156,6 +156,7 @@ def sync_odk_data_task(
             insert_many_data_to_arangodb,
             update_sync_status_internal,
             get_margin_dates_and_records_count,
+            fetch_form_questions,
         )
         from app.shared.utils.odk_columns import clean_odk_columns
 
@@ -262,6 +263,20 @@ def sync_odk_data_task(
                     current_records = await get_margin_dates_and_records_count(db)
                     current_total = current_records.get('total_records', 0) if current_records else 0
                     await update_sync_status_internal(db, records_saved, current_total)
+
+                    # Data sync and question-dictionary sync used to be two
+                    # separate manual steps, so a fresh install's very first
+                    # sync pulled records but left fields like instanceid/
+                    # isadult/ischild/isneonatal unlabelled until someone
+                    # remembered to also click "Sync Questions" - fold it in
+                    # here so one sync covers both. Non-fatal: a labels
+                    # refresh failing should never fail an otherwise-
+                    # successful data sync.
+                    try:
+                        await fetch_form_questions(db, override_labels=False)
+                    except Exception as questions_exc:
+                        logger.warning(f"Question dictionary sync after data sync failed (non-fatal): {questions_exc}")
+
                     await _save_sync_history(
                         db,
                         records_synced=records_saved,
