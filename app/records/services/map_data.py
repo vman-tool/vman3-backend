@@ -30,7 +30,7 @@ async def fetch_va_map_records(
         interviewer_field = config.field_mapping.interviewer_name
 
 
-        today_field = config.field_mapping.date
+        today_field = config.field_mapping.interview_date or 'id10012'
 
         query = f"""
             FOR doc IN {collection.name}
@@ -62,15 +62,19 @@ async def fetch_va_map_records(
 
         if paging and limit and locations is None:
             query += f"LIMIT {limit} "
-    
+
+        # location_level2 (district) isn't always mapped - some deployments
+        # only configure admin level 1. Interpolating a blank field name as
+        # `doc.` is invalid AQL and fails this whole query.
+        district_line = f"district: doc.{district_field}," if district_field else ""
 
         query += f"""
-        
+
             RETURN {{
             id: doc._key,
             location: doc.{region_field},
             coordinates: doc.coordinates,
-            district: doc.{district_field},
+            {district_line}
             date: doc.{today_field},
             interviewer: doc.{interviewer_field},
             deviceid: doc.deviceid

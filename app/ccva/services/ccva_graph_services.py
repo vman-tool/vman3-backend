@@ -62,22 +62,10 @@ async def fetch_db_processed_ccva_graphs(
             elif date_type == 'interview_date':
                 today_field = interview_date
             else:
-                today_field = config.field_mapping.date 
+                today_field = interview_date
         else:
-            today_field = config.field_mapping.date 
-            
-        # if date_type is not None:
-        #     if date_type == 'submission_date':
-        #         today_field = 'submitted_date'
-        #     elif date_type == 'death_date':
-        #         today_field = 'death_date'
-        #     elif date_type == 'interview_date':
-        #         today_field = 'interview_date'
-        #     else:
-        #         today_field = 'date' or config.field_mapping.date 
-        # else:
-        #     today_field = 'date' or config.field_mapping.date 
-            
+            today_field = interview_date
+
         collection_name = db_collections.CCVA_RESULTS  # Use the actual collection name here
         if ccva_id is not None:
             cursor_cr = db.collection(db_collections().CCVA_GRAPH_RESULTS).find({
