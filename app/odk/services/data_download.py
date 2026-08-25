@@ -21,6 +21,7 @@ from app.settings.models.settings import SettingsConfigData, SyncStatus
 from app.shared.configs.arangodb import (ArangoDBClient, get_arangodb_client,
                                          remove_null_values, sanitize_document, clean_document)
 from app.shared.configs.constants import data_sources, db_collections
+from app.shared.utils.odk_columns import clean_odk_columns
 from app.shared.configs.models import ResponseMainModel
 
 
@@ -201,7 +202,7 @@ async def fetch_odk_data_with_async(
                         break
 
                     df = pd.json_normalize(page_records, sep='/')
-                    df.columns = [col.split('/')[-1] for col in df.columns]
+                    df.columns = clean_odk_columns(df.columns, sep='/')
                     df.columns = df.columns.str.lower()
                     df = df.dropna(axis=1, how='all')
                     df = df.loc[:, ~df.columns.duplicated()]

@@ -153,7 +153,23 @@ async def create_default_roles(current_user: User = None):
             if (role_created and role_created.data.name == 'superuser') or (len(existing_roles) > 0 and existing_roles[0]['name'] == 'superuser'):
                 role_to_assign = role_created.data.uuid if role_created else existing_roles[0]['uuid']
                 role_assignment_request = AssignRolesRequest(user = current_user.uuid, roles = [role_to_assign])
-                user_role = await user.assign_roles(data = role_assignment_request, current_user = current_user, db = db)
+                # This is system bootstrap, not a user-initiated grant - there is no
+                # assigner with existing privileges to check against yet (that's the
+                # whole point of creating the first superuser). Pass the full privilege
+                # set so assign_roles' "can't grant more than you have" guard doesn't
+                # block the very first role assignment on a fresh database.
+                #
+                # Unlike save_role, assign_roles reads current_user as a plain dict
+                # (current_user['uuid'], current_user.get('access_limit')) - it's
+                # always called with the raw dict from get_current_user over HTTP.
+                # Passing the User object used elsewhere in this function breaks
+                # that: User has no 'access_limit' field and isn't subscriptable.
+                user_role = await user.assign_roles(
+                    data = role_assignment_request,
+                    current_user = current_user.model_dump(),
+                    current_user_privileges = AccessPrivileges.get_privileges(),
+                    db = db,
+                )
                 if user_role.data:
                     logger.info(f"User {current_user.name} assigned to superuser role successfully")
     except Exception as e:
