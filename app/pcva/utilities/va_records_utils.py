@@ -45,7 +45,7 @@ def format_va_record(raw_data: dict, config: SettingsConfigData = None) -> DataR
     instance_field = config.field_mapping.instance_id
     district_field = config.field_mapping.location_level2
     interview_name_field = config.field_mapping.interviewer_name
-    today_field = config.field_mapping.date
+    today_field = config.field_mapping.interview_date or 'id10012'
 
     # Fall back to None, not to the field's name. These defaults used to be the
     # literal strings "id10005r", "today", "id10007" and so on, so a record
