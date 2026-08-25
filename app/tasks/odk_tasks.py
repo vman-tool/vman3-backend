@@ -157,6 +157,7 @@ def sync_odk_data_task(
             update_sync_status_internal,
             get_margin_dates_and_records_count,
         )
+        from app.shared.utils.odk_columns import clean_odk_columns
 
         db = get_arangodb_client_sync()
         loop = asyncio.new_event_loop()
@@ -224,7 +225,7 @@ def sync_odk_data_task(
                             break
 
                         df = pd.json_normalize(page_records, sep='/')
-                        df.columns = [col.split('/')[-1] for col in df.columns]
+                        df.columns = clean_odk_columns(df.columns, sep='/')
                         df.columns = df.columns.str.lower()
                         df = df.dropna(axis=1, how='all')
                         df = df.loc[:, ~df.columns.duplicated()]
