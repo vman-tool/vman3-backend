@@ -146,6 +146,12 @@ async def fetch_odk_data_with_async_endpoint(
             app_logger.info(f"ODK sync task dispatched (id={task_id}, user={user_name}, {total_data_count} records)")
         else:
             task_id = None
+            # No new records to pull, so sync_odk_data_task (which also
+            # refreshes the question dictionary - see odk_tasks.py) never
+            # runs. Still refresh it here in the background so "Sync Data"
+            # keeps question labels current even on a no-op data sync,
+            # without holding up this response.
+            background_tasks.add_task(data_download.fetch_form_questions, db, False)
 
         return {"status": "Data fetch initiated", "using_celery": True, "task_id": task_id, **initial_response}
 
