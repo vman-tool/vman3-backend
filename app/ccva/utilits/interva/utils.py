@@ -176,7 +176,15 @@ def csmf(iva5: interva.interva5.InterVA5,
             va5_results = va5_results[sex_index]
 
     if va5_results.shape[0] == 0:
-        raise ArgumentException("No VA results found.")
+        # A specific demographic slice (e.g. no neonates, or no males) can
+        # legitimately have zero rows in a batch even when the run overall
+        # produced valid results - _csmf_without_interva_rule already
+        # returns None for an empty input for exactly this reason (see
+        # `if va.shape[0] < 1: return None` below), so raising here instead
+        # of falling through to that existing empty-input handling turned
+        # one CSMF-empty subgroup into a hard failure of the whole run, with
+        # nothing saved and no visible trace of the attempt.
+        return Series(dtype=float)
 
     if va5_results.shape[1] != 15 and va5_results.shape[1] != 17:
         raise ArgumentException(
@@ -189,7 +197,12 @@ def csmf(iva5: interva.interva5.InterVA5,
         dist_cod = _csmf_without_interva_rule(va5_results, top_aggregate)
 
     if dist_cod is None:
-        return None
+        # Same reasoning as the empty-shape case above: every caller in this
+        # codebase treats csmf()'s return value as a Series unconditionally
+        # (`.index.tolist()`, `.tolist()`), matching its declared return
+        # type - returning None here would just move the crash one level
+        # up instead of avoiding it.
+        return Series(dtype=float)
 
     dist_cod.sort_values(ascending=False, inplace=True)
 
