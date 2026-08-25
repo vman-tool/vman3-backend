@@ -19,7 +19,7 @@ async def fetch_ccva_records(paging: bool = True, page_number: int = 1, limit: i
         config = await fetch_odk_config(db, True)
         region_field = config.field_mapping.location_level1
 
-        today_field = config.field_mapping.date
+        today_field = config.field_mapping.interview_date or 'id10012'
         collection = db.collection(db_collections.CCVA_RESULTS)  # Use the actual collection name here
         query = f"FOR doc IN {collection.name} "
         bind_vars = {}
@@ -402,8 +402,40 @@ async def set_ccva_as_default(ccva_id: str, db: StandardDatabase) -> ResponseMai
     except ArangoError as e:
         raise BadRequestException("Failed to set CCVA as default", str(e))
     except Exception as e:
-        app_logger.error(f"Failed to set CCVA as default: {e}")
-          
+        raise BadRequestException(f"Failed to set CCVA as default: {str(e)}", str(e))
+
+async def clear_ccva_default(ccva_id: str, db: StandardDatabase) -> ResponseMainModel:
+    try:
+        collection = db.collection(db_collections.CCVA_GRAPH_RESULTS)
+
+        query_clear_default = f"""
+        FOR doc IN {collection.name}
+        FILTER doc._key == @ccva_id AND doc.isDefault == true
+        UPDATE doc WITH {{ isDefault: false }} IN {collection.name}
+        RETURN NEW
+        """
+        bind_vars = {"ccva_id": ccva_id}
+
+        def execute_clear_default():
+            cursor = db.aql.execute(query_clear_default, bind_vars=bind_vars, cache=True)
+            return next(cursor, None)
+
+        updated_doc = await run_in_threadpool(execute_clear_default)
+        if not updated_doc:
+            raise BadRequestException(f"CCVA entry with id {ccva_id} not found or not currently default")
+
+        await invalidate_cache_pattern("ccva_*")
+        return ResponseMainModel(
+            data=updated_doc,
+            message=f"CCVA entry with id {ccva_id} default cleared successfully",
+            total=None
+        )
+
+    except ArangoError as e:
+        raise BadRequestException("Failed to clear CCVA default", str(e))
+    except Exception as e:
+        raise BadRequestException(f"Failed to clear CCVA default: {str(e)}", str(e))
+
 async def delete_ccva_entry(ccva_id: str, db: StandardDatabase) -> ResponseMainModel:
     try:
         # Define the collection
