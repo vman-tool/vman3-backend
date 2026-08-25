@@ -94,9 +94,9 @@ async def fetch_charts_statistics( current_user: dict,paging: bool = True, page_
                     {filter_query}
     LET ageGroup = FIRST(
         FOR key IN ["adult", "child", "neonatal"]
-            FILTER (key == "adult" AND doc.{is_adult_field} == '1') OR 
-                   (key == "child" AND doc.{is_child_field} == '1') OR 
-                   (key == "neonatal" AND doc.{is_neonate_field} == '1')
+            FILTER (key == "adult" AND TO_STRING(doc.{is_adult_field}) == '1') OR
+                   (key == "child" AND TO_STRING(doc.{is_child_field}) == '1') OR
+                   (key == "neonatal" AND TO_STRING(doc.{is_neonate_field}) == '1')
             RETURN key
     ) || "unknown"
 

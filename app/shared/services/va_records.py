@@ -1,5 +1,5 @@
 import re
-from typing import Dict
+from typing import Dict, List
 
 from arango.database import StandardDatabase
 from fastapi import HTTPException
@@ -176,6 +176,39 @@ async def shared_fetch_va_records(paging: bool = True,  page_number: int = 1, li
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to fetch data: {e}")
     
+
+# Bookkeeping fields the insert path stamps onto every VA record document
+# (or ArangoDB itself adds) - never a real submission column, so they'd
+# only clutter the Field Mapping picker.
+_INTERNAL_VA_FIELDS = {
+    '_key', '_id', '_rev',
+    'vman_data_source', 'vman_data_name', '__id', 'version_number', 'trackid',
+}
+
+
+async def get_distinct_va_field_names(db: StandardDatabase = None) -> List[str]:
+    """All distinct top-level field names actually present on VA records.
+
+    The question dictionary (form_questions, backing Field Mapping's search)
+    only ever contains XLSForm survey rows - ODK org-unit/geo metadata like
+    "region"/"woreda" are never survey questions, so no sync or xForm upload
+    can put them there, no matter how fresh. This reads the real data
+    instead, so those fields can still be mapped.
+    """
+    query = f"""
+        FOR doc IN {db_collections.VA_TABLE}
+            FOR k IN ATTRIBUTES(doc)
+                COLLECT field = k
+                RETURN field
+    """
+
+    def execute_field_names_query():
+        cursor = db.aql.execute(query)
+        return [document for document in cursor]
+
+    fields = await run_in_threadpool(execute_field_names_query)
+    return sorted(f for f in fields if f not in _INTERNAL_VA_FIELDS)
+
 
 async def get_field_value_from_va_records(
     field: str,

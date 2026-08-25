@@ -32,6 +32,7 @@ from app.settings.services.odk_configs import (
     save_system_images,
 )
 from app.shared.utils.cache import invalidate_cache_pattern
+from app.shared.utils.odk_columns import clean_odk_columns
 from datetime import datetime, timezone
 from app.shared.configs.arangodb import get_arangodb_session
 from app.shared.configs.constants import AccessPrivileges, data_sources, db_collections
@@ -336,10 +337,19 @@ async def upload_csv(
         contents = await file.read()
         df = pd.read_csv(io.StringIO(contents.decode('utf-8')), low_memory=False)
 
+        # ODK Central CSV exports join a submission's nested group path onto
+        # each field name with '-' (e.g. "orgunit-region", "meta-instanceID"),
+        # the same convention the ODK API sync path resolves via
+        # clean_odk_columns on its '/'-joined json_normalize output. Without
+        # this, fields land under their full compound name instead of the
+        # bare name (e.g. "region", "instanceid") the rest of the app - field
+        # mapping config, charts, dashboard filters - actually queries by.
+        df.columns = clean_odk_columns(df.columns, sep='-')
+        df.columns = df.columns.str.lower()
+        df = df.loc[:, ~df.columns.duplicated()]
 
-        if 'instanceID' in df.columns:
-            df['instanceid'] = df['instanceID']
-            df.drop(columns=['instanceID'], inplace=True)
+        unique_id = (unique_id or 'KEY').strip().lower()
+
         if 'instanceid' not in df.columns:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Instance ID (instanceid) not found in the uploaded CSV")
         if unique_id not in df.columns:
@@ -349,11 +359,8 @@ async def upload_csv(
         df['vman_data_name'] = 't'
         df['__id'] =df[unique_id]
 
-         
-        
         df['version_number'] = '1.0'
         df['trackid'] = task_id
-        df.columns = map(str.lower, df.columns)
 
         # Convert DataFrame back to a list of dictionaries
         recordsDF = df.to_dict(orient='records')

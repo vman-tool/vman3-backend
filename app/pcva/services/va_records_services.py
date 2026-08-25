@@ -16,6 +16,7 @@ from app.pcva.utilities.va_records_utils import format_va_record, get_categorise
 from app.shared.configs.models import Pager, ResponseMainModel, VManBaseModel
 from app.odk.models.questions_models import VA_Question
 from app.settings.services.odk_configs import fetch_odk_config
+from app.shared.services.va_records import get_distinct_va_field_names
 
 import pandas as pd
 
@@ -727,9 +728,21 @@ async def get_form_questions_service(filters: Dict = None, db: StandardDatabase 
     questions = await VA_Question.get_many(paging=False, filters=filters, db=db)
 
     questions = [VAQuestionResponseClass(**question).model_dump() for question in questions]
-    questions = { question['name']: question for question in questions} if len(questions) else []
-    
-     
+    questions = { question['name']: question for question in questions} if len(questions) else {}
+
+    # Only for the "give me everything" call (no specific names requested) -
+    # merges in raw field names that actually exist on VA records but were
+    # never, and can never be, part of the question dictionary (see
+    # get_distinct_va_field_names). A caller asking for specific
+    # question_id's wants exactly those, not the whole data-driven set.
+    if not filters:
+        raw_fields = await get_distinct_va_field_names(db)
+        for name in raw_fields:
+            if name not in questions:
+                questions[name] = VAQuestionResponseClass(
+                    path=name, name=name, type='string', label=name
+                ).model_dump()
+
     return ResponseMainModel(data=questions, message="Questions fetched successfully", total=len(questions))
 
 
