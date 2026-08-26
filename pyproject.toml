@@ -1,0 +1,6 @@
+[tool.pytest.ini_options]
+# test_performance.py at the repo root is a live-DB diagnostic script, not a
+# unit test - scoping discovery to tests/ keeps a bare `pytest` from
+# collecting it.
+testpaths = ["tests"]
+asyncio_mode = "auto"
