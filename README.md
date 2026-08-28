@@ -119,6 +119,42 @@ docker compose up --build
 > ```
 > Data in the `vman3db` volume is preserved automatically.
 
+## Running Tests
+
+Unit tests use [pytest](https://docs.pytest.org/). Most tests run against a
+lightweight fake ArangoDB (`tests/support/fakes.py`) instead of a real
+database, so the whole suite runs in well under a second.
+
+```bash
+# Install test dependencies (installs requirements.txt too)
+pip install -r requirements-dev.txt
+
+# Run the full suite
+pytest
+
+# Run one file, or one test, verbosely
+pytest tests/unit/ccva/test_interva_utils.py -v
+pytest tests/unit/ccva/test_interva_utils.py::test_csmf_rejects_an_invalid_age_group -v
+
+# With a coverage report
+pytest --cov=app --cov-report=term-missing
+```
+
+Tests live under `tests/unit/`, mirroring `app/`'s package layout (e.g.
+`app/ccva/services/...` is covered by `tests/unit/ccva/...`).
+`tests/conftest.py` and `tests/support/fakes.py` hold shared fixtures — the
+fake ArangoDB stand-ins (`FakeDB`/`FakeAQL`/`FakeCursor`) most tests build
+on to check what AQL a function issued, or feed it canned results, without
+touching a real database.
+
+`test_performance.py` at the project root is a separate, manual diagnostic
+script for checking live query performance against a real database — it's
+not a unit test, and `pyproject.toml` scopes pytest's discovery to `tests/`
+so a bare `pytest` run never picks it up.
+
+The same suite runs in CI (`.github/workflows/main.yml`) on every push/PR
+to `main`, before the Docker image is built.
+
 ## Development Guidelines
 
 ### 1. Asynchronous vs Synchronous Code
