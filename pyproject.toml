@@ -4,3 +4,10 @@
 # collecting it.
 testpaths = ["tests"]
 asyncio_mode = "auto"
+# Neither `app` nor `tests` is an installed package (no `pip install -e .`
+# in CI, only requirements-dev.txt) - `python -m pytest` happens to work
+# locally because `-m` prepends the CWD to sys.path, but a bare `pytest`
+# invocation (what CI runs) does not, so imports like `from app...` in
+# test files or `from tests.support...` in conftest.py fail with
+# ModuleNotFoundError. This makes both resolve regardless of invocation.
+pythonpath = ["."]
