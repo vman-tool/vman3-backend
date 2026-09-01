@@ -5,7 +5,70 @@ from typing import List
 import uuid
 
 from fastapi import UploadFile
+from PIL import Image, UnidentifiedImageError
+
 from app.shared.configs.constants import Special_Constants
+
+
+def validate_image(
+    file: UploadFile,
+    max_size_bytes: int,
+    min_width: int = 1,
+    min_height: int = 1,
+) -> None:
+    """Validates an uploaded image is within the size limit and is a
+    genuinely decodable image of at least the given dimensions - catches
+    corrupted files and files whose extension doesn't match their actual
+    content, not just files with the wrong extension (see save_file's own
+    extension check for that).
+
+    SVG is vector, not raster - Pillow can't decode it, and its dimensions
+    aren't a fixed pixel grid, so it only gets a lightweight sanity check.
+
+    Rewinds file.file back to the start before returning, so a subsequent
+    save_file() call still reads the whole file.
+
+    :raises ValueError: on any validation failure
+    """
+    file.file.seek(0, os.SEEK_END)
+    size = file.file.tell()
+    file.file.seek(0)
+
+    if size > max_size_bytes:
+        raise ValueError(
+            f"File is too large ({size / 1024 / 1024:.1f} MB). "
+            f"Maximum allowed is {max_size_bytes / 1024 / 1024:.1f} MB."
+        )
+
+    file_extension = (file.filename or "").split(".")[-1].lower()
+    if file_extension == "svg":
+        head = file.file.read(2048)
+        file.file.seek(0)
+        if b"<svg" not in head.lower():
+            raise ValueError("File is not a valid SVG image.")
+        return
+
+    try:
+        with Image.open(file.file) as image:
+            image.verify()
+        # verify() leaves the image unusable for further reads (and, per
+        # Pillow's own docs, shouldn't be used before it) - re-open to read
+        # actual dimensions.
+        file.file.seek(0)
+        with Image.open(file.file) as image:
+            width, height = image.size
+    except UnidentifiedImageError:
+        raise ValueError("File is not a valid image.")
+    except Exception:
+        raise ValueError("File could not be read as an image - it may be corrupted.")
+    finally:
+        file.file.seek(0)
+
+    if width < min_width or height < min_height:
+        raise ValueError(
+            f"Image is too small ({width}x{height}px). "
+            f"Minimum size is {min_width}x{min_height}px."
+        )
 
 
 def save_file(file: UploadFile, valid_file_extensions: List[str] = None, delete_extisting: str = None, reconstruct_filename: bool = True):
