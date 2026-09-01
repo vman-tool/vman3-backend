@@ -40,7 +40,7 @@ from app.shared.configs.models import ResponseMainModel
 from app.shared.services.va_records import get_field_value_from_va_records
 from app.users.decorators.user import check_privileges, get_current_user
 from app.utilits.db_logger import db_logger, log_to_db
-from app.utilits.helpers import delete_file, save_file
+from app.utilits.helpers import delete_file, save_file, validate_image
 from app.utilits.schedeular import schedule_odk_fetch_job
 from app.shared.utils.cache import cache
 # from sqlalchemy.orm import Session
@@ -215,6 +215,24 @@ async def get_field_unique_value(
     response = await get_field_value_from_va_records(field=field, db=db, parent_field=parent_field, parent_value=parent_value, current_user=current_user, scope_to_user=scope_to_user)
     return response
 
+VALID_IMAGE_EXTENSIONS = ['jpg', 'jpeg', 'png', 'ico', 'svg', 'gif', 'webp']
+
+# (max file size in bytes, min width px, min height px) per image - a
+# favicon is tiny by nature, while a logo or login background being under
+# these floors is almost certainly a corrupted or placeholder upload.
+IMAGE_VALIDATION_RULES = {
+    "favicon": (512 * 1024, 16, 16),
+    "logo": (5 * 1024 * 1024, 64, 64),
+    "home_image": (5 * 1024 * 1024, 200, 200),
+}
+
+# Maps the DB/model field name to the multipart form field name - the
+# upload form field is "login_image" (matching the frontend's <input> name)
+# while everywhere else (the DB record, ImagesConfigData) calls it
+# "home_image".
+IMAGE_TYPE_FORM_FIELD = {"logo": "logo", "favicon": "favicon", "home_image": "login_image"}
+
+
 @settings_router.post("/system_images/")
 async def upload_image(
     logo: UploadFile = File(None),
@@ -225,28 +243,35 @@ async def upload_image(
     db: StandardDatabase = Depends(get_arangodb_session)
 ):
     try:
-        valid_image_extensions = ['jpg', 'jpeg', 'png', 'ico', 'svg', 'gif', 'webp']
-        logo_saved_path = None
-        login_image_saved_path = None
-        favicon_saved_path = None
+        uploads = {"logo": logo, "home_image": login_image, "favicon": favicon}
+
+        for image_type, upload in uploads.items():
+            if not upload:
+                continue
+            max_size, min_width, min_height = IMAGE_VALIDATION_RULES[image_type]
+            try:
+                validate_image(upload, max_size_bytes=max_size, min_width=min_width, min_height=min_height)
+            except ValueError as e:
+                raise HTTPException(status_code=400, detail=f"{IMAGE_TYPE_FORM_FIELD[image_type]}: {e}")
 
         existing_images_record = await get_system_images(db)
 
         existing_images = existing_images_record[0] if len(existing_images_record) >  0 and existing_images_record[0] is not None else {}
 
-        if logo:
-            logo_saved_path = save_file(logo, valid_file_extensions=valid_image_extensions, delete_extisting=existing_images["logo"] if "logo" in existing_images else None)
-        
-        if login_image:
-            login_image_saved_path = save_file(login_image, valid_file_extensions=valid_image_extensions, delete_extisting=existing_images["home_image"] if "home_image" in existing_images else None)
-        
-        if favicon:
-            favicon_saved_path = save_file(favicon, valid_file_extensions=valid_image_extensions, delete_extisting=existing_images["favicon"] if "favicon" in existing_images else None)
+        saved_paths = {}
+        for image_type, upload in uploads.items():
+            if not upload:
+                continue
+            saved_paths[image_type] = save_file(
+                upload,
+                valid_file_extensions=VALID_IMAGE_EXTENSIONS,
+                delete_extisting=existing_images.get(image_type),
+            )
 
         data = ImagesConfigData(
-            logo=logo_saved_path,
-            favicon=favicon_saved_path,
-            home_image = login_image_saved_path
+            logo=saved_paths.get("logo"),
+            favicon=saved_paths.get("favicon"),
+            home_image=saved_paths.get("home_image"),
         )
         results = await save_system_images(data = data, db = db)
 
@@ -255,6 +280,10 @@ async def upload_image(
             message="System images uploaded successfully"
         )
 
+    except HTTPException:
+        raise
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -273,8 +302,10 @@ async def get_images(
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@settings_router.delete("/system_images/", description="Get System Images")
+@settings_router.delete("/system_images/", description="Reset all system images to default")
 async def delete_system_images(
+    current_user = Depends(get_current_user),
+    required_privs: List[str] = Depends(check_privileges([AccessPrivileges.SETTINGS_UPDATE_SYSTEM_IMAGES])),
     db: StandardDatabase = Depends(get_arangodb_session)
 ):
     try:
@@ -299,6 +330,38 @@ async def delete_system_images(
         return ResponseMainModel(
             data = results,
             message="System images reset successfully"
+        )
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@settings_router.delete("/system_images/{image_type}", description="Reset a single system image to default")
+async def delete_single_system_image(
+    image_type: str,
+    current_user = Depends(get_current_user),
+    required_privs: List[str] = Depends(check_privileges([AccessPrivileges.SETTINGS_UPDATE_SYSTEM_IMAGES])),
+    db: StandardDatabase = Depends(get_arangodb_session)
+):
+    if image_type not in IMAGE_VALIDATION_RULES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid image type '{image_type}'. Must be one of: {', '.join(IMAGE_VALIDATION_RULES)}",
+        )
+    try:
+        existing_images_record = await get_system_images(db)
+        existing_images = existing_images_record[0] if len(existing_images_record) > 0 and existing_images_record[0] is not None else {}
+
+        if existing_images.get(image_type):
+            try:
+                delete_file(existing_images[image_type])
+            except:
+                print(f"Could not delete {image_type}")
+
+        results = await save_system_images(data=ImagesConfigData(), fields_to_reset=[image_type], db=db)
+
+        return ResponseMainModel(
+            data=results,
+            message=f"{image_type} reset successfully",
         )
 
     except Exception as e:

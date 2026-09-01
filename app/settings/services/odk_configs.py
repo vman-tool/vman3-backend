@@ -1,4 +1,5 @@
 from types import SimpleNamespace
+from typing import List, Optional
 
 from arango.database import StandardDatabase
 from fastapi import HTTPException, status
@@ -289,7 +290,14 @@ async def get_system_images(db: StandardDatabase = None):
     data = await run_in_threadpool(execute_get_images_query)
     return data
 
-async def save_system_images(data: ImagesConfigData, reset: bool = False, db: StandardDatabase = None):
+async def save_system_images(data: ImagesConfigData, reset: bool = False, fields_to_reset: Optional[List[str]] = None, db: StandardDatabase = None):
+    """
+    :param reset: force every field in `data` onto the existing record,
+        including nulls - used to reset ALL images at once.
+    :param fields_to_reset: reset just these specific fields to null,
+        leaving the rest of the existing record (and anything else merged
+        in from `data`) untouched - used to reset a single image.
+    """
     try:
         if not data and not reset:
             raise ValueError("No system images provided")
@@ -298,14 +306,17 @@ async def save_system_images(data: ImagesConfigData, reset: bool = False, db: St
 
         existing_images = await get_system_images(db)
         if len(existing_images) > 0 and existing_images[0] is not None:
-            
+
             updated_images = replace_object_values(saving_data['system_images'], existing_images[0], force=reset)
+            if fields_to_reset:
+                for field in fields_to_reset:
+                    updated_images[field] = None
             saving_data['system_images'] = updated_images
             await save_system_settings(saving_data, db)
-            
+
             # Invalidate cache for smart update
             await invalidate_cache("system_images")
-            
+
             return await get_system_images(db)
         else:
             await save_system_settings(saving_data, db)
