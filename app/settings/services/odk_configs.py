@@ -279,8 +279,20 @@ async def get_questioners_fields(db: StandardDatabase = None):
     
 @ttl_cache(ttl=3600, key_prefix="system_images") # Cache for 1 hour
 async def get_system_images(db: StandardDatabase = None):
+    # Regression: this used to scan every document in SYSTEM_CONFIGS
+    # (FOR settings IN ... RETURN settings.system_images) rather than
+    # looking up the one settings document by key, like everywhere else in
+    # this file does (db.collection(...).get('vman_config')). That's fine
+    # when 'vman_config' is the only document in the collection, but other
+    # features (e.g. the DQA analytics scheduler) store their own documents
+    # there too under different keys - and AQL's scan order over those isn't
+    # guaranteed to put 'vman_config' first. Whenever it didn't, this
+    # returned an unrelated document's (absent) system_images as index 0,
+    # which every caller treats as "no images configured" - making a
+    # perfectly successful upload look like it silently reset everything.
     aql_query = f"""
         FOR settings in  {db_collections.SYSTEM_CONFIGS}
+        FILTER settings._key == "vman_config"
         RETURN settings.system_images
     """
     def execute_get_images_query():

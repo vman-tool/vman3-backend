@@ -28,19 +28,25 @@ def cache(*args, **kwargs):
 async def invalidate_cache(key: str):
     """
     Invalidates a specific cache key using FastAPICache backend.
-    Dynamically gets prefix and client from initialized FastAPICache.
+
+    :param key: the exact cache key to delete - this must match a
+        ttl_cache(key_prefix=...)'s key_prefix verbatim. ttl_cache's own key
+        builder (see specific_key_builder in this module) uses key_prefix as
+        the literal cache key with no namespace/prefix applied, unlike
+        fastapi-cache2's own default_key_builder - so this must NOT prepend
+        FastAPICache's global prefix, or it deletes a key nothing ever wrote
+        to. That mismatch previously made every call here a silent no-op:
+        a save would invalidate "{prefix}:{key}" while the actual cached
+        entry sat under the bare key, so the next read kept serving
+        up-to-an-hour-stale data regardless of what was just saved.
     """
 
     try:
-
         backend = FastAPICache.get_backend()
-        prefix = FastAPICache.get_prefix() or ""
 
-        
         if hasattr(backend, "redis"):
             redis = backend.redis
-            full_key = f"{prefix}:{key}" if prefix else key
-            await redis.delete(full_key)
+            await redis.delete(key)
     except Exception as e:
         print("COULDN'T INVALIDATE CACHE FOR KEY: ", key, " ERROR: ", e)
         pass

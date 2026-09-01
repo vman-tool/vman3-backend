@@ -41,7 +41,6 @@ from app.shared.services.va_records import get_field_value_from_va_records
 from app.users.decorators.user import check_privileges, get_current_user
 from app.utilits.db_logger import db_logger, log_to_db
 from app.utilits.helpers import delete_file, save_file, validate_image
-from app.utilits.schedeular import schedule_odk_fetch_job
 from app.shared.utils.cache import cache
 # from sqlalchemy.orm import Session
 
@@ -631,25 +630,27 @@ async def get_cron_settings(
 #@log_to_db(context="save_api_cron_settings", log_args=True)
 @settings_router.post("/cron", status_code=status.HTTP_200_OK, response_model=ResponseMainModel)
 async def save_api_cron_settings(
-     background_tasks: BackgroundTasks,
     settings: CronSettings,
     current_user = Depends(get_current_user),
     required_privs: List[str] = Depends(check_privileges([AccessPrivileges.SETTINGS_CREATE_SYSTEM_CONFIGS])),
     db: StandardDatabase = Depends(get_arangodb_session)):
-    """Save API cron settings"""
+    """Save API cron settings.
+
+    Nothing needs to be re-scheduled here - Celery beat's
+    check_odk_sync_schedule (app/tasks/odk_tasks.py) re-reads cron_settings
+    from the database on every run (once a minute), so a saved change takes
+    effect on its own within a minute, with no explicit "apply" step.
+    """
     try:
         # Create a SettingsConfigData object with cron_settings
         config_data = SettingsConfigData(
             type='cron_settings',
             cron_settings=settings
         )
-        
+
         # Save the settings
         response = await add_configs_settings(config_data, db=db)
-        background_tasks.add_task(schedule_odk_fetch_job, db)
-        print("Scheduled ODK fetch job executed successfully")
-        
-        
+
         return ResponseMainModel(
             data=settings.model_dump(),
             message="Cron settings saved successfully"
