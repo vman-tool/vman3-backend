@@ -26,6 +26,7 @@ from app.settings.services.data_reset import preview_reset, reset_va_data
 from app.settings.services.xform_dictionary import enrich_questions_from_xform, get_data_dictionary, update_question_label
 from app.settings.services.odk_configs import (
     add_configs_settings,
+    ensure_odk_api_ready_for_scheduling,
     fetch_configs_settings,
     get_questioners_fields,
     get_system_images,
@@ -642,6 +643,13 @@ async def save_api_cron_settings(
     effect on its own within a minute, with no explicit "apply" step.
     """
     try:
+        # A schedule can only ever run an ODK API sync - there's no way to
+        # "schedule" a CSV upload - so enabling one (days non-empty) without
+        # a working ODK API connection would just fail on every fire, every
+        # day. Disabling (empty days) is always allowed regardless.
+        if settings.days:
+            await ensure_odk_api_ready_for_scheduling(db)
+
         # Create a SettingsConfigData object with cron_settings
         config_data = SettingsConfigData(
             type='cron_settings',
@@ -655,10 +663,15 @@ async def save_api_cron_settings(
             data=settings.model_dump(),
             message="Cron settings saved successfully"
         )
+    except HTTPException:
+        # Preserve the 400 + message from ensure_odk_api_ready_for_scheduling
+        # (BadRequestException) as-is - the blanket handler below would
+        # otherwise rewrap it as a 500 with a mangled "400: ..." message.
+        raise
     except Exception as e:
         print(e)
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
-    
+
 #@log_to_db(context="get_backup_settings", log_args=True)
 @settings_router.get("/backup", status_code=status.HTTP_200_OK, response_model=ResponseMainModel)
 # @cache(namespace='backup_settings_get',expire=6000)

@@ -118,12 +118,18 @@ class DqaThresholds(BaseModel):
 #     field_mapping: Union[FieldMapping, None] = None  # Optional field
 #     va_summary: Union[List[str], None] = None
 #     field_labels: Union[List[FieldLabels], None] = None
+class VaSummaryCodOptions(BaseModel):
+    include_ccva_default: bool = False
+    include_pcva: bool = False
+
+
 class SettingsConfigData(BaseModel):
     type: Union[str, None] = 'odk_api_configs'  # Optional field with a default value
     odk_api_configs: Union[OdkConfigModel, None] = None  # Optional field
     system_configs: Union[SystemConfig, None] = None  # Optional field
     field_mapping: Union[FieldMapping, None] = None  # Optional field
     va_summary: Union[List[str], None] = None
+    va_summary_cod_options: Union[VaSummaryCodOptions, None] = None
     field_labels: Union[List[FieldLabels], None] = None
     cron_settings: Union[CronSettings, None] = None
     backup_settings: Union[BackupSettings, None] = None
