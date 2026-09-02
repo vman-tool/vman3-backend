@@ -1,11 +1,8 @@
 import asyncio
 import logging
 from datetime import datetime, timedelta
-from typing import List, Dict, Any
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
-from apscheduler.triggers.cron import CronTrigger
-from fastapi import BackgroundTasks
 
 
 from app.shared.configs.arangodb import get_arangodb_session
@@ -22,116 +19,17 @@ logger = logging.getLogger(__name__)
 # Create a global scheduler instance
 scheduler = AsyncIOScheduler()
 
-async def get_cron_settings(db) -> Dict[str, Any]:
-    """Get cron settings from the database"""
-    try:
-        # Query to get the vman_config document
-        aql_query = f"""
-        FOR settings in {db_collections.SYSTEM_CONFIGS}
-        FILTER settings._key == 'vman_config'
-        RETURN settings.cron_settings
-        """
-        # Execute the query without using await on the cursor
-        cursor = db.aql.execute(aql_query, bind_vars={}, cache=True)
-        
-        # Collect results without using await
-        cron_settings = [doc for doc in cursor]
-        
-        # If no cron settings found, return default settings
-        if not cron_settings or not cron_settings[0]:
-            return {"days": [], "time": "00:00"}
-        
-        return cron_settings[0]
-    except Exception as e:
-        logger.error(f"Error fetching cron settings: {str(e)}")
-        return {"days": [], "time": "00:00"}
-
-def day_of_week_to_cron(days: List[str]) -> str:
-    """Convert day names to cron day numbers (0-6, where 0 is Monday in APScheduler).
-    Callers must ensure days is non-empty before calling this function.
-    """
-    day_mapping = {
-        'monday': 0,
-        'tuesday': 1,
-        'wednesday': 2,
-        'thursday': 3,
-        'friday': 4,
-        'saturday': 5,
-        'sunday': 6
-    }
-    cron_days = [str(day_mapping[day.lower()]) for day in days if day.lower() in day_mapping]
-    return ','.join(cron_days) if cron_days else '0'  # fallback to Monday if all names were unrecognised
-
-# Dispatch the scheduled sync via Celery so we avoid calling FastAPI route
-# functions directly (their Depends/Query parameters are never resolved outside
-# a request context, making the call unreliable).
-async def odk_fetch_job_wrapper(db=None):
-    """Dispatch run_scheduled_odk_sync to Celery instead of calling the route directly."""
-    from app.tasks.odk_tasks import run_scheduled_odk_sync, get_redis_client
-    import json as _json
-    try:
-        now = datetime.utcnow()
-        logger.info(f"APScheduler: ODK scheduled sync firing at {now.strftime('%Y-%m-%dT%H:%M:%SZ')}")
-
-        # Stamp the "last fired" key so the UI badge updates immediately
-        try:
-            r = get_redis_client()
-            r.setex("odk:last_schedule_fired", 86400, _json.dumps({
-                "day": now.strftime("%A").lower(),
-                "time": now.strftime("%H:%M"),
-                "fired_at": now.strftime("%Y-%m-%dT%H:%M:%SZ"),
-            }))
-        except Exception:
-            pass
-
-        run_scheduled_odk_sync.delay()
-        logger.info("APScheduler: dispatched run_scheduled_odk_sync to Celery worker")
-    except Exception as e:
-        logger.error(f"APScheduler: error dispatching scheduled ODK sync: {str(e)}")
-#@log_to_db(context="schedule_odk_fetch_job")
-async def schedule_odk_fetch_job(db=None):
-    """Schedule the ODK fetch job based on cron settings.
-    If no days are configured, the job is removed — sync only happens manually.
-    """
-    try:
-        # Get cron settings
-        cron_settings = await get_cron_settings(db)
-        days = cron_settings.get('days', [])
-        time_str = cron_settings.get('time', '00:00')
-
-        # Always remove any existing scheduled sync job first
-        if scheduler.get_job('odk_fetch_job'):
-            scheduler.remove_job('odk_fetch_job')
-
-        # Only schedule if at least one day is explicitly selected
-        if not days:
-            logger.info("ODK fetch job: no days configured — job not scheduled (manual sync only)")
-        else:
-            # Parse time
-            hour, minute = time_str.split(':')
-
-            # Convert days to cron format
-            cron_days = day_of_week_to_cron(days)
-
-            scheduler.add_job(
-                odk_fetch_job_wrapper,
-                CronTrigger(day_of_week=cron_days, hour=int(hour), minute=int(minute), timezone='UTC'),
-                id='odk_fetch_job',
-                replace_existing=True,
-            )
-            logger.info(f"ODK fetch job scheduled for {time_str} UTC on: {', '.join(days)}")
-
-        # Schedule a job to re-read cron settings every hour so changes take effect without restart
-        if not scheduler.get_job('update_cron_settings_job'):
-            scheduler.add_job(
-                schedule_odk_fetch_job,
-                'interval',
-                hours=1,
-                id='update_cron_settings_job',
-                kwargs={'db': db}
-            )
-    except Exception as e:
-        logger.error(f"Error scheduling ODK fetch job: {str(e)}")
+# ODK sync scheduling (day/time from cron_settings) used to also be driven
+# from here via an in-process APScheduler job, alongside Celery beat's
+# check_odk_sync_schedule (app/tasks/odk_tasks.py, registered in
+# app/celery_app.py's beat_schedule). Both independently read the same
+# cron_settings and dispatch the same run_scheduled_odk_sync task, but only
+# the Celery beat path deduplicates fires with a Redis lock - the
+# APScheduler path here had none, so whenever a schedule was configured,
+# the scheduled sync could fire twice (once from each), which is likely
+# what made syncing look like it was ignoring the configured schedule. This
+# in-process copy was removed; Celery beat (running independently of this
+# API process, and correctly deduplicated) is now the only trigger.
 
 #@log_to_db(context="ccva_cleanup_job")
 async def ccva_cleanup_job(db=None):
@@ -216,12 +114,7 @@ async def start_scheduler():
     if not scheduler.running:
         scheduler.start()
         logger.info("Scheduler started")
-    
-    # Schedule the initial job
-    import asyncio
-    loop = asyncio.get_event_loop()
-    loop.create_task(schedule_odk_fetch_job(db))
-    
+
     # Schedule CCVA cleanup job to run every 6 hours for privacy
     # This will clean up expired TTL records from CCVA_PUBLIC_RESULTS
     # Privacy-first: Frontend deletes immediately on completion, but this is a backup
