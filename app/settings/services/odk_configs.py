@@ -108,8 +108,46 @@ async def fetch_configs_settings(db: StandardDatabase = None):
 
 
 
+async def ensure_odk_api_ready_for_scheduling(db: StandardDatabase = None) -> None:
+    """Guards POST /settings/cron: an automatic sync can only ever pull from
+    the ODK API (there's no way to "schedule" a CSV upload), so enabling a
+    schedule with no working ODK API connection just guarantees the sync
+    fails every single time it fires - e.g. the ODK API tab left at its
+    unedited placeholder credentials, which look "configured" but were
+    never actually saved (or, once saved, were never validated - see the
+    live check add_configs_settings already does for the ODK API tab
+    itself, reused here).
+
+    :raises BadRequestException: odk_api_configs is unset, or the
+        configured server rejects the credentials / is unreachable.
+    """
+    try:
+        config = await fetch_odk_config(db)
+    except Exception:
+        config = None
+
+    if not config or not config.odk_api_configs:
+        raise BadRequestException(
+            "ODK API is not configured. Data can only be synchronized automatically via the ODK API, "
+            "not CSV upload - configure it under Settings > Configuration > ODK API before enabling "
+            "automatic synchronization."
+        )
+
+    try:
+        async with ODKClientAsync(config.odk_api_configs) as odk_client:
+            data_for_count = await odk_client.getFormSubmissions(top=1, order_by='__system/submissionDate', order_direction='asc')
+            if not data_for_count:
+                raise ValueError("ODK API returned no data")
+    except Exception:
+        raise BadRequestException(
+            "Could not connect to the configured ODK API - check the URL, username, and password under "
+            "Settings > Configuration > ODK API. Automatic synchronization was not enabled, since it "
+            "would fail the same way on every scheduled run."
+        )
+
+
 async def add_configs_settings(configData: SettingsConfigData, db: StandardDatabase = None) -> ResponseMainModel:
-    
+
     try:
         # Prepare the base data dictionary with a unique key
         data = {'_key': 'vman_config'}
@@ -143,7 +181,10 @@ async def add_configs_settings(configData: SettingsConfigData, db: StandardDatab
         
         elif configData.type == 'va_summary' and configData.va_summary:
             data['va_summary'] = configData.va_summary
-        
+
+        elif configData.type == 'va_summary_cod_options' and configData.va_summary_cod_options is not None:
+            data['va_summary_cod_options'] = configData.va_summary_cod_options.model_dump()
+
         elif configData.type == 'field_labels' and configData.field_labels:
 
             # field_labels is one array holding an entry per relabelled
