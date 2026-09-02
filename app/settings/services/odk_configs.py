@@ -1,4 +1,5 @@
 from types import SimpleNamespace
+from typing import List, Optional
 
 from arango.database import StandardDatabase
 from fastapi import HTTPException, status
@@ -107,8 +108,46 @@ async def fetch_configs_settings(db: StandardDatabase = None):
 
 
 
+async def ensure_odk_api_ready_for_scheduling(db: StandardDatabase = None) -> None:
+    """Guards POST /settings/cron: an automatic sync can only ever pull from
+    the ODK API (there's no way to "schedule" a CSV upload), so enabling a
+    schedule with no working ODK API connection just guarantees the sync
+    fails every single time it fires - e.g. the ODK API tab left at its
+    unedited placeholder credentials, which look "configured" but were
+    never actually saved (or, once saved, were never validated - see the
+    live check add_configs_settings already does for the ODK API tab
+    itself, reused here).
+
+    :raises BadRequestException: odk_api_configs is unset, or the
+        configured server rejects the credentials / is unreachable.
+    """
+    try:
+        config = await fetch_odk_config(db)
+    except Exception:
+        config = None
+
+    if not config or not config.odk_api_configs:
+        raise BadRequestException(
+            "ODK API is not configured. Data can only be synchronized automatically via the ODK API, "
+            "not CSV upload - configure it under Settings > Configuration > ODK API before enabling "
+            "automatic synchronization."
+        )
+
+    try:
+        async with ODKClientAsync(config.odk_api_configs) as odk_client:
+            data_for_count = await odk_client.getFormSubmissions(top=1, order_by='__system/submissionDate', order_direction='asc')
+            if not data_for_count:
+                raise ValueError("ODK API returned no data")
+    except Exception:
+        raise BadRequestException(
+            "Could not connect to the configured ODK API - check the URL, username, and password under "
+            "Settings > Configuration > ODK API. Automatic synchronization was not enabled, since it "
+            "would fail the same way on every scheduled run."
+        )
+
+
 async def add_configs_settings(configData: SettingsConfigData, db: StandardDatabase = None) -> ResponseMainModel:
-    
+
     try:
         # Prepare the base data dictionary with a unique key
         data = {'_key': 'vman_config'}
@@ -142,7 +181,10 @@ async def add_configs_settings(configData: SettingsConfigData, db: StandardDatab
         
         elif configData.type == 'va_summary' and configData.va_summary:
             data['va_summary'] = configData.va_summary
-        
+
+        elif configData.type == 'va_summary_cod_options' and configData.va_summary_cod_options is not None:
+            data['va_summary_cod_options'] = configData.va_summary_cod_options.model_dump()
+
         elif configData.type == 'field_labels' and configData.field_labels:
 
             # field_labels is one array holding an entry per relabelled
@@ -278,8 +320,20 @@ async def get_questioners_fields(db: StandardDatabase = None):
     
 @ttl_cache(ttl=3600, key_prefix="system_images") # Cache for 1 hour
 async def get_system_images(db: StandardDatabase = None):
+    # Regression: this used to scan every document in SYSTEM_CONFIGS
+    # (FOR settings IN ... RETURN settings.system_images) rather than
+    # looking up the one settings document by key, like everywhere else in
+    # this file does (db.collection(...).get('vman_config')). That's fine
+    # when 'vman_config' is the only document in the collection, but other
+    # features (e.g. the DQA analytics scheduler) store their own documents
+    # there too under different keys - and AQL's scan order over those isn't
+    # guaranteed to put 'vman_config' first. Whenever it didn't, this
+    # returned an unrelated document's (absent) system_images as index 0,
+    # which every caller treats as "no images configured" - making a
+    # perfectly successful upload look like it silently reset everything.
     aql_query = f"""
         FOR settings in  {db_collections.SYSTEM_CONFIGS}
+        FILTER settings._key == "vman_config"
         RETURN settings.system_images
     """
     def execute_get_images_query():
@@ -289,7 +343,14 @@ async def get_system_images(db: StandardDatabase = None):
     data = await run_in_threadpool(execute_get_images_query)
     return data
 
-async def save_system_images(data: ImagesConfigData, reset: bool = False, db: StandardDatabase = None):
+async def save_system_images(data: ImagesConfigData, reset: bool = False, fields_to_reset: Optional[List[str]] = None, db: StandardDatabase = None):
+    """
+    :param reset: force every field in `data` onto the existing record,
+        including nulls - used to reset ALL images at once.
+    :param fields_to_reset: reset just these specific fields to null,
+        leaving the rest of the existing record (and anything else merged
+        in from `data`) untouched - used to reset a single image.
+    """
     try:
         if not data and not reset:
             raise ValueError("No system images provided")
@@ -298,14 +359,17 @@ async def save_system_images(data: ImagesConfigData, reset: bool = False, db: St
 
         existing_images = await get_system_images(db)
         if len(existing_images) > 0 and existing_images[0] is not None:
-            
+
             updated_images = replace_object_values(saving_data['system_images'], existing_images[0], force=reset)
+            if fields_to_reset:
+                for field in fields_to_reset:
+                    updated_images[field] = None
             saving_data['system_images'] = updated_images
             await save_system_settings(saving_data, db)
-            
+
             # Invalidate cache for smart update
             await invalidate_cache("system_images")
-            
+
             return await get_system_images(db)
         else:
             await save_system_settings(saving_data, db)

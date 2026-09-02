@@ -9,6 +9,7 @@ from app.records.services.list_data import fetch_va_records
 from app.records.services.map_data import fetch_va_map_records
 from app.records.services.regions_data import get_unique_regions
 from app.records.services.export_va_records import export_va_records_multi_sheet
+from app.records.services.cause_of_death import get_va_cause_of_death
 from app.shared.configs.arangodb import get_arangodb_session
 from app.shared.configs.models import ResponseMainModel
 from app.users.decorators.user import get_current_user
@@ -88,7 +89,23 @@ async def get_fetch_va_map_records(
     return response
 
 
-#@log_to_db(context="fetch_unique_regions", log_args=True)      
+#@log_to_db(context="get_va_cause_of_death", log_args=True)
+@data_router.get("/{va_id}/cause-of-death", status_code=status.HTTP_200_OK, response_model=ResponseMainModel)
+async def get_va_cause_of_death_route(
+    va_id: str,
+    include_ccva: bool = Query(False, alias="include_ccva"),
+    include_pcva: bool = Query(False, alias="include_pcva"),
+    current_user = Depends(get_current_user),
+    db: StandardDatabase = Depends(get_arangodb_session)):
+
+    return await get_va_cause_of_death(
+        va_id=va_id,
+        include_ccva=include_ccva,
+        include_pcva=include_pcva,
+        db=db)
+
+
+#@log_to_db(context="fetch_unique_regions", log_args=True)
 @data_router.get("/unique-regions", response_model=ResponseMainModel)
 # @cache( namespace='unique_regions',expire=100)
 async def fetch_unique_regions(db: StandardDatabase = Depends(get_arangodb_session), current_user = Depends(get_current_user),):
