@@ -27,7 +27,7 @@ value, it is created then, not before.
 
 import hashlib
 from io import BytesIO
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 
 from arango.database import StandardDatabase
 from fastapi.concurrency import run_in_threadpool
@@ -456,3 +456,58 @@ async def update_expected_deaths_value(key: str, period: str, expected_deaths: i
         },
         message=f"Updated expected deaths for {doc.get('label')}.",
     )
+
+
+# ── Read access for other services (completeness: submitted vs expected) ────
+
+async def get_expected_deaths_by_value(db: StandardDatabase) -> Dict[Tuple[int, str], Dict[str, int]]:
+    """Index of every node's computed expected_deaths, keyed by (level, raw
+    value) - e.g. (2, "Ilala_Municipal_Council") - for another service that
+    only has a raw admin-unit code and the level it was grouped at (e.g. the
+    submissions summary table, grouped by region/district/ward) to look up
+    its expected-deaths-per-period in one query instead of one per row.
+    """
+    existing = await _fetch_all(db)
+    return {
+        (doc["level"], doc["value"]): (doc.get("expected_deaths") or {})
+        for doc in existing.values()
+    }
+
+
+async def get_total_expected_deaths_by_period(db: StandardDatabase) -> Dict[str, int]:
+    """Country-wide expected deaths per period: the sum of every top-level
+    (level 1) node's expected_deaths - e.g. for a dashboard-wide monthly
+    target line.
+    """
+    existing = await _fetch_all(db)
+    totals: Dict[str, int] = {}
+    for doc in existing.values():
+        if doc["level"] != 1:
+            continue
+        for period, value in (doc.get("expected_deaths") or {}).items():
+            totals[period] = totals.get(period, 0) + value
+    return totals
+
+
+async def get_expected_deaths_total_for_nodes(
+    db: StandardDatabase, nodes: List[Tuple[int, str]]
+) -> Dict[str, int]:
+    """Expected deaths per period, summed across the given (level, value)
+    admin-unit nodes - e.g. whatever the dashboard's location filter
+    currently has selected. Falls back to the country-wide total (every
+    level-1 node) when `nodes` is empty, matching "no filter applied".
+
+    Each node's own expected_deaths already includes everything beneath it
+    (see recompute_aggregates), so summing the selected nodes directly -
+    without also summing their descendants - doesn't double count. Nodes
+    with no expected_deaths match (e.g. a district the xForm's choices sheet
+    never listed) simply contribute nothing.
+    """
+    if not nodes:
+        return await get_total_expected_deaths_by_period(db)
+    index = await get_expected_deaths_by_value(db)
+    totals: Dict[str, int] = {}
+    for node in nodes:
+        for period, value in (index.get(node) or {}).items():
+            totals[period] = totals.get(period, 0) + value
+    return totals

@@ -7,7 +7,10 @@ from openpyxl import Workbook
 from app.settings.services.expected_deaths import (
     _build_tree,
     _drop_empty_branches,
+    get_expected_deaths_by_value,
+    get_expected_deaths_total_for_nodes,
     get_expected_deaths_tree,
+    get_total_expected_deaths_by_period,
     import_expected_deaths_from_xform,
     parse_expected_deaths_hierarchy,
     recompute_aggregates,
@@ -400,3 +403,83 @@ class TestUpdateExpectedDeathsValue:
         with patch("app.settings.services.expected_deaths._fetch_all", new=AsyncMock(return_value=self._tree())):
             with pytest.raises(Exception):
                 await update_expected_deaths_value("does-not-exist", "2023", 5, db=None)
+
+
+class TestGetExpectedDeathsByValue:
+    @pytest.mark.asyncio
+    async def test_indexes_every_node_by_level_and_value(self):
+        by_key = {
+            "r": {"_key": "r", "level": 1, "value": "Dodoma", "expected_deaths": {"2023": 300}},
+            "d": {"_key": "d", "level": 2, "value": "Kongwa_DC", "expected_deaths": {"2023": 300}},
+        }
+        with patch("app.settings.services.expected_deaths._fetch_all", new=AsyncMock(return_value=by_key)):
+            index = await get_expected_deaths_by_value(db=None)
+
+        assert index[(1, "Dodoma")] == {"2023": 300}
+        assert index[(2, "Kongwa_DC")] == {"2023": 300}
+        assert (2, "Dodoma") not in index  # wrong level for this value
+
+    @pytest.mark.asyncio
+    async def test_empty_collection_gives_an_empty_index(self):
+        with patch("app.settings.services.expected_deaths._fetch_all", new=AsyncMock(return_value={})):
+            index = await get_expected_deaths_by_value(db=None)
+        assert index == {}
+
+
+class TestGetTotalExpectedDeathsByPeriod:
+    @pytest.mark.asyncio
+    async def test_sums_only_top_level_nodes_per_period(self):
+        by_key = {
+            "r1": {"_key": "r1", "level": 1, "expected_deaths": {"2023": 300, "2024": 320}},
+            "r2": {"_key": "r2", "level": 1, "expected_deaths": {"2023": 100}},
+            # A level-2 node with its own total should NOT be double-counted
+            # on top of its region's already-aggregated total.
+            "d1": {"_key": "d1", "level": 2, "expected_deaths": {"2023": 300}},
+        }
+        with patch("app.settings.services.expected_deaths._fetch_all", new=AsyncMock(return_value=by_key)):
+            totals = await get_total_expected_deaths_by_period(db=None)
+
+        assert totals == {"2023": 400, "2024": 320}
+
+    @pytest.mark.asyncio
+    async def test_empty_collection_gives_empty_totals(self):
+        with patch("app.settings.services.expected_deaths._fetch_all", new=AsyncMock(return_value={})):
+            totals = await get_total_expected_deaths_by_period(db=None)
+        assert totals == {}
+
+
+class TestGetExpectedDeathsTotalForNodes:
+    @pytest.mark.asyncio
+    async def test_sums_the_given_nodes_own_already_aggregated_totals(self):
+        by_key = {
+            "r1": {"_key": "r1", "level": 1, "value": "Dodoma", "expected_deaths": {"2023": 300, "2024": 320}},
+            "r2": {"_key": "r2", "level": 1, "value": "Arusha", "expected_deaths": {"2023": 100}},
+            "d1": {"_key": "d1", "level": 2, "value": "Kongwa_DC", "expected_deaths": {"2023": 50}},
+        }
+        with patch("app.settings.services.expected_deaths._fetch_all", new=AsyncMock(return_value=by_key)):
+            # A region plus an unrelated district - not the region's own
+            # child, so no double counting to worry about here.
+            totals = await get_expected_deaths_total_for_nodes(db=None, nodes=[(1, "Dodoma"), (2, "Kongwa_DC")])
+
+        assert totals == {"2023": 350, "2024": 320}
+
+    @pytest.mark.asyncio
+    async def test_falls_back_to_the_country_wide_total_when_no_nodes_given(self):
+        by_key = {
+            "r1": {"_key": "r1", "level": 1, "value": "Dodoma", "expected_deaths": {"2023": 300}},
+            "r2": {"_key": "r2", "level": 1, "value": "Arusha", "expected_deaths": {"2023": 100}},
+        }
+        with patch("app.settings.services.expected_deaths._fetch_all", new=AsyncMock(return_value=by_key)):
+            totals = await get_expected_deaths_total_for_nodes(db=None, nodes=[])
+
+        assert totals == {"2023": 400}
+
+    @pytest.mark.asyncio
+    async def test_a_node_with_no_expected_deaths_match_contributes_nothing(self):
+        by_key = {
+            "r1": {"_key": "r1", "level": 1, "value": "Dodoma", "expected_deaths": {"2023": 300}},
+        }
+        with patch("app.settings.services.expected_deaths._fetch_all", new=AsyncMock(return_value=by_key)):
+            totals = await get_expected_deaths_total_for_nodes(db=None, nodes=[(2, "Unmapped_DC")])
+
+        assert totals == {}
