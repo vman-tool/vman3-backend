@@ -49,11 +49,6 @@ class FieldMapping(BaseModel):
     interview_date: Optional[str] = None
     additional_fields: Optional[Dict[str, Any]] = Field(default_factory=dict)  # For additional fields
 
-class FieldLabels(BaseModel):
-    field_id: str
-    label: Union[str, None] = None
-    options: Union[Dict, None] = None
-
 # Define the models for cron and backup settings
 class CronSettings(BaseModel):
     days: List[str] = []
@@ -130,7 +125,6 @@ class SettingsConfigData(BaseModel):
     field_mapping: Union[FieldMapping, None] = None  # Optional field
     va_summary: Union[List[str], None] = None
     va_summary_cod_options: Union[VaSummaryCodOptions, None] = None
-    field_labels: Union[List[FieldLabels], None] = None
     cron_settings: Union[CronSettings, None] = None
     backup_settings: Union[BackupSettings, None] = None
     sync_status: Union[SyncStatus, None] = None

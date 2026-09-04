@@ -31,6 +31,7 @@ class db_collections():
     TASK_PROGRESS: str = 'task_progress'
     SYNC_HISTORY: str = 'sync_history'
     DQA_ANALYTICS: str = 'dqa_analytics'
+    EXPECTED_DEATHS: str = 'expected_deaths'
 
 class data_sources():
     """Where a VA record came from, stored on every submission as
@@ -166,6 +167,10 @@ collections_with_indexes = {
     ],
     db_collections.DQA_ANALYTICS: [
         {"fields": ["computed_at"], "type": "persistent", "name": "idx_dqa_computed_at"},
+    ],
+    db_collections.EXPECTED_DEATHS: [
+        {"fields": ["level"], "type": "persistent", "name": "idx_expected_deaths_level"},
+        {"fields": ["parent_key"], "type": "persistent", "name": "idx_expected_deaths_parent"},
     ],
 }
 
