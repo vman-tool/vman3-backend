@@ -185,46 +185,7 @@ async def add_configs_settings(configData: SettingsConfigData, db: StandardDatab
         elif configData.type == 'va_summary_cod_options' and configData.va_summary_cod_options is not None:
             data['va_summary_cod_options'] = configData.va_summary_cod_options.model_dump()
 
-        elif configData.type == 'field_labels' and configData.field_labels:
-
-            # field_labels is one array holding an entry per relabelled
-            # field_id (region, district, ward, ...); the merge below needs
-            # that whole array to preserve every other field's relabels.
-            # Two bugs previously combined to silently drop data on every
-            # save past the first: (1) `field_labels[0]` fetched only the
-            # array's first ENTRY, not the whole array, and (2) the fetch
-            # scanned every document in the collection with no `_key`
-            # filter, so it could read a stray/older document instead of
-            # the one `save_system_settings` actually upserts (by
-            # `_key: 'vman_config'`, same pattern as fetch_odk_config).
-            def get_existing_field_labels():
-                doc = db.collection(db_collections.SYSTEM_CONFIGS).get('vman_config')
-                return (doc or {}).get('field_labels')
-
-            existing_field_labels_array = await run_in_threadpool(get_existing_field_labels)
-            field_label_data = []
-            if existing_field_labels_array:
-                existing_field_label_dict = {
-                    field['field_id']: field for field in existing_field_labels_array
-                    if field and 'field_id' in field
-                }
-
-                for field_label in configData.model_dump().get('field_labels', ""):
-                    if "field_id" not in field_label:
-                        continue
-                    field_id = field_label['field_id']
-
-                    if field_id in existing_field_label_dict:
-                        existing_field_label_dict[field_id] = replace_object_values(field_label, existing_field_label_dict[field_id])
-                    else:
-                         existing_field_label_dict[field_id] = field_label
-
-                field_label_data = list(existing_field_label_dict.values())
-            else:
-                field_label_data = configData.model_dump().get('field_labels', "")
-
-            data['field_labels'] = field_label_data
-                # Add handling for cron settings
+        # Add handling for cron settings
         elif configData.type == 'cron_settings' and configData.cron_settings:
             data['cron_settings'] = configData.cron_settings.model_dump()
             
