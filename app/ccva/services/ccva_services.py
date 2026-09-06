@@ -240,6 +240,8 @@ def runCCVA(odk_raw:pd.DataFrame, id_col: str = None,date_col:str =None,start_ti
             date_col=date_col,
             odk_raw=odk_raw,
             db=db,
+            malaria_status=malaria,
+            hiv_status=hiv,
         )
 
         call_update_callback(update_callback, {
@@ -352,7 +354,9 @@ def runCCVA(odk_raw:pd.DataFrame, id_col: str = None,date_col:str =None,start_ti
                                                total_records=total_records,
                                                rangeDates =rangeDates,
                                                db=db,
-                                               user_id=user_id)
+                                               user_id=user_id,
+                                               malaria_status=malaria,
+                                               hiv_status=hiv)
         except Exception as compile_exc:
             # A run that got this far already produced valid individual
             # classifications (results_to_insert was inserted above) - only
@@ -371,6 +375,8 @@ def runCCVA(odk_raw:pd.DataFrame, id_col: str = None,date_col:str =None,start_ti
                 "user_id": user_id,
                 "range": rangeDates,
                 "algorithm": "InterVA5",
+                "malaria_status": malaria,
+                "hiv_status": hiv,
                 "all": empty_group, "male": empty_group, "female": empty_group,
                 "adult": empty_group, "child": empty_group, "neonate": empty_group,
                 "status": "failed",
@@ -405,6 +411,8 @@ def compile_ml_csmf_results(
     db: StandardDatabase,
     top: int = 10,
     algorithm: str = "VManML10",
+    malaria_status: Optional[str] = None,
+    hiv_status: Optional[str] = None,
 ) -> dict:
     """Build CSMF from ML prediction results and write to CCVA_GRAPH_RESULTS.
 
@@ -454,6 +462,8 @@ def compile_ml_csmf_results(
         "user_id":                    user_id,
         "range":                      {"start": latest_date, "end": earliest_date},
         "algorithm":                  algorithm,
+        "malaria_status":             malaria_status,
+        "hiv_status":                 hiv_status,
         "all":                        all_r,
         "male":                       male_r,
         "female":                     female_r,
@@ -478,7 +488,9 @@ def compile_ccva_results(iv5out, top=10, undetermined=True,start_time:timedelta=
                          total_records:int=0, rangeDates: Dict={},
                          error_logs: Optional[any]=None,
                          db: StandardDatabase=None,
-                         user_id: str = "unknown"):
+                         user_id: str = "unknown",
+                         malaria_status: Optional[str] = None,
+                         hiv_status: Optional[str] = None):
     # Compile results for all groups
     all_results = {
         "index": csmf(iv5out, top=top, age=None, sex=None).index.tolist(),
@@ -600,6 +612,8 @@ def compile_ccva_results(iv5out, top=10, undetermined=True,start_time:timedelta=
         "user_id": user_id,
         "range":rangeDates,
         "algorithm": "InterVA5",
+        "malaria_status": malaria_status,
+        "hiv_status": hiv_status,
         "all": all_results,
         "male": male_results,
         "female": female_results,
