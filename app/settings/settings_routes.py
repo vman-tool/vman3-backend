@@ -24,6 +24,11 @@ from app.settings.models.settings import ImagesConfigData, SettingsConfigData, S
 from app.settings.services.cron import BackupSettings, CronSettings, fetch_backup_settings, fetch_cron_settings, save_backup_settings, save_cron_settings
 from app.settings.services.data_reset import preview_reset, reset_va_data
 from app.settings.services.xform_dictionary import enrich_questions_from_xform, get_data_dictionary, update_question_label
+from app.settings.services.expected_deaths import (
+    get_expected_deaths_tree,
+    import_expected_deaths_from_xform,
+    update_expected_deaths_value,
+)
 from app.settings.services.odk_configs import (
     add_configs_settings,
     ensure_odk_api_ready_for_scheduling,
@@ -869,7 +874,15 @@ async def upload_xform_dictionary(
             detail="The uploaded file is empty.",
         )
 
-    return await enrich_questions_from_xform(content, file.filename, db, override_labels)
+    response = await enrich_questions_from_xform(content, file.filename, db, override_labels)
+
+    # Optional: only present when the workbook's `choices` sheet carries an
+    # `expected_deaths` column - skipped silently otherwise.
+    expected_deaths_summary = await import_expected_deaths_from_xform(content, db)
+    if expected_deaths_summary is not None:
+        response.data = {**(response.data or {}), "expected_deaths": expected_deaths_summary}
+
+    return response
 
 
 @settings_router.get("/dictionary", status_code=status.HTTP_200_OK, response_model=ResponseMainModel)
@@ -895,6 +908,32 @@ async def patch_dictionary_label(
 ):
     """Edit one question's label for one language, from the dictionary table."""
     return await update_question_label(name, language, label, db)
+
+
+@settings_router.get("/expected-deaths", status_code=status.HTTP_200_OK, response_model=ResponseMainModel)
+async def get_expected_deaths(
+    current_user=Depends(get_current_user),
+    db: StandardDatabase = Depends(get_arangodb_session),
+):
+    """The admin-unit hierarchy and expected deaths, imported from an xForm's
+    `choices` sheet. Empty (`configured: false`) until one has been uploaded
+    with an `expected_deaths` column."""
+    return await get_expected_deaths_tree(db)
+
+
+@settings_router.patch("/expected-deaths/{key}", status_code=status.HTTP_200_OK, response_model=ResponseMainModel)
+async def patch_expected_deaths(
+    key: str,
+    period: str = Body(..., embed=True),
+    expected_deaths: int = Body(..., embed=True),
+    current_user=Depends(get_current_user),
+    required_privs: List[str] = Depends(check_privileges([AccessPrivileges.SETTINGS_CREATE_SYSTEM_CONFIGS])),
+    db: StandardDatabase = Depends(get_arangodb_session),
+):
+    """Edit one administrative unit's expected deaths for one period. Only a
+    unit with no children can be edited directly - totals above it are
+    recomputed automatically."""
+    return await update_expected_deaths_value(key, period, expected_deaths, db)
 
 
 # ── Danger zone: deleting VA data ────────────────────────────────────────────

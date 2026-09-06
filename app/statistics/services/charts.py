@@ -5,9 +5,35 @@ from arango.database import StandardDatabase
 from fastapi.concurrency import run_in_threadpool
 
 from app.settings.services.odk_configs import fetch_odk_config
+from app.settings.services.expected_deaths import get_expected_deaths_total_for_nodes
 from app.shared.configs.constants import db_collections
 from app.shared.configs.models import ResponseMainModel
-from app.shared.configs.security import build_location_limit_filter, build_locations_query_filter
+from app.shared.configs.security import (
+    build_location_limit_filter,
+    build_locations_query_filter,
+    parse_location_query_pairs,
+)
+
+
+def _resolve_location_nodes(locations_json, field_mapping):
+    """Maps the dashboard's `locations` filter - raw field/value pairs like
+    [("region", "Dar_es_Salaam")] - onto (level, value) pairs matching the
+    expected_deaths hierarchy's own level numbering (1=top), using this
+    deployment's field_mapping to know which raw field is which level. A
+    pair for an unmapped field is dropped rather than raising, matching
+    parse_location_query_pairs' own "bad filter shows everything"
+    tolerance.
+    """
+    field_to_level = {}
+    for level in range(1, 5):
+        field = getattr(field_mapping, f"location_level{level}", None)
+        if field:
+            field_to_level[field] = level
+    return [
+        (field_to_level[field], value)
+        for field, value in parse_location_query_pairs(locations_json)
+        if field in field_to_level
+    ]
 
 
 from app.shared.utils.cache import ttl_cache
@@ -193,6 +219,26 @@ async def fetch_charts_statistics( current_user: dict,paging: bool = True, page_
 
         result = await run_in_threadpool(execute_query)
 
+        # A flat monthly target line for the Monthly Submissions chart: the
+        # annual expected deaths for whichever period is most relevant,
+        # divided by 12 - scoped to the dashboard's location filter when one
+        # is applied (e.g. filtering to "Dar es Salaam" targets just that
+        # region's own expected deaths, not the whole country), and to the
+        # country-wide total (every top-level admin unit) otherwise. There's
+        # no year filter on this chart yet (that's the planned global date
+        # filter), so the most recent year with data is used as a stand-in
+        # for "the current target" - falls back to a single-period ("total")
+        # file, or None when no expected_deaths data has been imported at
+        # all (or none matches the current location filter).
+        location_nodes = _resolve_location_nodes(locations, config.field_mapping)
+        totals_by_period = await get_expected_deaths_total_for_nodes(db, location_nodes)
+        numeric_years = [p for p in totals_by_period if p.isdigit()]
+        monthly_target = None
+        if numeric_years:
+            monthly_target = totals_by_period[max(numeric_years)] / 12
+        elif "total" in totals_by_period:
+            monthly_target = totals_by_period["total"] / 12
+
         monthly_submissions_data = result['monthly_submissions']
         distribution_by_age_data = result['distribution_by_age'][0]
         distribution_by_gender = result['gender_distribution'][0]
@@ -201,6 +247,7 @@ async def fetch_charts_statistics( current_user: dict,paging: bool = True, page_
         # Structure the combined response
         response_data = {
             "monthly_submissions": monthly_submissions_data,
+            "monthly_target": monthly_target,
             "distribution_by_age": {
                 "neonates": distribution_by_age_data["neonatal"],
                 "children": distribution_by_age_data["child"],
