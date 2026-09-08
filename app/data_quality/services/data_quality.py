@@ -77,7 +77,7 @@ async def fetch_error_list(
             bind_vars["error_type"] = error_type
         
         def execute_query():
-            cursor = db.aql.execute(query, bind_vars=bind_vars, cache=True)
+            cursor = db.aql.execute(query, bind_vars=bind_vars)
             return [document for document in cursor]
 
         data = await run_in_threadpool(execute_query)
@@ -86,7 +86,7 @@ async def fetch_error_list(
         count_query = f"RETURN LENGTH({collection.name})"
         
         def execute_count_query():
-            total_records_cursor = db.aql.execute(count_query, cache=True)
+            total_records_cursor = db.aql.execute(count_query)
             return total_records_cursor.next()
 
         total_records = await run_in_threadpool(execute_count_query)
@@ -129,7 +129,7 @@ async def fetch_error_details(db: StandardDatabase, error_id: str) -> ResponseMa
         """
 
         def execute_details_query():
-            cursor = db.aql.execute(query, bind_vars={"error_id": error_id}, cache=True)
+            cursor = db.aql.execute(query, bind_vars={"error_id": error_id})
             return cursor.next()
 
         result = await run_in_threadpool(execute_details_query)
@@ -168,7 +168,7 @@ async def fetch_error_details(db: StandardDatabase, error_id: str) -> ResponseMa
 
 async def fetch_form_data(db: StandardDatabase, form_id: str) -> ResponseMainModel:
     try:
-        collection = db.collection(db_collections.FORM_SUBMISSIONS)
+        collection = db.collection(db_collections.VA_TABLE)
         query = f"""
         FOR fs IN {collection.name}
         FILTER fs.__id == @form_id
@@ -176,7 +176,7 @@ async def fetch_form_data(db: StandardDatabase, form_id: str) -> ResponseMainMod
         """
         
         def execute_form_data_query():
-            cursor = db.aql.execute(query, bind_vars={"form_id": form_id}, cache=True)
+            cursor = db.aql.execute(query, bind_vars={"form_id": form_id})
             return cursor.next()
 
         result = await run_in_threadpool(execute_form_data_query)
@@ -195,7 +195,7 @@ async def fetch_form_data(db: StandardDatabase, form_id: str) -> ResponseMainMod
 
 async def update_form_data(db: StandardDatabase, form_id: str, updated_data: dict) -> ResponseMainModel:
     try:
-        collection = db.collection(db_collections.FORM_SUBMISSIONS)
+        collection = db.collection(db_collections.VA_TABLE)
         query = f"""
         FOR fs IN {collection.name}
         FILTER fs.__id == @form_id
@@ -204,7 +204,7 @@ async def update_form_data(db: StandardDatabase, form_id: str, updated_data: dic
         """
         
         def execute_update_form_query():
-            cursor = db.aql.execute(query, bind_vars={"form_id": form_id, "updated_data": updated_data}, cache=True)
+            cursor = db.aql.execute(query, bind_vars={"form_id": form_id, "updated_data": updated_data})
             return cursor.next()
 
         result = await run_in_threadpool(execute_update_form_query)

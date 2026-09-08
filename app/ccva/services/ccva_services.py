@@ -719,7 +719,7 @@ async def fetch_ccva_results_and_errors(db: StandardDatabase, task_id: str):
 
         # Execute the AQL query
         def execute_query():
-            cursor = db.aql.execute(query, cache=True)
+            cursor = db.aql.execute(query)
             return cursor.next()
 
         # Retrieve the result (first result since RETURN only outputs one document)
