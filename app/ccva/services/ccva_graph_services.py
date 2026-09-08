@@ -327,7 +327,7 @@ LET _locIds = (
 
         # print(query, 'query',ccva_task_id)
         def execute_query():
-            cursor = db.aql.execute(query, bind_vars=bind_vars, cache=True)
+            cursor = db.aql.execute(query, bind_vars=bind_vars)
             return [document for document in cursor]
 
         data = await run_in_threadpool(execute_query)

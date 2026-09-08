@@ -119,7 +119,7 @@ class StatisticsCache:
                     }}
                 """
                 
-                cursor = db.aql.execute(query, cache=True)
+                cursor = db.aql.execute(query)
                 return cursor.next()
 
             result = await run_in_threadpool(execute_compute)

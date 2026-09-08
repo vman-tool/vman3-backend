@@ -214,7 +214,7 @@ async def fetch_charts_statistics( current_user: dict,paging: bool = True, page_
         # print(combined_query)
         # Execute the combined query
         def execute_query():
-            cursor = db.aql.execute(combined_query, bind_vars=bind_vars, cache=True)
+            cursor = db.aql.execute(combined_query, bind_vars=bind_vars)
             return cursor.next()
 
         result = await run_in_threadpool(execute_query)
