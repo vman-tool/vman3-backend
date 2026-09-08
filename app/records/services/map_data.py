@@ -82,7 +82,7 @@ async def fetch_va_map_records(
         """
 
         def execute_map_query():
-            cursor = db.aql.execute(query, bind_vars=bind_vars, cache=True)
+            cursor = db.aql.execute(query, bind_vars=bind_vars)
             return [document for document in cursor]
 
         data = await run_in_threadpool(execute_map_query)
@@ -100,7 +100,7 @@ async def fetch_va_map_records(
         count_query = f"RETURN LENGTH({collection.name})"
         
         def execute_map_count_query():
-            total_records_cursor = db.aql.execute(count_query, cache=True)
+            total_records_cursor = db.aql.execute(count_query)
             return total_records_cursor.next()
 
         total_records = await run_in_threadpool(execute_map_count_query)

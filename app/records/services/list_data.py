@@ -87,7 +87,7 @@ async def fetch_va_records(current_user:dict,paging: bool = True, page_number: i
 
         query += "RETURN doc"
         def execute_query():
-            cursor = db.aql.execute(query, bind_vars=bind_vars, cache=True)
+            cursor = db.aql.execute(query, bind_vars=bind_vars)
             return [map_to_data_response(config, document) for document in cursor]
 
         data = await run_in_threadpool(execute_query)
@@ -186,7 +186,7 @@ async def fetch_va_records_json(current_user:dict,paging: bool = True,data_sourc
 
         query += "RETURN doc"
         def execute_json_query():
-            cursor = db.aql.execute(query, bind_vars=bind_vars, cache=True)
+            cursor = db.aql.execute(query, bind_vars=bind_vars)
             return [document for document in cursor]
 
         data = await run_in_threadpool(execute_json_query)
@@ -265,7 +265,7 @@ async def fetch_va_records_count(current_user:dict, start_date: Optional[date] =
         count_query = f"RETURN LENGTH({query})"
         
         def execute_count():
-            cursor = db.aql.execute(query, bind_vars=bind_vars, cache=True)
+            cursor = db.aql.execute(query, bind_vars=bind_vars)
             # Length of RETURN 1 is the count
             count = 0
             for _ in cursor:

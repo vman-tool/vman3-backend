@@ -29,7 +29,7 @@ async def get_unique_regions(db: StandardDatabase, current_user:dict):
         """
 
         def execute_query():
-            cursor = db.aql.execute(query, bind_vars=bind_vars, cache=True)
+            cursor = db.aql.execute(query, bind_vars=bind_vars)
             return [region for region in cursor]
 
         unique_regions = await run_in_threadpool(execute_query)
