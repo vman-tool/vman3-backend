@@ -50,7 +50,7 @@ async def fetch_ccva_records(paging: bool = True, page_number: int = 1, limit: i
 
         query += "RETURN doc"
         def execute_query():
-            cursor = db.aql.execute(query, bind_vars=bind_vars, cache=True)
+            cursor = db.aql.execute(query, bind_vars=bind_vars)
             return [document for document in cursor]
 
         data = await run_in_threadpool(execute_query)
@@ -59,7 +59,7 @@ async def fetch_ccva_records(paging: bool = True, page_number: int = 1, limit: i
         count_query = f"RETURN LENGTH({collection.name})"
         
         def execute_count_query():
-            total_records_cursor = db.aql.execute(count_query, cache=True)
+            total_records_cursor = db.aql.execute(count_query)
             return total_records_cursor.next()
 
         total_records = await run_in_threadpool(execute_count_query)
@@ -108,6 +108,24 @@ _CCVA_INDIVIDUAL_SORT_FIELDS = {
 # from this run's distinct causes (see _cause_category_maps below, also used
 # to turn a Broad/Major filter into a `CAUSE1 IN [...]` filter).
 _CCVA_CATEGORY_SORT_FIELDS = {"broad", "major"}
+
+# "Group by" fields the individual-results table's grouped/chart views
+# expose - plain stored fields grouped directly; Broad/Major Category
+# grouped via the same CAUSE1->category TRANSLATE() map used for sorting.
+_CCVA_GROUPABLE_FIELDS = {
+    "region": "doc.locationLevel1",
+    "district": "doc.locationLevel2",
+    "ward": "doc.locationLevel3",
+    "gender": "doc.gender",
+    "age_group": "doc.age_group",
+}
+_CCVA_CATEGORY_GROUP_FIELDS = {"broad", "major"}
+
+# Individual VA map points are capped well below `/records/maps`'s
+# effectively-uncapped default (10_000_000) - a Leaflet-clustered view of a
+# CCVA run stays responsive at this size, and a truncation note is more
+# useful to a user than a sluggish map of tens of thousands of markers.
+_CCVA_MAP_POINTS_LIMIT = 5000
 
 
 def _clean_ccva_text(value) -> Optional[str]:
@@ -238,6 +256,35 @@ async def get_ccva_filter_options(task_id: str, db: StandardDatabase) -> Respons
         raise BadRequestException(f"Failed to fetch CCVA filter options: {str(e)}", str(e))
 
 
+async def _build_ccva_result_filters(
+    task_id: str,
+    search_va_id: Optional[str],
+    filter_by: Optional[str],
+    filter_value: Optional[str],
+    db: StandardDatabase,
+) -> Tuple[List[str], Dict]:
+    """The task_id + optional VA-ID-search + optional Filter By/Value AQL
+    clauses shared by every `ccva_results` read (individual rows, grouped
+    counts, map points) - kept in one place so the three stay in sync."""
+    bind_vars: Dict = {"task_id": task_id}
+    filters = ["doc.task_id == @task_id"]
+
+    if search_va_id:
+        filters.append("CONTAINS(LOWER(TO_STRING(doc.ID)), @search_va_id)")
+        bind_vars["search_va_id"] = search_va_id.strip().lower()
+
+    if filter_by in _CCVA_FILTERABLE_FIELDS and filter_value:
+        if filter_by in ("gender", "age_group"):
+            filters.append(f"doc.{filter_by} == @filter_value")
+            bind_vars["filter_value"] = filter_value
+        else:
+            matching_causes = await _cause1_values_for_category(task_id, filter_by, filter_value, db)
+            filters.append("doc.CAUSE1 IN @matching_causes")
+            bind_vars["matching_causes"] = matching_causes
+
+    return filters, bind_vars
+
+
 async def fetch_ccva_individual_results(
     task_id: str,
     page_number: int = 1,
@@ -256,21 +303,7 @@ async def fetch_ccva_individual_results(
     """
     try:
         collection = db.collection(db_collections.CCVA_RESULTS)
-        bind_vars = {"task_id": task_id}
-        filters = ["doc.task_id == @task_id"]
-
-        if search_va_id:
-            filters.append("CONTAINS(LOWER(TO_STRING(doc.ID)), @search_va_id)")
-            bind_vars["search_va_id"] = search_va_id.strip().lower()
-
-        if filter_by in _CCVA_FILTERABLE_FIELDS and filter_value:
-            if filter_by in ("gender", "age_group"):
-                filters.append(f"doc.{filter_by} == @filter_value")
-                bind_vars["filter_value"] = filter_value
-            else:
-                matching_causes = await _cause1_values_for_category(task_id, filter_by, filter_value, db)
-                filters.append("doc.CAUSE1 IN @matching_causes")
-                bind_vars["matching_causes"] = matching_causes
+        filters, bind_vars = await _build_ccva_result_filters(task_id, search_va_id, filter_by, filter_value, db)
 
         base_query = f"FOR doc IN {collection.name} FILTER " + " AND ".join(filters) + " "
 
@@ -342,6 +375,133 @@ async def fetch_ccva_individual_results(
         raise BadRequestException(f"Failed to fetch CCVA individual results: {str(e)}", str(e))
 
 
+async def fetch_ccva_grouped_results(
+    task_id: str,
+    group_by: str,
+    search_va_id: Optional[str] = None,
+    filter_by: Optional[str] = None,
+    filter_value: Optional[str] = None,
+    db: StandardDatabase = None,
+) -> ResponseMainModel:
+    """Counts of (already filtered) CCVA individual results grouped by one
+    of _CCVA_GROUPABLE_FIELDS or _CCVA_CATEGORY_GROUP_FIELDS - backs the
+    Display Data table's Group By + Table/Pie/Bar views. Small result set
+    (a handful of group values) - no pagination, frontend sorts/paginates
+    the returned array itself if needed.
+    """
+    if group_by not in _CCVA_GROUPABLE_FIELDS and group_by not in _CCVA_CATEGORY_GROUP_FIELDS:
+        raise BadRequestException(f"Unsupported group_by value: {group_by}", group_by)
+    try:
+        collection = db.collection(db_collections.CCVA_RESULTS)
+        filters, bind_vars = await _build_ccva_result_filters(task_id, search_va_id, filter_by, filter_value, db)
+        base_query = f"FOR doc IN {collection.name} FILTER " + " AND ".join(filters) + " "
+
+        if group_by in _CCVA_CATEGORY_GROUP_FIELDS:
+            cause_to_major, cause_to_broad = await _cause_category_maps(task_id, db)
+            bind_vars["cause1_category_map"] = cause_to_broad if group_by == "broad" else cause_to_major
+            group_expression = 'TRANSLATE(doc.CAUSE1, @cause1_category_map, "Unclassified")'
+        else:
+            group_expression = _CCVA_GROUPABLE_FIELDS[group_by]
+
+        query = base_query + f"""
+        COLLECT grouped_value = {group_expression} WITH COUNT INTO count
+        RETURN {{"group": grouped_value, "count": count}}
+        """
+
+        def execute_query():
+            cursor = db.aql.execute(query, bind_vars=bind_vars)
+            return [document for document in cursor]
+
+        data = await run_in_threadpool(execute_query)
+        total = sum(row["count"] for row in data)
+
+        return ResponseMainModel(
+            data=data,
+            message="CCVA grouped results fetched successfully",
+            total=total,
+        )
+    except ArangoError as e:
+        raise BadRequestException("Failed to fetch CCVA grouped results", str(e))
+    except Exception as e:
+        raise BadRequestException(f"Failed to fetch CCVA grouped results: {str(e)}", str(e))
+
+
+async def fetch_ccva_map_points(
+    task_id: str,
+    search_va_id: Optional[str] = None,
+    filter_by: Optional[str] = None,
+    filter_value: Optional[str] = None,
+    db: StandardDatabase = None,
+) -> ResponseMainModel:
+    """Individual VA points (already filtered, same shape as
+    fetch_ccva_individual_results's filters) with GPS coordinates, for the
+    Display Data table's Map view. Joins back to the raw VA submission
+    (`db_collections.VA_TABLE`) the same way `getVADataAndMergeWithResults`
+    in ccva_services.py already does: `ccva_results.ID ==
+    form_submissions.<instance_id field>`, where the instance-id field name
+    is resolved per-deployment from ODK config rather than hardcoded.
+    Capped at _CCVA_MAP_POINTS_LIMIT with `truncated` reported in the
+    response so a run with far more matching records than that doesn't
+    silently drop points with no indication.
+    """
+    try:
+        config = await fetch_odk_config(db, True)
+        instance_id_field = config.field_mapping.instance_id or "instanceid"
+
+        collection = db.collection(db_collections.CCVA_RESULTS)
+        filters, bind_vars = await _build_ccva_result_filters(task_id, search_va_id, filter_by, filter_value, db)
+        bind_vars["limit"] = _CCVA_MAP_POINTS_LIMIT + 1
+
+        query = f"""
+        FOR doc IN {collection.name}
+            FILTER {" AND ".join(filters)}
+            LET submission = FIRST(
+                FOR s IN {db_collections.VA_TABLE}
+                    FILTER s.{instance_id_field} == doc.ID
+                    LIMIT 1
+                    RETURN s
+            )
+            FILTER submission != null AND submission.coordinates != null AND LENGTH(submission.coordinates) == 3
+            LIMIT @limit
+            RETURN {{
+                va_id: doc.ID,
+                lat: submission.coordinates[1],
+                lng: submission.coordinates[0],
+                gender: doc.gender,
+                age_group: doc.age_group,
+                cause1: doc.CAUSE1,
+                locationLevel1: doc.locationLevel1
+            }}
+        """
+
+        def execute_query():
+            cursor = db.aql.execute(query, bind_vars=bind_vars)
+            return [document for document in cursor]
+
+        rows = await run_in_threadpool(execute_query)
+        # Fetched one extra row (bind_vars["limit"]) purely to detect
+        # truncation - the frontend treats a result exactly at
+        # _CCVA_MAP_POINTS_LIMIT as "there may be more" and shows a note,
+        # so no separate response field is needed for this.
+        data = rows[:_CCVA_MAP_POINTS_LIMIT]
+
+        category_lookup = await get_cause_category_lookup(db)
+        for row in data:
+            cause1 = _clean_ccva_text(row.get("cause1"))
+            row["cause1"] = cause1
+            _, row["cause1_broad"] = classify_cause(cause1, category_lookup)
+
+        return ResponseMainModel(
+            data=data,
+            message="CCVA map points fetched successfully",
+            total=len(data),
+        )
+    except ArangoError as e:
+        raise BadRequestException("Failed to fetch CCVA map points", str(e))
+    except Exception as e:
+        raise BadRequestException(f"Failed to fetch CCVA map points: {str(e)}", str(e))
+
+
 # @ttl_cache(ttl=300, key_prefix="ccva_processed_graphs")
 # @cache(expire=6000, namespace="ccva_processed_graphs")
 async def fetch_processed_ccva_graphs(
@@ -401,7 +561,7 @@ async def fetch_processed_ccva_graphs(
         """
 
         def execute_processed_query():
-            cursor = db.aql.execute(query, bind_vars=bind_vars, cache=True)
+            cursor = db.aql.execute(query, bind_vars=bind_vars)
             return [document for document in cursor]
 
         data = await run_in_threadpool(execute_processed_query)
@@ -479,7 +639,7 @@ async def fetch_processed_individual_ccva_graphs(
         """
 
         def execute_individual_query():
-            cursor = db.aql.execute(query, bind_vars=bind_vars, cache=True)
+            cursor = db.aql.execute(query, bind_vars=bind_vars)
             return [document for document in cursor]
 
         data = await run_in_threadpool(execute_individual_query)
@@ -584,7 +744,7 @@ async def update_ccva_entry(ccva_id: str, update_data: dict, db: StandardDatabas
         query = f"FOR doc IN {collection.name} FILTER doc._key == @ccva_id RETURN doc"
         
         def execute_fetch_entry():
-            cursor = db.aql.execute(query, bind_vars={"ccva_id": ccva_id}, cache=True)
+            cursor = db.aql.execute(query, bind_vars={"ccva_id": ccva_id})
             return next(cursor, None)
 
         ccva_doc = await run_in_threadpool(execute_fetch_entry)
@@ -600,7 +760,7 @@ async def update_ccva_entry(ccva_id: str, update_data: dict, db: StandardDatabas
         }
         
         def execute_update_entry():
-            cursor = db.aql.execute(query, bind_vars=bind_vars, cache=True)
+            cursor = db.aql.execute(query, bind_vars=bind_vars)
             return next(cursor, None)
 
         updated_doc = await run_in_threadpool(execute_update_entry)
@@ -628,7 +788,7 @@ async def set_ccva_as_default(ccva_id: str, db: StandardDatabase) -> ResponseMai
         """
         
         def execute_toggle_default():
-            db.aql.execute(query_unset_default, cache=True)  # Unset the current default entry
+            db.aql.execute(query_unset_default)  # Unset the current default entry
 
             # Step 2: Set the new CCVA as default
             query_set_default = f"""
@@ -638,7 +798,7 @@ async def set_ccva_as_default(ccva_id: str, db: StandardDatabase) -> ResponseMai
             RETURN NEW
             """
             bind_vars = {"ccva_id": ccva_id}
-            cursor = db.aql.execute(query_set_default, bind_vars=bind_vars, cache=True)
+            cursor = db.aql.execute(query_set_default, bind_vars=bind_vars)
             return next(cursor, None)
 
         updated_doc = await run_in_threadpool(execute_toggle_default)
@@ -671,7 +831,7 @@ async def clear_ccva_default(ccva_id: str, db: StandardDatabase) -> ResponseMain
         bind_vars = {"ccva_id": ccva_id}
 
         def execute_clear_default():
-            cursor = db.aql.execute(query_clear_default, bind_vars=bind_vars, cache=True)
+            cursor = db.aql.execute(query_clear_default, bind_vars=bind_vars)
             return next(cursor, None)
 
         updated_doc = await run_in_threadpool(execute_clear_default)
@@ -699,7 +859,7 @@ async def delete_ccva_entry(ccva_id: str, db: StandardDatabase) -> ResponseMainM
         query = f"FOR doc IN {collection.name} FILTER doc._key == @ccva_id RETURN doc"
         
         def execute_delete_entry():
-            cursor = db.aql.execute(query, bind_vars={"ccva_id": ccva_id}, cache=True)
+            cursor = db.aql.execute(query, bind_vars={"ccva_id": ccva_id})
             ccva_doc = next(cursor, None)
             if not ccva_doc:
                 raise BadRequestException(f"CCVA entry with id {ccva_id} not found")
@@ -707,7 +867,7 @@ async def delete_ccva_entry(ccva_id: str, db: StandardDatabase) -> ResponseMainM
             # Delete the document
             query_delete = f"REMOVE {{ _key: @ccva_id }} IN {collection.name}"
             bind_vars = {"ccva_id": ccva_id}
-            db.aql.execute(query_delete, bind_vars=bind_vars, cache=True)
+            db.aql.execute(query_delete, bind_vars=bind_vars)
 
             task_id = ccva_doc.get("task_id")
             if task_id:

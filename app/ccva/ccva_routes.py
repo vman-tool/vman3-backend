@@ -12,7 +12,8 @@ from fastapi import (APIRouter, BackgroundTasks, Body, Depends, File,
 
 from app.ccva.services.ccva_data_services import (
     delete_ccva_entry, fetch_all_processed_ccva_graphs,
-    fetch_ccva_individual_results, get_ccva_filter_options,
+    fetch_ccva_individual_results, fetch_ccva_grouped_results,
+    fetch_ccva_map_points, get_ccva_filter_options,
     fetch_processed_ccva_graphs, set_ccva_as_default, clear_ccva_default)
 from app.ccva.services.ccva_graph_services import \
     fetch_db_processed_ccva_graphs
@@ -359,6 +360,40 @@ async def get_ccva_filter_options_route(
     db: StandardDatabase = Depends(get_arangodb_session),
 ):
     return await get_ccva_filter_options(task_id=task_id, db=db)
+
+@ccva_router.get("/{task_id}/grouped-results", status_code=status.HTTP_200_OK)
+async def get_ccva_grouped_results_route(
+    task_id: str,
+    group_by: str = Query(...),
+    search_va_id: Optional[str] = Query(None),
+    filter_by: Optional[str] = Query(None),
+    filter_value: Optional[str] = Query(None),
+    db: StandardDatabase = Depends(get_arangodb_session),
+):
+    return await fetch_ccva_grouped_results(
+        task_id=task_id,
+        group_by=group_by,
+        search_va_id=search_va_id,
+        filter_by=filter_by,
+        filter_value=filter_value,
+        db=db,
+    )
+
+@ccva_router.get("/{task_id}/map-points", status_code=status.HTTP_200_OK)
+async def get_ccva_map_points_route(
+    task_id: str,
+    search_va_id: Optional[str] = Query(None),
+    filter_by: Optional[str] = Query(None),
+    filter_value: Optional[str] = Query(None),
+    db: StandardDatabase = Depends(get_arangodb_session),
+):
+    return await fetch_ccva_map_points(
+        task_id=task_id,
+        search_va_id=search_va_id,
+        filter_by=filter_by,
+        filter_value=filter_value,
+        db=db,
+    )
 
 #@log_to_db(context="set_default_ccva", log_args=True)
 @ccva_router.post("/{ccva_id}/set-default", status_code=status.HTTP_200_OK)

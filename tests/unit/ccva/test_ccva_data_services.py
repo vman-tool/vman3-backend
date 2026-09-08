@@ -2,10 +2,14 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
+from types import SimpleNamespace
+
 from app.ccva.services.ccva_data_services import (
     clear_ccva_default,
     fetch_all_processed_ccva_graphs,
+    fetch_ccva_grouped_results,
     fetch_ccva_individual_results,
+    fetch_ccva_map_points,
     get_ccva_filter_options,
     set_ccva_as_default,
 )
@@ -394,3 +398,165 @@ class TestGetCcvaFilterOptions:
         result = await get_ccva_filter_options("t1", fake_db)
 
         assert result.data == {"gender": [], "age_group": [], "broad": [], "major": []}
+
+
+class TestFetchCcvaGroupedResults:
+    @pytest.fixture(autouse=True)
+    def cause_category_lookup(self):
+        lookup = (
+            {"04": ("Diseases of the circulatory system", "Group II: Non-Communicable")},
+            [("Diseases of the circulatory system", "Group II: Non-Communicable")],
+        )
+        with patch(
+            "app.ccva.services.ccva_data_services.get_cause_category_lookup",
+            new=AsyncMock(return_value=lookup),
+        ):
+            yield
+
+    def _responder(self, grouped_rows):
+        def responder(query, bind_vars):
+            if "COLLECT cause = doc.CAUSE1" in query:
+                # Only the broad/major path needs the distinct-causes lookup.
+                return FakeCursor(["Stroke", "Some Unmapped Cause"])
+            return FakeCursor(list(grouped_rows))
+        return responder
+
+    async def test_rejects_an_unsupported_group_by_value(self):
+        fake_db = FakeDB()
+
+        with pytest.raises(BadRequestException):
+            await fetch_ccva_grouped_results("t1", "not-a-real-field", db=fake_db)
+
+    async def test_groups_by_a_plain_stored_field(self):
+        fake_db = FakeDB(responder=self._responder([
+            {"group": "dodoma", "count": 7}, {"group": "iringa", "count": 3},
+        ]))
+
+        result = await fetch_ccva_grouped_results("t1", "region", db=fake_db)
+
+        assert result.data == [{"group": "dodoma", "count": 7}, {"group": "iringa", "count": 3}]
+        assert result.total == 10
+        data_query = [q for q, _ in fake_db.aql.queries][0]
+        assert "COLLECT grouped_value = doc.locationLevel1 WITH COUNT INTO count" in data_query
+
+    async def test_groups_by_broad_category_via_a_cause1_translate_map(self):
+        fake_db = FakeDB(responder=self._responder([
+            {"group": "Group II: Non-Communicable", "count": 4},
+            {"group": "Unclassified", "count": 1},
+        ]))
+
+        result = await fetch_ccva_grouped_results("t1", "broad", db=fake_db)
+
+        assert result.total == 5
+        data_query, data_bind_vars = [
+            (q, b) for q, b in fake_db.aql.queries if "COLLECT cause = doc.CAUSE1" not in q
+        ][0]
+        assert 'COLLECT grouped_value = TRANSLATE(doc.CAUSE1, @cause1_category_map, "Unclassified")' in data_query
+        assert data_bind_vars["cause1_category_map"] == {"Stroke": "Group II: Non-Communicable"}
+
+    async def test_applies_the_shared_search_and_filter_clauses(self):
+        fake_db = FakeDB(responder=self._responder([{"group": "male", "count": 2}]))
+
+        await fetch_ccva_grouped_results(
+            "t1", "gender", search_va_id="uuid-1", filter_by="age_group", filter_value="adult", db=fake_db
+        )
+
+        data_query, data_bind_vars = [q for q, _ in fake_db.aql.queries][0], fake_db.aql.queries[0][1]
+        assert "CONTAINS(LOWER(TO_STRING(doc.ID))" in data_query
+        assert "doc.age_group == @filter_value" in data_query
+        assert data_bind_vars["filter_value"] == "adult"
+
+    async def test_empty_run_returns_an_empty_group_list(self):
+        fake_db = FakeDB(responder=self._responder([]))
+
+        result = await fetch_ccva_grouped_results("t1", "gender", db=fake_db)
+
+        assert result.data == []
+        assert result.total == 0
+
+
+class TestFetchCcvaMapPoints:
+    def _fake_config(self, instance_id="instanceid"):
+        return SimpleNamespace(field_mapping=SimpleNamespace(instance_id=instance_id))
+
+    def _patch_config(self, instance_id="instanceid"):
+        return patch(
+            "app.ccva.services.ccva_data_services.fetch_odk_config",
+            new=AsyncMock(return_value=self._fake_config(instance_id)),
+        )
+
+    @pytest.fixture(autouse=True)
+    def cause_category_lookup(self):
+        lookup = (
+            {"04": ("Diseases of the circulatory system", "Group II: Non-Communicable")},
+            [("Diseases of the circulatory system", "Group II: Non-Communicable")],
+        )
+        with patch(
+            "app.ccva.services.ccva_data_services.get_cause_category_lookup",
+            new=AsyncMock(return_value=lookup),
+        ):
+            yield
+
+    def _point(self, **overrides):
+        point = {
+            "va_id": "uuid-1", "lat": -6.3, "lng": 34.8,
+            "gender": "male", "age_group": "adult", "cause1": "Stroke", "locationLevel1": "dodoma",
+        }
+        point.update(overrides)
+        return point
+
+    async def test_joins_on_the_configured_instance_id_field(self):
+        fake_db = FakeDB(responder=lambda q, b: FakeCursor([self._point()]))
+
+        with self._patch_config(instance_id="instanceID"):
+            result = await fetch_ccva_map_points("t1", db=fake_db)
+
+        assert result.data[0]["va_id"] == "uuid-1"
+        assert result.data[0]["lat"] == -6.3
+        assert result.data[0]["lng"] == 34.8
+        query = fake_db.aql.queries[0][0]
+        assert "s.instanceID == doc.ID" in query
+        assert "form_submissions" in query
+
+    async def test_falls_back_to_the_default_instance_id_field(self):
+        fake_db = FakeDB(responder=lambda q, b: FakeCursor([]))
+
+        with self._patch_config(instance_id=None):
+            await fetch_ccva_map_points("t1", db=fake_db)
+
+        query = fake_db.aql.queries[0][0]
+        assert "s.instanceid == doc.ID" in query
+
+    async def test_attaches_broad_category_for_each_point(self):
+        fake_db = FakeDB(responder=lambda q, b: FakeCursor([self._point(cause1="Stroke")]))
+
+        with self._patch_config():
+            result = await fetch_ccva_map_points("t1", db=fake_db)
+
+        assert result.data[0]["cause1_broad"] == "Group II: Non-Communicable"
+
+    async def test_caps_results_at_the_map_points_limit(self):
+        rows = [self._point(va_id=f"uuid-{i}") for i in range(5001)]
+        fake_db = FakeDB(responder=lambda q, b: FakeCursor(rows))
+
+        with self._patch_config():
+            result = await fetch_ccva_map_points("t1", db=fake_db)
+
+        assert len(result.data) == 5000
+        assert result.total == 5000
+        # The query itself asks the DB for one extra row past the limit
+        # purely to detect truncation - confirm that request shape.
+        assert fake_db.aql.queries[0][1]["limit"] == 5001
+
+    async def test_applies_the_shared_search_and_filter_clauses(self):
+        fake_db = FakeDB(responder=lambda q, b: FakeCursor([]))
+
+        with self._patch_config():
+            await fetch_ccva_map_points(
+                "t1", search_va_id="uuid-1", filter_by="gender", filter_value="female", db=fake_db
+            )
+
+        query, bind_vars = fake_db.aql.queries[0]
+        assert "CONTAINS(LOWER(TO_STRING(doc.ID))" in query
+        assert "doc.gender == @filter_value" in query
+        assert bind_vars["filter_value"] == "female"
