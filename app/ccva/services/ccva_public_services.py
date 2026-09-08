@@ -554,7 +554,7 @@ async def fetch_ccva_results_and_errors(db: StandardDatabase, task_id: str):
             """
 
             # Execute the AQL query
-            cursor = db.aql.execute(query, cache=True)
+            cursor = db.aql.execute(query)
 
             # Retrieve the result (first result since RETURN only outputs one document)
             result = cursor.next()
@@ -694,7 +694,7 @@ FOR doc IN {collection.name}
     """
     # print(query)
     # Execute the query with caching
-    cursor = db.aql.execute(query, cache=True)
+    cursor = db.aql.execute(query)
 
     # Convert the cursor to a dictionary keyed by UID for easy lookup
     va_data_map = {doc['uid']: doc for doc in cursor}

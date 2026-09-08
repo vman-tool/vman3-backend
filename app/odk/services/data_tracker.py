@@ -90,7 +90,7 @@ async def get_last_processed_timestamp(db: StandardDatabase):
     
     try:
         def execute_query():
-            cursor = db.aql.execute(query, bind_vars=bind_vars, cache=True)
+            cursor = db.aql.execute(query, bind_vars=bind_vars)
             return cursor.next()
 
         doc = await run_in_threadpool(execute_query)
@@ -229,7 +229,7 @@ async def get_incomplete_chunks(db: StandardDatabase):
         '''
         
         def execute_incomplete_chunks_query():
-            cursor = db.aql.execute(query, bind_vars={'@collection': collection.name}, cache=True)
+            cursor = db.aql.execute(query, bind_vars={'@collection': collection.name})
             return [doc for doc in cursor]
 
         return await run_in_threadpool(execute_incomplete_chunks_query)
