@@ -95,6 +95,12 @@ async def get_va_cause_of_death_route(
     va_id: str,
     include_ccva: bool = Query(False, alias="include_ccva"),
     include_pcva: bool = Query(False, alias="include_pcva"),
+    # Set when opened from a specific CCVA run's own results table (CCVA >
+    # Display Data), so the popup shows that run's own cause rather than
+    # whichever run happens to be marked default - see cause_of_death.py's
+    # _fetch_ccva_cod for why. Omitted everywhere else (VA Records menu,
+    # PCVA screens), which keeps the existing default-run behavior.
+    task_id: Optional[str] = Query(None, alias="task_id"),
     current_user = Depends(get_current_user),
     db: StandardDatabase = Depends(get_arangodb_session)):
 
@@ -102,7 +108,8 @@ async def get_va_cause_of_death_route(
         va_id=va_id,
         include_ccva=include_ccva,
         include_pcva=include_pcva,
-        db=db)
+        db=db,
+        task_id=task_id)
 
 
 #@log_to_db(context="fetch_unique_regions", log_args=True)
