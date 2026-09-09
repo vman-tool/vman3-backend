@@ -68,6 +68,48 @@ async def test_ccva_not_fetched_when_include_ccva_is_false():
 
 
 @pytest.mark.asyncio
+async def test_ccva_scoped_to_a_task_id_ignores_which_run_is_marked_default():
+    # CCVA > Display Data always knows exactly which run it's showing - the
+    # popup should reflect that run's own cause, not whichever run (if any)
+    # happens to be marked default, which may well be a different one.
+    def responder(query, bind_vars):
+        assert bind_vars == {"va_id": "va-1", "task_id": "run-42"}
+        assert "g.task_id == @task_id" in query
+        assert "r.task_id == @task_id" in query
+        assert "isDefault" not in query
+        return FakeCursor([{"algorithm": "InterVA5", "cause1": "Malaria", "probability": 91.0}])
+
+    db = FakeDB(responder)
+
+    result = await get_va_cause_of_death("va-1", include_ccva=True, include_pcva=False, db=db, task_id="run-42")
+
+    assert result.data["ccva"] == {"algorithm": "InterVA5", "cause1": "Malaria", "probability": 91.0}
+
+
+@pytest.mark.asyncio
+async def test_ccva_scoped_to_a_task_id_returns_none_when_that_run_has_no_result_for_this_record():
+    db = FakeDB(lambda query, bind_vars: FakeCursor([]))
+
+    result = await get_va_cause_of_death("va-1", include_ccva=True, include_pcva=False, db=db, task_id="run-42")
+
+    assert result.data["ccva"] is None
+
+
+@pytest.mark.asyncio
+async def test_ccva_without_a_task_id_still_falls_back_to_the_default_run():
+    def responder(query, bind_vars):
+        assert bind_vars == {"va_id": "va-1"}
+        assert "g.isDefault == true" in query
+        return FakeCursor([{"algorithm": "VManML10", "cause1": "Sepsis", "probability": 78.5}])
+
+    db = FakeDB(responder)
+
+    result = await get_va_cause_of_death("va-1", include_ccva=True, include_pcva=False, db=db, task_id=None)
+
+    assert result.data["ccva"]["algorithm"] == "VManML10"
+
+
+@pytest.mark.asyncio
 async def test_pcva_returns_none_when_no_coder_has_coded_this_va():
     db = FakeDB(lambda query, bind_vars: FakeCursor([]))
 
