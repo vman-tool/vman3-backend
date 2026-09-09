@@ -8,34 +8,64 @@ from app.shared.configs.constants import db_collections
 from app.shared.configs.models import ResponseMainModel
 
 
-async def _fetch_ccva_cod(va_id: str, db: StandardDatabase) -> Optional[dict]:
-    """CoD from the CCVA run currently marked as the default (InterVA5 or
-    VManML10 - whichever the user set as default under CCVA settings).
-    Returns None when no default run is set, or the default run has no
+async def _fetch_ccva_cod(va_id: str, db: StandardDatabase, task_id: Optional[str] = None) -> Optional[dict]:
+    """CoD for this VA from a specific CCVA run when `task_id` is given (used
+    by CCVA > Display Data, where the run being viewed is unambiguous and
+    may not be the one marked default - showing the default run's cause
+    there would be inconsistent with the row the user actually clicked),
+    otherwise from whichever run is currently marked default (InterVA5 or
+    VManML10 - the VA Records menu and everywhere else with no specific run
+    in context). Returns None when the relevant run doesn't exist, or has no
     result for this particular VA.
     """
-    query = f"""
-        LET default_run = FIRST(
-            FOR g IN {db_collections.CCVA_GRAPH_RESULTS}
-                FILTER g.isDefault == true
-                RETURN g
-        )
-        FILTER default_run != null
-        LET record = FIRST(
-            FOR r IN {db_collections.CCVA_RESULTS}
-                FILTER r.task_id == default_run.task_id AND (r.ID == @va_id OR r.uid == @va_id)
-                RETURN r
-        )
-        FILTER record != null
-        RETURN {{
-            algorithm: default_run.algorithm != null ? default_run.algorithm : "InterVA5",
-            cause1: record.CAUSE1,
-            probability: record.LIK1
-        }}
-    """
+    if task_id:
+        # "graph" is a reserved AQL keyword (GRAPH traversal syntax) and
+        # can't be used as a LET variable name - caught live, where the real
+        # ArangoDB parser rejects it; the FakeDB-backed unit tests below
+        # don't parse AQL so they couldn't catch this.
+        query = f"""
+            LET run_graph = FIRST(
+                FOR g IN {db_collections.CCVA_GRAPH_RESULTS}
+                    FILTER g.task_id == @task_id
+                    RETURN g
+            )
+            LET record = FIRST(
+                FOR r IN {db_collections.CCVA_RESULTS}
+                    FILTER r.task_id == @task_id AND (r.ID == @va_id OR r.uid == @va_id)
+                    RETURN r
+            )
+            FILTER record != null
+            RETURN {{
+                algorithm: run_graph != null && run_graph.algorithm != null ? run_graph.algorithm : "InterVA5",
+                cause1: record.CAUSE1,
+                probability: record.LIK1
+            }}
+        """
+        bind_vars = {"va_id": va_id, "task_id": task_id}
+    else:
+        query = f"""
+            LET default_run = FIRST(
+                FOR g IN {db_collections.CCVA_GRAPH_RESULTS}
+                    FILTER g.isDefault == true
+                    RETURN g
+            )
+            FILTER default_run != null
+            LET record = FIRST(
+                FOR r IN {db_collections.CCVA_RESULTS}
+                    FILTER r.task_id == default_run.task_id AND (r.ID == @va_id OR r.uid == @va_id)
+                    RETURN r
+            )
+            FILTER record != null
+            RETURN {{
+                algorithm: default_run.algorithm != null ? default_run.algorithm : "InterVA5",
+                cause1: record.CAUSE1,
+                probability: record.LIK1
+            }}
+        """
+        bind_vars = {"va_id": va_id}
 
     def execute():
-        cursor = db.aql.execute(query, bind_vars={"va_id": va_id})
+        cursor = db.aql.execute(query, bind_vars=bind_vars)
         results = list(cursor)
         return results[0] if results else None
 
@@ -106,8 +136,10 @@ async def _fetch_pcva_cod(va_id: str, db: StandardDatabase) -> Optional[dict]:
     }
 
 
-async def get_va_cause_of_death(va_id: str, include_ccva: bool, include_pcva: bool, db: StandardDatabase) -> ResponseMainModel:
-    ccva = await _fetch_ccva_cod(va_id, db) if include_ccva else None
+async def get_va_cause_of_death(
+    va_id: str, include_ccva: bool, include_pcva: bool, db: StandardDatabase, task_id: Optional[str] = None
+) -> ResponseMainModel:
+    ccva = await _fetch_ccva_cod(va_id, db, task_id) if include_ccva else None
     pcva = await _fetch_pcva_cod(va_id, db) if include_pcva else None
 
     return ResponseMainModel(
