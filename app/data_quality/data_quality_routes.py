@@ -14,6 +14,7 @@ from app.data_quality.services.general_dqa import (
     fetch_ics_value_sample,
     fetch_rrs_stats,
     fetch_ici_stats,
+    fetch_dqa_map_points,
 )
 from app.data_quality.services.dqa_analytics_service import (
     fetch_dqa_analytics_snapshot,
@@ -94,6 +95,26 @@ async def get_dqa_analytics(
     try:
         snapshot = await fetch_dqa_analytics_snapshot(db)
         return {"data": snapshot, "message": "ok"}
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+
+
+@data_quality_router.get("/map-points")
+async def get_dqa_map_points(
+    current_user=Depends(get_current_user),
+    start_date: Optional[date] = Query(None, alias="start_date"),
+    end_date: Optional[date] = Query(None, alias="end_date"),
+    locations: Optional[str] = Query(None, alias="locations"),
+    db: StandardDatabase = Depends(get_arangodb_session),
+):
+    try:
+        return await fetch_dqa_map_points(
+            current_user=current_user,
+            start_date=start_date,
+            end_date=end_date,
+            locations=locations,
+            db=db,
+        )
     except Exception as e:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
 

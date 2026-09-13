@@ -89,14 +89,48 @@ def run_ccva_task(
     database internally to avoid memory pressure during task dispatch.
     """
     logger.info(f"Starting CCVA task {task_id}")
-    
+
     start_time = datetime.now()
-    
+
     # Check if we need to fetch data
     is_fetch_mode = records_data is None
-    
+
+    # Import here to avoid circular imports. Done before the first progress
+    # publish (not inside the try: block below, where this used to live) so
+    # every single update - including the very first one - can be persisted
+    # durably, not just broadcast live.
+    from app.shared.configs.arangodb import get_arangodb_client_sync
+    from app.shared.services.task_progress_service import TaskProgressService
+
+    # Get database connection (sync version for Celery)
+    db = get_arangodb_client_sync()
+
+    def _publish_and_persist(progress_data: dict):
+        """Broadcast live via Redis pub/sub AND persist durably to
+        TaskProgressService, mirroring ccva_services.py's
+        _persist_and_broadcast (the non-Celery run path). Without the
+        durable write, a task run via Celery (USE_CELERY=True, the
+        production default) had no record anywhere but a one-shot pub/sub
+        message: GET /ccva/progress/{task_id} always 404'd, so a missed
+        WebSocket message (network blip, proxy/idle timeout, worker
+        recycle) left the frontend with literally no way to ever learn the
+        task had finished - not even a page refresh could resync, since
+        there was nothing to resync from. This is the fix for that.
+        """
+        publish_progress(task_id, progress_data)
+        try:
+            loop = asyncio.new_event_loop()
+            try:
+                loop.run_until_complete(
+                    TaskProgressService.save_progress(db, task_id, dict(progress_data))
+                )
+            finally:
+                loop.close()
+        except Exception as e:
+            logger.error(f"Failed to persist progress for task {task_id}: {e}")
+
     # Publish initial progress
-    publish_progress(task_id, {
+    _publish_and_persist({
         "progress": 1,
         "total_records": len(records_data) if records_data else 0,
         "message": "Starting CCVA analysis..." if not is_fetch_mode else "Initializing CCVA worker...",
@@ -105,23 +139,18 @@ def run_ccva_task(
         "error": False,
         "elapsed_time": "0:0:0"
     })
-    
+
     try:
-        # Import here to avoid circular imports
-        from app.shared.configs.arangodb import get_arangodb_client_sync
         from app.ccva.services.ccva_services import runCCVA, get_record_to_run_ccva
         from app.settings.services.odk_configs import fetch_odk_config
         from app.shared.configs.models import ResponseMainModel
-        
+
         import pandas as pd
         from app.shared.configs.arangodb import remove_null_values
-        
-        # Get database connection (sync version for Celery)
-        db = get_arangodb_client_sync()
 
         # Step 1: Fetch data if optimized mode is used
         if is_fetch_mode:
-            publish_progress(task_id, {
+            _publish_and_persist({
                 "progress": 2,
                 "message": "Fetching records from database...",
                 "status": "running",
@@ -159,7 +188,7 @@ def run_ccva_task(
             logger.info(f"Worker fetched {len(records_data)} records from database")
         
         # Convert to DataFrame
-        publish_progress(task_id, {
+        _publish_and_persist({
             "progress": 3,
             "message": "Preparing data...",
             "status": "running",
@@ -190,11 +219,11 @@ def run_ccva_task(
                     progress = json.loads(progress)
                 except:
                     progress = {"message": progress}
-            
-            publish_progress(task_id, progress)
-        
+
+            _publish_and_persist(progress)
+
         # Run CCVA (this is synchronous)
-        publish_progress(task_id, {
+        _publish_and_persist({
             "progress": 5,
             "message": "Running InterVA5 analysis...",
             "status": "running",
@@ -223,7 +252,7 @@ def run_ccva_task(
         elapsed_str = f"{elapsed.seconds // 3600}:{(elapsed.seconds // 60) % 60}:{elapsed.seconds % 60}"
         
         # Publish completion
-        publish_progress(task_id, {
+        _publish_and_persist({
             "progress": 100,
             "message": "CCVA analysis completed successfully",
             "status": "completed",
@@ -242,8 +271,12 @@ def run_ccva_task(
         
         logger.error(f"CCVA task {task_id} failed: {e}")
         
-        # Publish error
-        publish_progress(task_id, {
+        # Publish error. Note: this also fires on a non-final retry attempt
+        # (autoretry_for=(Exception,) means Celery will quietly retry up to
+        # max_retries times after this) - pre-existing behavior, unrelated
+        # to this fix, that could show a transient "error" during the
+        # backoff window before the next attempt starts.
+        _publish_and_persist({
             "progress": 0,
             "message": f"Error during CCVA analysis: {str(e)}",
             "status": "error",

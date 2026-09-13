@@ -43,10 +43,19 @@ class FakeCollection:
     def __init__(self, name: str):
         self.name = name
         self.inserted: list[Any] = []
+        self.truncated = False
 
     def insert(self, document, **kwargs):
         self.inserted.append(document)
         return {**document, "_key": document.get("_key", "fake-key")}
+
+    def insert_many(self, documents, **kwargs):
+        self.inserted.extend(documents)
+        return [{**d, "_key": d.get("_key", "fake-key")} for d in documents]
+
+    def truncate(self):
+        self.truncated = True
+        self.inserted = []
 
 
 class FakeDB:
