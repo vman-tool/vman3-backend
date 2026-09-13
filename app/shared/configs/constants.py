@@ -31,6 +31,7 @@ class db_collections():
     TASK_PROGRESS: str = 'task_progress'
     SYNC_HISTORY: str = 'sync_history'
     DQA_ANALYTICS: str = 'dqa_analytics'
+    DQA_MAP_POINTS: str = 'dqa_map_points'
     EXPECTED_DEATHS: str = 'expected_deaths'
 
 class data_sources():
@@ -168,6 +169,14 @@ collections_with_indexes = {
     ],
     db_collections.DQA_ANALYTICS: [
         {"fields": ["computed_at"], "type": "persistent", "name": "idx_dqa_computed_at"},
+    ],
+    # No index on the location fields here - unlike "date" (always that
+    # literal key), the region/district/ward columns are stored under
+    # whatever field name this deployment's field_mapping configures (only
+    # known at runtime), not a fixed name this static bootstrap list can
+    # reference.
+    db_collections.DQA_MAP_POINTS: [
+        {"fields": ["date"], "type": "persistent", "name": "idx_dqa_map_date"},
     ],
     db_collections.EXPECTED_DEATHS: [
         {"fields": ["level"], "type": "persistent", "name": "idx_expected_deaths_level"},

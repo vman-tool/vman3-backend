@@ -216,13 +216,30 @@ async def get_ccva_progress(
     """
     progress = await TaskProgressService.get_progress(db, task_id)
     if not progress:
-        # Fallback: check Celery directly if not found in DB progress
+        # Fallback: check Celery directly if not found in DB progress. This
+        # should be rare now that run_ccva_task persists every update
+        # (including the final one) via TaskProgressService - it only
+        # covers a worker dying between the Redis publish and the DB write.
         if USE_CELERY:
              res = AsyncResult(task_id)
              if res.state == 'FAILURE':
                  return ResponseMainModel(data={"status": "failed", "message": f"Task failed: {res.result}", "error": True, "task_id": task_id}, message="Progress fetched (Celery Failure)", error=False)
+             if res.state == 'SUCCESS':
+                 result = res.result if isinstance(res.result, dict) else {}
+                 return ResponseMainModel(
+                     data={
+                         "status": "completed",
+                         "progress": 100,
+                         "message": "CCVA analysis completed successfully",
+                         "elapsed_time": result.get("elapsed_time"),
+                         "task_id": task_id,
+                         "error": False,
+                     },
+                     message="Progress fetched (Celery Success)",
+                     error=False,
+                 )
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task progress not found.")
-    
+
     # 1. Check Celery native state as first layer of truth
     if USE_CELERY:
         try:
@@ -232,6 +249,15 @@ async def get_ccva_progress(
                 progress['message'] = f"Celery reported failure: {res.result}"
                 progress['error'] = True
                 return ResponseMainModel(data=progress, message="Progress fetched (Celery Failure)", error=False)
+            if res.state == 'SUCCESS' and progress.get('status') not in ('completed', 'failed', 'error'):
+                # The task finished, but the last *persisted* update somehow
+                # wasn't the final "completed" one (e.g. a worker restart
+                # between the DB write and Celery recording its own result) -
+                # Celery's own result backend is still the source of truth.
+                progress['status'] = 'completed'
+                progress['progress'] = 100
+                progress['error'] = False
+                return ResponseMainModel(data=progress, message="Progress fetched (Celery Success)", error=False)
         except Exception:
             pass
 

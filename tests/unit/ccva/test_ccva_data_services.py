@@ -527,13 +527,18 @@ class TestFetchCcvaMapPoints:
         query = fake_db.aql.queries[0][0]
         assert "s.instanceid == doc.ID" in query
 
-    async def test_attaches_broad_category_for_each_point(self):
+    async def test_attaches_broad_and_major_category_for_each_point(self):
+        # Regression test: cause1_major used to be computed and thrown away
+        # (`_, row["cause1_broad"] = classify_cause(...)`), which is why the
+        # Map view's "Major Category" Group By silently had nothing to
+        # color by even though "Broad Category" worked fine.
         fake_db = FakeDB(responder=lambda q, b: FakeCursor([self._point(cause1="Stroke")]))
 
         with self._patch_config():
             result = await fetch_ccva_map_points("t1", db=fake_db)
 
         assert result.data[0]["cause1_broad"] == "Group II: Non-Communicable"
+        assert result.data[0]["cause1_major"] == "Diseases of the circulatory system"
 
     async def test_caps_results_at_the_map_points_limit(self):
         rows = [self._point(va_id=f"uuid-{i}") for i in range(5001)]

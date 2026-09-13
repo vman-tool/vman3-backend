@@ -1,3 +1,5 @@
+from typing import Optional
+
 import pandas as pd
 from arango.database import StandardDatabase
 from fastapi.concurrency import run_in_threadpool
@@ -8,6 +10,7 @@ from vman_dq.dqa import ICI_RULE_DESCRIPTIONS
 from app.settings.services.odk_configs import fetch_odk_config
 from app.shared.configs.constants import db_collections
 from app.shared.configs.models import ResponseMainModel
+from app.shared.configs.security import build_location_limit_filter, build_locations_query_filter
 
 # ---------------------------------------------------------------------------
 # Shared helper: fetch every VA record into a DataFrame for vman_dq
@@ -287,3 +290,175 @@ async def fetch_ici_stats(db: StandardDatabase, df: pd.DataFrame = None) -> Resp
 
     except Exception as e:
         return ResponseMainModel(data=None, message="Failed to fetch ICI statistics", error=str(e))
+
+
+# ---------------------------------------------------------------------------
+# Per-record DQA map points (Data Map's DQA-indicator coloring)
+# ---------------------------------------------------------------------------
+
+def _clean(v):
+    """None-safe scalar cleanup: NaN/None -> None, everything else passed
+    through as-is (caller casts to float where a number is expected)."""
+    if v is None:
+        return None
+    if isinstance(v, float) and pd.isna(v):
+        return None
+    return v
+
+
+async def compute_and_store_dqa_map_points(db: StandardDatabase, df: pd.DataFrame) -> int:
+    """Persist one row per VA record with GPS + admin location + each
+    indicator's raw score, for the Data Map's DQA-indicator coloring.
+
+    Tiering (High/Medium/Low equivalents) deliberately happens on the
+    frontend via the already-existing, admin-configurable
+    DqaThresholdService - this only stores raw scores, so a threshold
+    change recolors the map without needing a recompute here.
+
+    Reuses the exact per-record Series fetch_rrs_stats/fetch_ics_stats/
+    fetch_interview_duration_stats/fetch_ici_stats already produce
+    internally from this same `df` - the only new cost is zipping them with
+    coordinates/location (already columns in `df`) and writing rows.
+    """
+    if df.empty:
+        await run_in_threadpool(
+            lambda: db.collection(db_collections.DQA_MAP_POINTS).truncate()
+        )
+        return 0
+
+    config = await fetch_odk_config(db, True)
+    fm = config.field_mapping
+
+    def col(name):
+        if name and name in df.columns:
+            return df[name]
+        return pd.Series(None, index=df.index)
+
+    coordinates = col("coordinates")
+    region = col(fm.location_level1)
+    district = col(fm.location_level2)
+    ward = col(fm.location_level3)
+    date_col = col(fm.interview_date)
+    va_id_col = col("_key")
+
+    rrs = await run_in_threadpool(compute_rrs, df)
+    ics = await run_in_threadpool(_compute_ics_chunked, df)
+    aid = await run_in_threadpool(compute_aid, df)
+
+    def _compute_ici_series():
+        ici_series, _flags, _computable = compute_ici(df, gender_field=fm.deceased_gender)
+        return ici_series
+
+    ici = await run_in_threadpool(_compute_ici_series)
+
+    def run():
+        rows = []
+        for i in df.index:
+            coord = _clean(coordinates.loc[i])
+            if not isinstance(coord, (list, tuple)) or len(coord) < 2:
+                continue
+            lng, lat = _clean(coord[0]), _clean(coord[1])
+            if lat is None or lng is None:
+                continue
+
+            raw_date = _clean(date_col.loc[i])
+
+            def _num(series):
+                v = _clean(series.loc[i])
+                return float(v) if v is not None else None
+
+            row = {
+                "_key": str(va_id_col.loc[i]),
+                "lat": float(lat),
+                "lng": float(lng),
+                "date": str(raw_date) if raw_date is not None else None,
+                "rrs": _num(rrs),
+                "ics": _num(ics),
+                "ici": _num(ici),
+                "aid": _num(aid),
+            }
+            # Stored under the deployment's *actual* field names (e.g.
+            # "id10005r"), not the fixed labels "region"/"district"/"ward" -
+            # fetch_dqa_map_points' location filter (build_locations_query_
+            # filter/build_location_limit_filter, shared with every other
+            # location-filterable view) interpolates doc.<that same raw
+            # field name>, so storing it under a different key meant the
+            # filter always compared against a field that did not exist and
+            # silently matched nothing. A level with no field configured
+            # for this deployment (fm.location_levelN falsy) is omitted
+            # entirely, same as map_data.py's own district_line handling.
+            for field_name, series in (
+                (fm.location_level1, region),
+                (fm.location_level2, district),
+                (fm.location_level3, ward),
+            ):
+                if field_name:
+                    row[field_name] = _clean(series.loc[i])
+            rows.append(row)
+
+        collection = db.collection(db_collections.DQA_MAP_POINTS)
+        collection.truncate()
+        if rows:
+            collection.insert_many(rows)
+        return len(rows)
+
+    return await run_in_threadpool(run)
+
+
+async def fetch_dqa_map_points(
+    current_user: dict,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    locations: Optional[str] = None,
+    db: StandardDatabase = None,
+) -> ResponseMainModel:
+    """Reads the cached per-record snapshot built by
+    compute_and_store_dqa_map_points - a plain AQL scan over a small
+    pre-computed collection, not a pandas recompute, so this is cheap to
+    call on every Data Map page load/filter change.
+    """
+    try:
+        collection = db_collections.DQA_MAP_POINTS
+        bind_vars: dict = {}
+        filters = []
+
+        location_limit_filter = build_location_limit_filter(current_user, bind_vars)
+        if location_limit_filter:
+            filters.append(location_limit_filter)
+
+        if start_date:
+            filters.append("doc.date >= @start_date")
+            bind_vars["start_date"] = str(start_date)
+
+        if end_date:
+            filters.append("doc.date <= @end_date")
+            bind_vars["end_date"] = str(end_date)
+
+        locations_filter = build_locations_query_filter(locations, bind_vars)
+        if locations_filter:
+            filters.append(locations_filter)
+
+        query = f"FOR doc IN {collection}"
+        if filters:
+            query += " FILTER " + " AND ".join(filters)
+        query += """
+            RETURN {
+                va_id: doc._key,
+                lat: doc.lat,
+                lng: doc.lng,
+                rrs: doc.rrs,
+                ics: doc.ics,
+                ici: doc.ici,
+                aid: doc.aid
+            }
+        """
+
+        def run():
+            cursor = db.aql.execute(query, bind_vars=bind_vars)
+            return list(cursor)
+
+        data = await run_in_threadpool(run)
+        return ResponseMainModel(data=data, message="DQA map points fetched successfully")
+
+    except Exception as e:
+        return ResponseMainModel(data=None, message="Failed to fetch DQA map points", error=str(e))

@@ -95,6 +95,7 @@ async def compute_and_store_dqa_analytics(db: StandardDatabase) -> dict:
         fetch_ics_stats,
         fetch_interview_duration_stats,
         fetch_ici_stats,
+        compute_and_store_dqa_map_points,
     )
 
     computed_at = datetime.utcnow().isoformat() + "Z"
@@ -118,6 +119,17 @@ async def compute_and_store_dqa_analytics(db: StandardDatabase) -> dict:
         ics_result = await fetch_ics_stats(db, df)
         aid_result = await fetch_interview_duration_stats(db, df)
         ici_result = await fetch_ici_stats(db, df)
+
+        # Per-record map points for the Data Map's DQA-indicator coloring -
+        # piggybacks on this same batch run/df rather than a separate
+        # on-demand recompute (see that function's docstring for why).
+        # Isolated in its own try/except: a bug here should not regress the
+        # long-standing aggregate-stats snapshot the dashboard depends on.
+        try:
+            await compute_and_store_dqa_map_points(db, df)
+        except Exception as map_exc:
+            import logging
+            logging.getLogger(__name__).error(f"DQA map points computation failed: {map_exc}")
 
         snapshot = {
             "_key": _SNAPSHOT_KEY,
