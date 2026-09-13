@@ -489,7 +489,7 @@ async def fetch_ccva_map_points(
         for row in data:
             cause1 = _clean_ccva_text(row.get("cause1"))
             row["cause1"] = cause1
-            _, row["cause1_broad"] = classify_cause(cause1, category_lookup)
+            row["cause1_major"], row["cause1_broad"] = classify_cause(cause1, category_lookup)
 
         return ResponseMainModel(
             data=data,
