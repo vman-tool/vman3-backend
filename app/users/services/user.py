@@ -65,6 +65,21 @@ async def create_or_update_user_account(data: RegisterUserRequest, image: Upload
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="This email address belongs to more than one user.")
         existing_user = existing_users[0]
         if existing_user:
+            # Editing another user requires both the role privilege already
+            # enforced on this route (check_privileges in users_routes.py)
+            # AND that the target is within the editor's own org-unit scope
+            # - a location-restricted admin must not be able to edit a user
+            # outside their boundary even if their role otherwise permits it.
+            scope_access_limit = (current_user or {}).get('access_limit') if current_user else None
+            if scope_access_limit and scope_access_limit.get('limit_by'):
+                target_limits = await UserAccessLimit.get_many(filters={"user": data.uuid}, db=db)
+                target_access_limit = target_limits[0].get('access_limit') if target_limits else None
+                if not await is_access_limit_within_scope(target_access_limit, scope_access_limit, db):
+                    raise HTTPException(
+                        status_code=403,
+                        detail="You do not have permission to edit this user - they are outside your administrative boundary."
+                    )
+
             hashed_password = None
             if data.confirm_password:
                 hashed_password = hash_password(data.confirm_password)
@@ -299,10 +314,17 @@ async def reset_user_password(data: ResetPasswordData, db):
     return {"msg": "Password updated successfully"}
     
     
-async def fetch_user_detail(pk: str, db):
+async def fetch_user_detail(pk: str, current_user: dict = None, db: StandardDatabase = None):
     user = await User.get(doc_uuid=pk, db=db)
 
     if user:
+        scope_access_limit = (current_user or {}).get('access_limit')
+        if scope_access_limit and scope_access_limit.get('limit_by'):
+            target_limits = await UserAccessLimit.get_many(filters={"user": pk}, db=db)
+            target_access_limit = target_limits[0].get('access_limit') if target_limits else None
+            if not await is_access_limit_within_scope(target_access_limit, scope_access_limit, db):
+                raise HTTPException(status_code=403, detail="You do not have access to view this user.")
+
         return UserResponse(
         uuid=user["uuid"],
         id=user["_key"],
@@ -342,7 +364,7 @@ async def _fetch_roles_and_limits(user_uuids: List[str], db: StandardDatabase) -
     return {item['user']: item for item in results} if results else {}
 
 
-async def fetch_users(paging: bool = None, page_number: int = None, limit: int = None, search: str = None, db: StandardDatabase = None):
+async def fetch_users(paging: bool = None, page_number: int = None, limit: int = None, search: str = None, current_user: dict = None, db: StandardDatabase = None):
     filters = {}
     if search:
         filters['like_conditions'] = [
@@ -350,20 +372,50 @@ async def fetch_users(paging: bool = None, page_number: int = None, limit: int =
             {'email': search}
         ]
 
-    users = await User.get_many(
-        limit=limit,
-        page_number=page_number,
-        paging=paging,
-        filters=filters,
-        db=db
-    )
+    scope_access_limit = (current_user or {}).get('access_limit')
+    scoped = bool(scope_access_limit and scope_access_limit.get('limit_by'))
 
-    total_users = await User.count(filters=filters, include_deleted=None, db=db)
+    if scoped:
+        # A location-restricted viewer must only ever see users within their
+        # own org unit or below. Fetch every match unpaginated, filter by
+        # each candidate's own access_limit, then paginate the filtered set
+        # in Python - user tables are small (unlike VA records), so this is
+        # the safe, easy-to-verify choice rather than pushing hierarchy
+        # containment into AQL.
+        all_users = await User.get_many(filters=filters, paging=False, db=db)
+        if not all_users:
+            raise HTTPException(status_code=400, detail="Users not found.")
 
-    if not users:
-        raise HTTPException(status_code=400, detail="Users not found.")
+        extras = await _fetch_roles_and_limits([u['uuid'] for u in all_users], db)
 
-    extras = await _fetch_roles_and_limits([u['uuid'] for u in users], db)
+        in_scope_users = [
+            u for u in all_users
+            if await is_access_limit_within_scope(extras.get(u['uuid'], {}).get('access_limit'), scope_access_limit, db)
+        ]
+        if not in_scope_users:
+            raise HTTPException(status_code=400, detail="Users not found.")
+
+        total_users = len(in_scope_users)
+        if paging and page_number and limit:
+            start = (page_number - 1) * limit
+            users = in_scope_users[start:start + limit]
+        else:
+            users = in_scope_users
+    else:
+        users = await User.get_many(
+            limit=limit,
+            page_number=page_number,
+            paging=paging,
+            filters=filters,
+            db=db
+        )
+
+        total_users = await User.count(filters=filters, include_deleted=None, db=db)
+
+        if not users:
+            raise HTTPException(status_code=400, detail="Users not found.")
+
+        extras = await _fetch_roles_and_limits([u['uuid'] for u in users], db)
 
     user_data = [
         UserResponse(
@@ -466,6 +518,106 @@ async def delete_role(data: List[str] = [], current_user: User = None, db: Stand
     except Exception as e:
         raise e
 
+# ---------------------------------------------------------------------------
+# Location-boundary containment - shared by assign_roles (what access a
+# scoped admin may grant) and by fetch_users/fetch_user_detail/
+# create_or_update_user_account (who a scoped admin may see or edit). There
+# is no separate admin-boundary table in this app: "is district X inside
+# region Y" is answered by checking whether any real VA record carries both
+# values at once (db_collections.VA_TABLE is the only source of truth for
+# hierarchy). This was originally inline only inside assign_roles.
+# ---------------------------------------------------------------------------
+
+def _location_pairs(access_limit: dict) -> list:
+    """Flattens an access_limit dict's limit_by entries into (field, value)
+    tuples. Supports both the current per-item `field` shape (a user can be
+    restricted across several admin levels at once) and the legacy single
+    top-level `field` shared by every limit_by item."""
+    if not access_limit:
+        return []
+    legacy_field = access_limit.get('field', '')
+    return [
+        (item.get('field') or legacy_field, item.get('value'))
+        for item in access_limit.get('limit_by', [])
+        if (item.get('field') or legacy_field) and item.get('value') is not None
+    ]
+
+
+async def _pair_within_scope(field: str, value: str, scope_pairs: list, field_to_level: dict, db: StandardDatabase) -> bool:
+    """True if (field, value) is the same as, or a descendant of, at least
+    one entry in scope_pairs. A level deeper than a scope pair (e.g.
+    scope=district, candidate=ward) is only a descendant if a real VA
+    record actually carries both values at once."""
+    candidate_level = field_to_level.get(field, 0)
+    if candidate_level == 0:
+        return False
+    for s_field, s_value in scope_pairs:
+        s_level = field_to_level.get(s_field, 0)
+        if s_level == 0 or candidate_level < s_level:
+            continue
+        if field == s_field:
+            if value == s_value:
+                return True
+            continue
+
+        def _check_descendant():
+            cursor = db.aql.execute(
+                f"FOR doc IN {db_collections.VA_TABLE} "
+                f"FILTER doc.{s_field} == @sv AND doc.{field} == @cv "
+                f"LIMIT 1 RETURN 1",
+                bind_vars={"sv": s_value, "cv": value},
+            )
+            return next(cursor, None) is not None
+
+        if await run_in_threadpool(_check_descendant):
+            return True
+    return False
+
+
+async def is_access_limit_within_scope(candidate_access_limit: dict, scope_access_limit: dict, db: StandardDatabase) -> bool:
+    """True if every location `candidate_access_limit` restricts to is
+    within, or equal to, at least one location `scope_access_limit`
+    restricts to.
+
+    - scope has no pairs (an unrestricted viewer) -> always True, matching
+      the "if current_user.get('access_limit') and ...limit_by" guard used
+      elsewhere in this file to mean "no restriction, sees/grants
+      everything".
+    - candidate has no pairs (an unrestricted target, e.g. another admin)
+      while scope IS restricted -> False. A location-restricted user must
+      never see or edit an account with no location restriction of its own.
+    - otherwise every candidate pair must pass _pair_within_scope against at
+      least one scope pair (candidate pairs AND'd, scope pairs OR'd - the
+      same semantics assign_roles already used for granting access).
+    - if the ODK field mapping can't be resolved, fails closed (denies)
+      rather than silently allowing an unverifiable boundary claim.
+    """
+    scope_pairs = _location_pairs(scope_access_limit)
+    if not scope_pairs:
+        return True
+
+    candidate_pairs = _location_pairs(candidate_access_limit)
+    if not candidate_pairs:
+        return False
+
+    try:
+        config = await fetch_odk_config(db)
+        fm = config.field_mapping
+        field_to_level = {
+            fm.location_level1: 1,
+            fm.location_level2: 2,
+            fm.location_level3: 3,
+            fm.location_level4: 4,
+        } if fm else {}
+    except Exception:
+        field_to_level = {}
+
+    for field, value in candidate_pairs:
+        if not await _pair_within_scope(field, value, scope_pairs, field_to_level, db):
+            return False
+    return True
+
+
 async def assign_roles(data: AssignRolesRequest = None, current_user: User = None, current_user_privileges: List[str] = None, db: StandardDatabase = None):
     try:
         filters = {
@@ -520,72 +672,19 @@ async def assign_roles(data: AssignRolesRequest = None, current_user: User = Non
             # broader, never a disjoint area at the same level (e.g. a
             # different district), and never left unrestricted altogether.
             try:
-                config = await fetch_odk_config(db)
-                fm = config.field_mapping
-                field_to_level = {
-                    fm.location_level1: 1,
-                    fm.location_level2: 2,
-                    fm.location_level3: 3,
-                    fm.location_level4: 4,
-                } if fm else {}
+                new_pairs = _location_pairs(data.access_limit) if data.access_limit else []
 
-                def _pairs(access_limit: dict) -> list:
-                    # limit_by items normally carry their own `field` (a user
-                    # can be restricted across several admin levels at once);
-                    # fall back to the legacy top-level `field` for records
-                    # saved before that change.
-                    legacy_field = access_limit.get('field', '')
-                    return [
-                        (item.get('field') or legacy_field, item.get('value'))
-                        for item in access_limit.get('limit_by', [])
-                        if (item.get('field') or legacy_field) and item.get('value') is not None
-                    ]
-
-                creator_pairs = _pairs(current_user['access_limit'])
-                new_pairs = _pairs(data.access_limit) if data.access_limit else []
-
-                if creator_pairs and not new_pairs:
+                if not new_pairs:
                     raise HTTPException(
                         status_code=403,
                         detail="Your own account is access-limited, so you must restrict this user to at least one location within your own boundary."
                     )
 
-                async def _within_creator_scope(field: str, value: str) -> bool:
-                    new_level = field_to_level.get(field, 0)
-                    if new_level == 0:
-                        return False
-                    for c_field, c_value in creator_pairs:
-                        c_level = field_to_level.get(c_field, 0)
-                        if c_level == 0 or new_level < c_level:
-                            continue
-                        if field == c_field:
-                            if value == c_value:
-                                return True
-                            continue
-                        # A level deeper than the creator's own restriction
-                        # (e.g. creator=district, new=ward) is only within
-                        # bounds if it actually occurs inside the creator's
-                        # area in real submitted records - admin levels have
-                        # no separate boundary table, so the data itself is
-                        # the only source of truth for what belongs to what.
-                        def _check_descendant():
-                            cursor = db.aql.execute(
-                                f"FOR doc IN {db_collections.VA_TABLE} "
-                                f"FILTER doc.{c_field} == @cv AND doc.{field} == @nv "
-                                f"LIMIT 1 RETURN 1",
-                                bind_vars={"cv": c_value, "nv": value},
-                            )
-                            return next(cursor, None) is not None
-                        if await run_in_threadpool(_check_descendant):
-                            return True
-                    return False
-
-                for field, value in new_pairs:
-                    if not await _within_creator_scope(field, value):
-                        raise HTTPException(
-                            status_code=403,
-                            detail="You can only grant access within your own administrative boundary."
-                        )
+                if not await is_access_limit_within_scope(data.access_limit, current_user['access_limit'], db):
+                    raise HTTPException(
+                        status_code=403,
+                        detail="You can only grant access within your own administrative boundary."
+                    )
             except HTTPException:
                 raise
             except Exception:

@@ -106,8 +106,8 @@ async def fetch_user(user = Depends(get_current_user)):
 
 
 @auth_router.get("/{uuid}", status_code=status.HTTP_200_OK, response_model=UserResponse)
-async def get_user_info(uuid, session = Depends(get_arangodb_session)):
-    return await user.fetch_user_detail(uuid, session)
+async def get_user_info(uuid, current_user = Depends(get_current_user), session = Depends(get_arangodb_session)):
+    return await user.fetch_user_detail(uuid, current_user=current_user, db=session)
 
 @auth_router.get("", status_code=status.HTTP_200_OK, response_model=ResponseMainModel)
 #@cache(namespace='user_get', expire=60)
@@ -126,6 +126,7 @@ async def get_users(
         page_number=page_number,
         limit=limit,
         search=search,
+        current_user=current_user,
         db=session
     )
 
