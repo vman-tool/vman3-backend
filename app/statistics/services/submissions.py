@@ -183,6 +183,27 @@ async def fetch_submissions_statistics( current_user: dict,paging: bool = True, 
               FILTER sub.{deceased_gender} == "female"
               RETURN sub
             )
+            // Records with none of the three age flags set to "1", and
+            // records with a gender value other than exactly "male"/
+            // "female" (usually both null together - an incomplete
+            // submission missing its demographics entirely, not one
+            // dimension known and the other not) - see the dashboard
+            // investigation this surfaced: count can exceed
+            // adults+children+neonates (or male+female) by exactly this
+            // many records, which used to look like an unexplained
+            // mismatch with no visible cause. Computed with their own FILTER
+            // (not `count - adults - children - neonates`) so a record that
+            // somehow has more than one age flag set to "1" shows up as a
+            // discrepancy in the numbers instead of silently going negative
+            // here.
+            LET age_unclassified = LENGTH(FOR sub IN grouped[*].doc
+                            FILTER TO_STRING(sub.{is_adult_field}) != "1"
+                              AND TO_STRING(sub.{is_child_field}) != "1"
+                              AND TO_STRING(sub.{is_neonte_field}) != "1"
+                            RETURN sub)
+            LET gender_unclassified = LENGTH(FOR sub IN grouped[*].doc
+                            FILTER sub.{deceased_gender} != "male" AND sub.{deceased_gender} != "female"
+                            RETURN sub)
             RETURN {{
               {return_group_fields},
               count,
@@ -191,8 +212,10 @@ async def fetch_submissions_statistics( current_user: dict,paging: bool = True, 
               adults,
               children,
               neonates,
+              age_unclassified,
               male,
-              female
+              female,
+              gender_unclassified
             }}
         """
 
