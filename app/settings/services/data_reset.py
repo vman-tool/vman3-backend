@@ -260,6 +260,12 @@ def _run_reset(db: StandardDatabase, sources: List[str]) -> Dict[str, int]:
                     REMOVE d IN {db_collections.DQA_MAP_POINTS}
                     RETURN 1)"""
         )
+        removed["dqa_trend_points"] = run(
+            f"""RETURN LENGTH(
+                FOR d IN {db_collections.DQA_TREND_POINTS}
+                    REMOVE d IN {db_collections.DQA_TREND_POINTS}
+                    RETURN 1)"""
+        )
 
         # With nothing left, a "last synchronized" timestamp describes data
         # that is gone; clear it so the status card is not quietly wrong.
@@ -276,6 +282,7 @@ def _run_reset(db: StandardDatabase, sources: List[str]) -> Dict[str, int]:
     else:
         removed["dqa_analytics"] = 0
         removed["dqa_map_points"] = 0
+        removed["dqa_trend_points"] = 0
 
     return removed
 
@@ -296,6 +303,7 @@ async def reset_va_data(sources: List[str], db: StandardDatabase) -> ResponseMai
         db_collections.CCVA_GRAPH_RESULTS,
         db_collections.DQA_ANALYTICS,
         db_collections.DQA_MAP_POINTS,
+        db_collections.DQA_TREND_POINTS,
     ):
         if not db.has_collection(name):
             db.create_collection(name)

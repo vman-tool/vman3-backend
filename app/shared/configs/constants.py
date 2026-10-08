@@ -32,6 +32,7 @@ class db_collections():
     SYNC_HISTORY: str = 'sync_history'
     DQA_ANALYTICS: str = 'dqa_analytics'
     DQA_MAP_POINTS: str = 'dqa_map_points'
+    DQA_TREND_POINTS: str = 'dqa_trend_points'
     EXPECTED_DEATHS: str = 'expected_deaths'
 
 class data_sources():
@@ -177,6 +178,9 @@ collections_with_indexes = {
     # reference.
     db_collections.DQA_MAP_POINTS: [
         {"fields": ["date"], "type": "persistent", "name": "idx_dqa_map_date"},
+    ],
+    db_collections.DQA_TREND_POINTS: [
+        {"fields": ["month"], "type": "persistent", "name": "idx_dqa_trend_month"},
     ],
     db_collections.EXPECTED_DEATHS: [
         {"fields": ["level"], "type": "persistent", "name": "idx_expected_deaths_level"},
