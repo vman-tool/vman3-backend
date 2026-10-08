@@ -192,3 +192,25 @@ class TestFetchSubmissionsStatisticsExpectedColumn:
             result = await fetch_submissions_statistics.__wrapped__(current_user={}, group_level=1, db=fake_db)
 
         assert result.data[0]["expected"] == 10.0  # 1 month * 120/12
+
+    async def test_query_computes_unclassified_counts_for_age_and_gender(self):
+        # Regression test for the dashboard investigation: count can exceed
+        # adults+children+neonates (or male+female) for records missing
+        # their demographics entirely - previously that gap had no visible
+        # column, so it looked like an unexplained mismatch between the two
+        # totals. Asserts the query itself, since these tests otherwise mock
+        # the DB response and never exercise the real AQL.
+        fake_db = FakeDB(responder=lambda query, bind_vars: FakeCursor([]))
+
+        with _patch_config(), \
+             patch("app.statistics.services.submissions.get_expected_deaths_by_value",
+                   new=AsyncMock(return_value={})):
+            await fetch_submissions_statistics.__wrapped__(current_user={}, group_level=2, db=fake_db)
+
+        query = fake_db.aql.queries[0][0]
+        assert 'FILTER TO_STRING(sub.isadult) != "1"' in query
+        assert 'AND TO_STRING(sub.ischild) != "1"' in query
+        assert 'AND TO_STRING(sub.isneonatal) != "1"' in query
+        assert 'FILTER sub.id10019 != "male" AND sub.id10019 != "female"' in query
+        assert "age_unclassified" in query
+        assert "gender_unclassified" in query

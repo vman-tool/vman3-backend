@@ -19,7 +19,13 @@ async def fetch_va_records(current_user:dict,paging: bool = True, page_number: i
         config = await fetch_odk_config(db)
         region_field = config.field_mapping.location_level1
         district_field = config.field_mapping.location_level2
+        # Two distinct, independently-configurable fields (Settings >
+        # Configuration > Field Mapping) - va_id is whatever this
+        # deployment has mapped as the VA ID, instance_id is the record's
+        # own uuid:... identifier. Both are offered as separate search-by
+        # options rather than one silently standing in for the other.
         va_id_field = config.field_mapping.va_id
+        instance_id_field = config.field_mapping.instance_id or 'instanceid'
         interviewer_field = config.field_mapping.interviewer_name
 
         death_date = config.field_mapping.death_date
@@ -62,6 +68,7 @@ async def fetch_va_records(current_user:dict,paging: bool = True, page_number: i
         if search_by and search_value:
             search_field_map = {
                 'vaId': va_id_field,
+                'instanceId': instance_id_field,
                 'region': region_field,
                 'district': district_field,
                 'location_level1': region_field,
