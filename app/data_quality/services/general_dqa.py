@@ -462,3 +462,139 @@ async def fetch_dqa_map_points(
 
     except Exception as e:
         return ResponseMainModel(data=None, message="Failed to fetch DQA map points", error=str(e))
+
+
+async def compute_and_store_dqa_trend_points(db: StandardDatabase, df: pd.DataFrame) -> int:
+    """Persist one row per VA record with its submission month + each
+    indicator's raw score, for the General DQA page's Trend Analysis chart.
+
+    Unlike compute_and_store_dqa_map_points, every record with a parseable
+    submission date is kept here regardless of whether it has GPS
+    coordinates - the map view's "skip records with no coordinates" rule
+    would silently skew a trend toward only geo-tagged submissions, which
+    is not what "data quality over time" is supposed to represent.
+
+    Tiering (High/Medium/Low equivalents) happens on the frontend via the
+    already-existing, admin-configurable DqaThresholdService - this only
+    stores raw per-record scores, so a threshold change updates the trend
+    without a recompute here. Bucketed to month (not stored as a full date)
+    since that's the only granularity this chart ever reads at - computing
+    it once here avoids re-parsing dates on every chart load.
+    """
+    if df.empty:
+        await run_in_threadpool(
+            lambda: db.collection(db_collections.DQA_TREND_POINTS).truncate()
+        )
+        return 0
+
+    config = await fetch_odk_config(db, True)
+    fm = config.field_mapping
+
+    def col(name):
+        if name and name in df.columns:
+            return df[name]
+        return pd.Series(None, index=df.index)
+
+    submitted_col = col(fm.submitted_date)
+    region = col(fm.location_level1)
+    district = col(fm.location_level2)
+    ward = col(fm.location_level3)
+    va_id_col = col("_key")
+
+    rrs = await run_in_threadpool(compute_rrs, df)
+    ics = await run_in_threadpool(_compute_ics_chunked, df)
+    aid = await run_in_threadpool(compute_aid, df)
+
+    def _compute_ici_series():
+        ici_series, _flags, _computable = compute_ici(df, gender_field=fm.deceased_gender)
+        return ici_series
+
+    ici = await run_in_threadpool(_compute_ici_series)
+
+    def run():
+        rows = []
+        for i in df.index:
+            raw_submitted = _clean(submitted_col.loc[i])
+            if raw_submitted is None:
+                continue
+            month = str(raw_submitted)[:7]
+            # A real YYYY-MM prefix always has '-' at index 4 (e.g.
+            # "2026-03"); anything else is an unparseable/malformed value,
+            # not a month this record can be bucketed into.
+            if len(month) != 7 or month[4] != "-":
+                continue
+
+            def _num(series):
+                v = _clean(series.loc[i])
+                return float(v) if v is not None else None
+
+            row = {
+                "_key": str(va_id_col.loc[i]),
+                "month": month,
+                "rrs": _num(rrs),
+                "ics": _num(ics),
+                "ici": _num(ici),
+                "aid": _num(aid),
+            }
+            # Same dynamic-field-name storage as compute_and_store_dqa_map_
+            # points (see its own comment) - access-control filtering below
+            # interpolates doc.<this deployment's raw field name>, not a
+            # fixed label.
+            for field_name, series in (
+                (fm.location_level1, region),
+                (fm.location_level2, district),
+                (fm.location_level3, ward),
+            ):
+                if field_name:
+                    row[field_name] = _clean(series.loc[i])
+            rows.append(row)
+
+        collection = db.collection(db_collections.DQA_TREND_POINTS)
+        collection.truncate()
+        if rows:
+            collection.insert_many(rows)
+        return len(rows)
+
+    return await run_in_threadpool(run)
+
+
+async def fetch_dqa_trend_points(current_user: dict, db: StandardDatabase = None) -> ResponseMainModel:
+    """Reads the cached per-record snapshot built by
+    compute_and_store_dqa_trend_points - a plain AQL scan over a small
+    pre-computed collection, not a pandas recompute. Monthly aggregation
+    (mean/median per month, tier percentages for the stacked bar) happens
+    on the frontend from these raw per-record rows, the same way the Data
+    Map's DQA coloring already classifies per-record values client-side -
+    keeps this endpoint trivial and the chart reactive to threshold edits.
+    """
+    try:
+        collection = db_collections.DQA_TREND_POINTS
+        bind_vars: dict = {}
+        filters = []
+
+        location_limit_filter = build_location_limit_filter(current_user, bind_vars)
+        if location_limit_filter:
+            filters.append(location_limit_filter)
+
+        query = f"FOR doc IN {collection}"
+        if filters:
+            query += " FILTER " + " AND ".join(filters)
+        query += """
+            RETURN {
+                month: doc.month,
+                rrs: doc.rrs,
+                ics: doc.ics,
+                ici: doc.ici,
+                aid: doc.aid
+            }
+        """
+
+        def run():
+            cursor = db.aql.execute(query, bind_vars=bind_vars)
+            return list(cursor)
+
+        data = await run_in_threadpool(run)
+        return ResponseMainModel(data=data, message="DQA trend points fetched successfully")
+
+    except Exception as e:
+        return ResponseMainModel(data=None, message="Failed to fetch DQA trend points", error=str(e))

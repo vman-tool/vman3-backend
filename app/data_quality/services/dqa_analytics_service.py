@@ -96,6 +96,7 @@ async def compute_and_store_dqa_analytics(db: StandardDatabase) -> dict:
         fetch_interview_duration_stats,
         fetch_ici_stats,
         compute_and_store_dqa_map_points,
+        compute_and_store_dqa_trend_points,
     )
 
     computed_at = datetime.utcnow().isoformat() + "Z"
@@ -130,6 +131,14 @@ async def compute_and_store_dqa_analytics(db: StandardDatabase) -> dict:
         except Exception as map_exc:
             import logging
             logging.getLogger(__name__).error(f"DQA map points computation failed: {map_exc}")
+
+        # Per-record trend points for the General DQA page's Trend Analysis
+        # chart - same reasoning/isolation as the map points above.
+        try:
+            await compute_and_store_dqa_trend_points(db, df)
+        except Exception as trend_exc:
+            import logging
+            logging.getLogger(__name__).error(f"DQA trend points computation failed: {trend_exc}")
 
         snapshot = {
             "_key": _SNAPSHOT_KEY,

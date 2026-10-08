@@ -15,6 +15,7 @@ from app.data_quality.services.general_dqa import (
     fetch_rrs_stats,
     fetch_ici_stats,
     fetch_dqa_map_points,
+    fetch_dqa_trend_points,
 )
 from app.data_quality.services.dqa_analytics_service import (
     fetch_dqa_analytics_snapshot,
@@ -115,6 +116,17 @@ async def get_dqa_map_points(
             locations=locations,
             db=db,
         )
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+
+
+@data_quality_router.get("/trend-points")
+async def get_dqa_trend_points(
+    current_user=Depends(get_current_user),
+    db: StandardDatabase = Depends(get_arangodb_session),
+):
+    try:
+        return await fetch_dqa_trend_points(current_user=current_user, db=db)
     except Exception as e:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
 
