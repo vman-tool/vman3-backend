@@ -1,4 +1,5 @@
 from io import BytesIO
+from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -7,6 +8,7 @@ from openpyxl import Workbook
 from app.settings.services.expected_deaths import (
     _build_tree,
     _drop_empty_branches,
+    delete_expected_deaths_node,
     get_expected_deaths_by_value,
     get_expected_deaths_total_for_nodes,
     get_expected_deaths_tree,
@@ -16,6 +18,13 @@ from app.settings.services.expected_deaths import (
     recompute_aggregates,
     update_expected_deaths_value,
 )
+
+# The user's own real-world example workbooks: the same WHO 2022 VA
+# instrument/hierarchy exported twice from the same deployment, once with
+# each linkage style. tests/ (parents[2] of this file) is where they live.
+_FIXTURES_DIR = Path(__file__).resolve().parents[2]
+WHO_2022_EXPLICIT_LEVELS_XLSX = _FIXTURES_DIR / "va_who_2022_v1.xlsx"
+WHO_2022_PARENT_COLUMN_XLSX = _FIXTURES_DIR / "va_who_2022_v2.xlsx"
 
 
 def _workbook_bytes(choices_rows, sheet_names=("survey", "choices")) -> bytes:
@@ -117,6 +126,190 @@ class TestParseExpectedDeathsHierarchy:
         others = [n for n in nodes if n["value"] == "other"]
         assert len(others) == 2
         assert len({n["_key"] for n in others}) == 2
+
+
+# Same three-level Region/District/Ward hierarchy as SAMPLE_ROWS, but linked
+# with explicit per-level columns (named after each ancestor's own
+# list_name) instead of a generic "parent" column - ODK's other valid way
+# of expressing a choices-sheet hierarchy, and some real deployments'
+# workbooks only ever use this form (see this module's va_who_2022_v1.xlsx
+# fixture).
+EXPLICIT_LEVEL_COLUMNS_HEADER = [
+    "list_name", "name", "label::English(en)", "region", "district",
+    "expected_deaths::2023", "expected_deaths::2024",
+]
+
+SAMPLE_ROWS_EXPLICIT_LEVELS = [
+    EXPLICIT_LEVEL_COLUMNS_HEADER,
+    ["region", "Arusha", "Arusha", None, None, None, None],
+    ["region", "Dodoma", "Dodoma", None, None, None, None],
+    ["district", "Arusha_DC", "Arusha District Council", "Arusha", None, None, None],
+    ["district", "Kongwa_DC", "Kongwa District Council", "Dodoma", None, None, None],
+    ["ward", "Sejeli_Ward", "Sejeli Ward", None, "Kongwa_DC", 100.4, 110],
+    ["ward", "Zoissa_Ward", "Zoissa Ward", None, "Kongwa_DC", 200.6, 210],
+]
+
+
+class TestParseExpectedDeathsHierarchyExplicitLevelColumns:
+    """Linkage approach 2: a column per ancestor level, named after that
+    level's own list_name, in place of a generic `parent` column."""
+
+    def test_builds_the_same_three_level_chain_as_the_parent_column_form(self):
+        content = _workbook_bytes(SAMPLE_ROWS_EXPLICIT_LEVELS)
+        nodes = parse_expected_deaths_hierarchy(content)
+
+        assert nodes is not None
+        by_value = {(n["list_name"], n["value"]): n for n in nodes}
+
+        assert ("region", "Dodoma") in by_value
+        assert ("district", "Kongwa_DC") in by_value
+        assert ("ward", "Sejeli_Ward") in by_value
+        assert ("district", "Arusha_DC") not in by_value  # pruned - no wards
+
+        kongwa = by_value[("district", "Kongwa_DC")]
+        dodoma = by_value[("region", "Dodoma")]
+        assert kongwa["parent_key"] == dodoma["_key"]
+
+        sejeli = by_value[("ward", "Sejeli_Ward")]
+        assert sejeli["parent_key"] == kongwa["_key"]
+        assert sejeli["raw_expected_deaths"] == {"2023": 100, "2024": 110}
+
+    def test_column_names_are_detected_from_the_sheets_own_list_names_not_hardcoded(self):
+        # Same structure, but the level columns are named for a different
+        # country's administrative terms entirely (Cambodia's
+        # province/district/commune, per the va_who_2022_v1.xlsx fixture) -
+        # nothing in the implementation should assume "region"/"district".
+        header = [
+            "list_name", "name", "label::English(en)", "province", "district",
+            "expected_deaths::2025",
+        ]
+        rows = [
+            header,
+            ["province", "Kampong Cham", "Kampong Cham", None, None, None],
+            ["district", "Chamkar Leu", "Chamkar Leu", "Kampong Cham", None, None],
+            ["commune", "Bos Khnor", "Bos Khnor", None, "Chamkar Leu", 146],
+        ]
+        content = _workbook_bytes(rows)
+        nodes = parse_expected_deaths_hierarchy(content)
+
+        assert nodes is not None
+        by_value = {n["value"]: n for n in nodes}
+        assert by_value["Bos Khnor"]["parent_key"] == by_value["Chamkar Leu"]["_key"]
+        assert by_value["Chamkar Leu"]["parent_key"] == by_value["Kampong Cham"]["_key"]
+
+    def test_an_unrelated_column_is_never_mistaken_for_a_level_reference_column(self):
+        # "notes" matches no list_name in this sheet, so it must never be
+        # treated as a parent reference even though it sits right next to
+        # genuine level columns.
+        rows = [row[:] for row in SAMPLE_ROWS_EXPLICIT_LEVELS]
+        rows[0] = rows[0] + ["notes"]
+        rows[5] = rows[5] + ["interviewed twice in 2023"]  # Sejeli_Ward row
+        content = _workbook_bytes(rows)
+        nodes = parse_expected_deaths_hierarchy(content)
+
+        sejeli = next(n for n in nodes if n["value"] == "Sejeli_Ward")
+        kongwa = next(n for n in nodes if n["value"] == "Kongwa_DC")
+        assert sejeli["parent_key"] == kongwa["_key"]  # unaffected by the stray column
+
+    def test_a_generic_parent_column_wins_over_an_explicit_level_column_on_the_same_row(self):
+        # A sheet that happens to carry both forms at once: the `parent`
+        # cell is authoritative for any row that has one, per the module
+        # docstring - the level-reference column is only a fallback.
+        header = ["list_name", "name", "label::English(en)", "parent", "region", "expected_deaths::2023"]
+        rows = [
+            header,
+            ["region", "Arusha", "Arusha", None, None, None],
+            ["region", "Dodoma", "Dodoma", None, None, None],
+            # Explicit "region" column says Arusha, but `parent` says Dodoma.
+            ["district", "Ambiguous_DC", "Ambiguous District", "Dodoma", "Arusha", 50],
+        ]
+        content = _workbook_bytes(rows)
+        nodes = parse_expected_deaths_hierarchy(content)
+
+        ambiguous = next(n for n in nodes if n["value"] == "Ambiguous_DC")
+        dodoma = next(n for n in nodes if n["value"] == "Dodoma")
+        assert ambiguous["parent_key"] == dodoma["_key"]
+
+    def test_falls_back_to_the_level_column_when_a_rows_parent_cell_is_blank(self):
+        header = ["list_name", "name", "label::English(en)", "parent", "region", "expected_deaths::2023"]
+        rows = [
+            header,
+            ["region", "Dodoma", "Dodoma", None, None, None],
+            ["district", "Kongwa_DC", "Kongwa District Council", None, "Dodoma", 50],
+        ]
+        content = _workbook_bytes(rows)
+        nodes = parse_expected_deaths_hierarchy(content)
+
+        kongwa = next(n for n in nodes if n["value"] == "Kongwa_DC")
+        dodoma = next(n for n in nodes if n["value"] == "Dodoma")
+        assert kongwa["parent_key"] == dodoma["_key"]
+
+
+class TestParseExpectedDeathsHierarchyRealWhoWorkbooks:
+    """The actual example files provided for this feature: the same WHO
+    2022 VA hierarchy for Cambodia, exported once with explicit
+    province/district/commune columns and once with a generic `parent`
+    column. Both must resolve to the exact same tree and figures."""
+
+    @pytest.mark.skipif(
+        not (WHO_2022_EXPLICIT_LEVELS_XLSX.exists() and WHO_2022_PARENT_COLUMN_XLSX.exists()),
+        reason="va_who_2022_v1.xlsx / va_who_2022_v2.xlsx fixtures are not present",
+    )
+    def test_explicit_level_columns_and_parent_column_produce_an_identical_tree(self):
+        explicit_nodes = parse_expected_deaths_hierarchy(WHO_2022_EXPLICIT_LEVELS_XLSX.read_bytes())
+        parent_col_nodes = parse_expected_deaths_hierarchy(WHO_2022_PARENT_COLUMN_XLSX.read_bytes())
+
+        assert explicit_nodes is not None
+        assert parent_col_nodes is not None
+        assert len(explicit_nodes) == len(parent_col_nodes) == 39
+
+        # Keyed by `_key`, not `value`: the real workbook has a commune
+        # named the same as a district ("Chbar Ampov"/"chbar_ampov" exists
+        # at both level 2 and level 3), so `value` alone is not unique
+        # across levels - `_key` (hashed from the full parent chain) is,
+        # and is deterministic from (parent_key, list_name, value) alone,
+        # so it comes out byte-identical between the two files whenever
+        # the resolved tree genuinely matches.
+        def shape(nodes):
+            return {
+                n["_key"]: (n["level"], n["list_name"], n["value"], n["parent_key"], n["raw_expected_deaths"])
+                for n in nodes
+            }
+
+        assert shape(explicit_nodes) == shape(parent_col_nodes)
+
+        # A couple of real figures from the workbook, pinned so a future
+        # change to the parsing can't silently drift the actual numbers.
+        # Keyed by (list_name, value), not value alone - the real workbook
+        # has a district literally named the same as its own parent
+        # province ("kampong_cham" at both level 1 and level 2).
+        by_list_and_value = {(n["list_name"], n["value"]): n for n in explicit_nodes}
+        assert by_list_and_value[("commune", "bos_khnor")]["raw_expected_deaths"] == {"2025": 146, "2026": 148}
+        assert by_list_and_value[("district", "chamkar_leu")]["level"] == 2
+        assert by_list_and_value[("province", "kampong_cham")]["level"] == 1
+
+    @pytest.mark.skipif(
+        not WHO_2022_EXPLICIT_LEVELS_XLSX.exists(),
+        reason="va_who_2022_v1.xlsx fixture is not present",
+    )
+    @pytest.mark.asyncio
+    async def test_the_explicit_level_column_workbook_imports_end_to_end(self):
+        content = WHO_2022_EXPLICIT_LEVELS_XLSX.read_bytes()
+        written = {}
+
+        async def fake_write_all(db, docs):
+            written.update({d["_key"]: d for d in docs})
+
+        with patch("app.settings.services.expected_deaths._fetch_all", new=AsyncMock(return_value={})), \
+             patch("app.settings.services.expected_deaths._write_all", new=AsyncMock(side_effect=fake_write_all)):
+            result = await import_expected_deaths_from_xform(content, db=None)
+
+        assert result["levels"] == 3
+        assert set(result["periods"]) == {"2025", "2026"}
+        country_total_2025 = sum(
+            d["expected_deaths"].get("2025", 0) for d in written.values() if d["level"] == 1
+        )
+        assert country_total_2025 == 2461
 
 
 class TestDropEmptyBranches:
@@ -405,6 +598,134 @@ class TestUpdateExpectedDeathsValue:
                 await update_expected_deaths_value("does-not-exist", "2023", 5, db=None)
 
 
+class TestDeleteExpectedDeathsNode:
+    def _tree(self):
+        return {
+            "r": {"_key": "r", "level": 1, "parent_key": None, "value": "Dodoma", "label": "Dodoma", "raw_expected_deaths": {}},
+            "d": {"_key": "d", "level": 2, "parent_key": "r", "value": "Kongwa_DC", "label": "Kongwa District Council", "raw_expected_deaths": {}},
+            "w1": {"_key": "w1", "level": 3, "parent_key": "d", "value": "Sejeli_Ward", "label": "Sejeli Ward", "raw_expected_deaths": {"2023": 100}},
+            "w2": {"_key": "w2", "level": 3, "parent_key": "d", "value": "Zoissa_Ward", "label": "Zoissa Ward", "raw_expected_deaths": {"2023": 200}},
+        }
+
+    @pytest.mark.asyncio
+    async def test_deletes_a_leaf_and_recomputes_its_ancestors(self):
+        by_key = self._tree()
+        written = {}
+        deleted = {}
+
+        async def fake_write_all(db, docs):
+            written.update({d["_key"]: d for d in docs})
+
+        async def fake_delete_many(db, keys):
+            deleted["keys"] = list(keys)
+
+        with patch("app.settings.services.expected_deaths._fetch_all", new=AsyncMock(return_value=by_key)), \
+             patch("app.settings.services.expected_deaths._write_all", new=AsyncMock(side_effect=fake_write_all)), \
+             patch("app.settings.services.expected_deaths._delete_many", new=AsyncMock(side_effect=fake_delete_many)):
+            result = await delete_expected_deaths_node("w1", db=None)
+
+        assert deleted["keys"] == ["w1"]
+        assert "w1" not in written
+        # Sejeli_Ward's 100 no longer contributes - only Zoissa_Ward's 200 remains.
+        assert written["d"]["expected_deaths"] == {"2023": 200}
+        assert written["r"]["expected_deaths"] == {"2023": 200}
+        assert result.data["configured"] is True
+        assert result.message == "Deleted Sejeli Ward."
+
+    @pytest.mark.asyncio
+    async def test_deleting_a_non_leaf_cascades_to_every_descendant(self):
+        by_key = self._tree()
+        deleted = {}
+
+        async def fake_write_all(db, docs):
+            pass
+
+        async def fake_delete_many(db, keys):
+            deleted["keys"] = set(keys)
+
+        with patch("app.settings.services.expected_deaths._fetch_all", new=AsyncMock(return_value=by_key)), \
+             patch("app.settings.services.expected_deaths._write_all", new=AsyncMock(side_effect=fake_write_all)), \
+             patch("app.settings.services.expected_deaths._delete_many", new=AsyncMock(side_effect=fake_delete_many)):
+            result = await delete_expected_deaths_node("d", db=None)
+
+        # Kongwa_DC plus both its wards - not left as orphans.
+        assert deleted["keys"] == {"d", "w1", "w2"}
+        assert result.message == "Deleted Kongwa District Council and 2 descendant(s)."
+
+    @pytest.mark.asyncio
+    async def test_deleting_the_only_remaining_unit_reports_unconfigured(self):
+        by_key = {"r": {"_key": "r", "level": 1, "parent_key": None, "value": "Dodoma", "label": "Dodoma", "raw_expected_deaths": {"2023": 5}}}
+
+        async def fake_write_all(db, docs):
+            pass
+
+        async def fake_delete_many(db, keys):
+            pass
+
+        with patch("app.settings.services.expected_deaths._fetch_all", new=AsyncMock(return_value=by_key)), \
+             patch("app.settings.services.expected_deaths._write_all", new=AsyncMock(side_effect=fake_write_all)), \
+             patch("app.settings.services.expected_deaths._delete_many", new=AsyncMock(side_effect=fake_delete_many)):
+            result = await delete_expected_deaths_node("r", db=None)
+
+        assert result.data["configured"] is False
+        assert result.data["tree"] == []
+
+    @pytest.mark.asyncio
+    async def test_rejects_an_unknown_key(self):
+        with patch("app.settings.services.expected_deaths._fetch_all", new=AsyncMock(return_value=self._tree())):
+            with pytest.raises(Exception):
+                await delete_expected_deaths_node("does-not-exist", db=None)
+
+    @pytest.mark.asyncio
+    async def test_reuploading_the_same_file_after_a_delete_reinserts_it_fresh(self):
+        # The exact user scenario: delete a row via the UI, then re-upload
+        # the xForm it came from - the deleted unit must come back, created
+        # (not silently kept deleted), with the file's own value.
+        content = _workbook_bytes(SAMPLE_ROWS)
+        store: dict = {}
+
+        async def fake_fetch_all(db):
+            return dict(store)
+
+        async def fake_write_all(db, docs):
+            for d in docs:
+                store[d["_key"]] = d
+
+        async def fake_delete_many(db, keys):
+            for k in keys:
+                store.pop(k, None)
+
+        with patch("app.settings.services.expected_deaths._fetch_all", new=fake_fetch_all), \
+             patch("app.settings.services.expected_deaths._write_all", new=fake_write_all):
+            await import_expected_deaths_from_xform(content, db=None)
+
+        sejeli_key = next(k for k, d in store.items() if d["value"] == "Sejeli_Ward")
+        kongwa_key = next(k for k, d in store.items() if d["value"] == "Kongwa_DC")
+        assert store[kongwa_key]["expected_deaths"] == {"2023": 301, "2024": 320}  # both wards
+
+        # Delete Sejeli_Ward.
+        with patch("app.settings.services.expected_deaths._fetch_all", new=fake_fetch_all), \
+             patch("app.settings.services.expected_deaths._write_all", new=fake_write_all), \
+             patch("app.settings.services.expected_deaths._delete_many", new=fake_delete_many):
+            await delete_expected_deaths_node(sejeli_key, db=None)
+
+        assert sejeli_key not in store
+        # Kongwa_DC's total shrank to just Zoissa_Ward's share.
+        assert store[kongwa_key]["expected_deaths"] == {"2023": 201, "2024": 210}
+
+        # Re-upload the same, unchanged file.
+        with patch("app.settings.services.expected_deaths._fetch_all", new=fake_fetch_all), \
+             patch("app.settings.services.expected_deaths._write_all", new=fake_write_all):
+            reupload_result = await import_expected_deaths_from_xform(content, db=None)
+
+        # Sejeli_Ward is back - inserted fresh, not merged from a missing prior.
+        assert reupload_result["nodes_created"] == 1
+        restored_sejeli = next(d for d in store.values() if d["value"] == "Sejeli_Ward")
+        assert restored_sejeli["raw_expected_deaths"] == {"2023": 100, "2024": 110}
+        # Kongwa_DC's total is back to both wards combined.
+        assert store[kongwa_key]["expected_deaths"] == {"2023": 301, "2024": 320}
+
+
 class TestGetExpectedDeathsByValue:
     @pytest.mark.asyncio
     async def test_indexes_every_node_by_level_and_value(self):
@@ -424,6 +745,24 @@ class TestGetExpectedDeathsByValue:
         with patch("app.settings.services.expected_deaths._fetch_all", new=AsyncMock(return_value={})):
             index = await get_expected_deaths_by_value(db=None)
         assert index == {}
+
+    @pytest.mark.asyncio
+    async def test_a_node_is_not_reachable_by_its_label_only_its_exact_value(self):
+        # Deliberate: `value` (the xForm's `name` column) is this index's
+        # only identity, exactly matching how parse_expected_deaths_hierarchy
+        # itself links nodes - a label never substitutes for it. A caller
+        # whose own raw value doesn't match here has its Field Mapping
+        # (Settings > Configuration) pointed at the wrong location question,
+        # and should surface that (as these empty Expected/Completeness
+        # columns do), not have it silently papered over.
+        by_key = {
+            "d": {"_key": "d", "level": 2, "value": "kang_meas", "label": "Kang Meas", "expected_deaths": {"2025": 66}},
+        }
+        with patch("app.settings.services.expected_deaths._fetch_all", new=AsyncMock(return_value=by_key)):
+            index = await get_expected_deaths_by_value(db=None)
+
+        assert index[(2, "kang_meas")] == {"2025": 66}
+        assert (2, "Kang Meas") not in index
 
 
 class TestGetTotalExpectedDeathsByPeriod:

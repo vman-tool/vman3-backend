@@ -3,12 +3,35 @@
 
 The hierarchy (how many levels, what they are called) is never assumed -
 country deployments differ (Region/District/Ward for Tanzania is just one
-example). It is derived purely from the workbook's own data: every choice
-list row may carry a `parent` value naming another row's `name` - wherever
-that points resolves which choice list is this one's parent, exactly as the
-xForm itself expresses the relationship. A workbook with none of its columns
-starting with `expected_deaths` has nothing to import - callers get `None`
-back and skip silently.
+example). It is derived purely from the workbook's own data, and ODK's
+choices sheet expresses "this row's parent" in either of two equally valid
+ways, both supported here, auto-detected per row rather than assumed for
+the whole workbook:
+
+  1. A generic `parent` column, naming another row's `name` wherever it
+     lives - which list that is gets resolved by majority vote across the
+     list's own rows (see `parent_list_name` below). This is ODK's simpler
+     form and what every workbook handled before this file supported both
+     structures used.
+  2. One column per ancestor *level*, each named after that level's own
+     list_name directly - e.g. a `district` choice list carrying a
+     `province` column holding its parent province's `name`, with no
+     column called "parent" anywhere in the sheet at all. This is ODK's
+     own convention for cascading administrative selects, and some
+     deployments' workbooks only ever use this form. Column names vary by
+     country (Tanzania's hierarchy might name its columns region/district/
+     ward, Cambodia's province/district/commune), so these are detected
+     from the sheet's own list_names, never hardcoded - see
+     `_level_reference_columns`.
+
+A single row may only ever use one of these per workbook in practice, but
+resolution happens per row (the generic `parent` cell wins when a row has
+one; a level-reference column is only consulted when it doesn't), so a
+sheet that happens to mix both forms across different choice lists is still
+handled correctly rather than assumed to be one or the other globally.
+
+A workbook with none of its columns starting with `expected_deaths` has
+nothing to import - callers get `None` back and skip silently.
 
 Values are per period: one or more `expected_deaths::<period>` columns (e.g.
 `expected_deaths::2023`, `expected_deaths::2024`), or a single bare
@@ -85,6 +108,37 @@ def _period_columns(header_row) -> Dict[str, int]:
     return periods
 
 
+# Columns with a dedicated meaning elsewhere in this file - never themselves
+# a level-reference column, however a sheet happens to name its levels.
+_RESERVED_COLUMNS = {"list_name", "list name", "name", "parent"}
+
+
+def _level_reference_columns(header_row, list_names_present: set) -> List[Tuple[str, int]]:
+    """Detect per-level parent-reference columns (linkage approach 2, see
+    module docstring): any header column whose name exactly matches a
+    list_name that genuinely appears in this sheet, and that isn't one of
+    the columns already handled some other way (list_name/name/parent/any
+    label::* or expected_deaths* column).
+
+    Column names are never hardcoded - "region"/"district"/"ward" for one
+    country's workbook, "province"/"district"/"commune" for another's - only
+    matched against list_names the sheet itself actually defines, so an
+    unrelated column (geometry, notes, a media:: column, ...) is never
+    mistaken for one of these just by coincidence of its header text.
+    """
+    columns: List[Tuple[str, int]] = []
+    for pos, cell in enumerate(header_row):
+        name = _clean(cell)
+        if not name:
+            continue
+        key = name.strip().lower()
+        if key in _RESERVED_COLUMNS or key.startswith("label") or key.startswith("expected_deaths"):
+            continue
+        if key in list_names_present:
+            columns.append((key, pos))
+    return columns
+
+
 def parse_expected_deaths_hierarchy(content: bytes) -> Optional[List[Dict]]:
     """Read the `choices` sheet and build the admin-unit hierarchy.
 
@@ -102,8 +156,8 @@ def parse_expected_deaths_hierarchy(content: bytes) -> Optional[List[Dict]]:
     if "choices" not in workbook.sheetnames:
         return None
 
-    rows = workbook["choices"].iter_rows(values_only=True)
-    header_row = next(rows, ()) or ()
+    rows_iter = workbook["choices"].iter_rows(values_only=True)
+    header_row = next(rows_iter, ()) or ()
     header = _header_index(header_row)
 
     period_columns = _period_columns(header_row)
@@ -117,8 +171,23 @@ def parse_expected_deaths_hierarchy(content: bytes) -> Optional[List[Dict]]:
 
     label_cols = _label_columns(header_row)
 
+    # Materialised once: `read_only` workbooks stream their rows, and this
+    # is needed twice - once to see which list_names the sheet actually
+    # defines (so level-reference columns can be told apart from an
+    # unrelated column that just happens to share a name), then again to
+    # build each row. Choice sheets list administrative units, not VA
+    # records, so even a large one is a modest amount of memory.
+    data_rows = list(rows_iter)
+
+    list_names_present = {
+        _clean(row[list_name_pos]).strip().lower()
+        for row in data_rows
+        if list_name_pos < len(row) and _clean(row[list_name_pos])
+    }
+    level_ref_columns = _level_reference_columns(header_row, list_names_present)
+
     raw_rows: Dict[str, List[Dict]] = {}
-    for row in rows:
+    for row in data_rows:
         list_name = _cell(row, header, "list_name") or _cell(row, header, "list name")
         value = _cell(row, header, "name")
         if not list_name or not value:
@@ -132,7 +201,17 @@ def parse_expected_deaths_hierarchy(content: bytes) -> Optional[List[Dict]]:
         }
         label = labels.get("English") or next(iter(labels.values()), None) or value
 
+        # Linkage approach 1 (generic `parent` column) wins when present;
+        # approach 2 (a column named after the parent's own list_name) is
+        # only consulted when it isn't - see the module docstring.
         parent_value = _cell(row, header, "parent")
+        if not parent_value:
+            for _col_name, pos in level_ref_columns:
+                if pos < len(row):
+                    candidate = _clean(row[pos])
+                    if candidate:
+                        parent_value = candidate
+                        break
 
         deaths_by_period: Dict[str, int] = {}
         for period, pos in period_columns.items():
@@ -352,6 +431,18 @@ async def _write_all(db: StandardDatabase, docs: List[Dict]) -> None:
     await run_in_threadpool(execute)
 
 
+async def _delete_many(db: StandardDatabase, keys: List[str]) -> None:
+    if not keys:
+        return
+
+    def execute():
+        if not db.has_collection(db_collections.EXPECTED_DEATHS):
+            return
+        db.collection(db_collections.EXPECTED_DEATHS).delete_many(keys)
+
+    await run_in_threadpool(execute)
+
+
 async def import_expected_deaths_from_xform(content: bytes, db: StandardDatabase) -> Optional[Dict]:
     """Import (or refresh) the admin-unit hierarchy from an uploaded xForm.
 
@@ -458,6 +549,62 @@ async def update_expected_deaths_value(key: str, period: str, expected_deaths: i
     )
 
 
+async def delete_expected_deaths_node(key: str, db: StandardDatabase) -> ResponseMainModel:
+    """Delete an administrative unit, along with its whole subtree.
+
+    Deleting just the one row and leaving its children in place would orphan
+    them (their `parent_key` would point at nothing), which would make them
+    silently vanish from the tree UI - `_build_tree` only ever starts from
+    roots with `parent_key: None` - while still sitting in storage and still
+    counted nowhere. Cascading to descendants avoids that, and matches how a
+    tree-structured delete reads intuitively ("delete this unit and
+    everything under it").
+
+    Ancestors above the deleted unit are recomputed and rewritten so their
+    totals no longer include it. The deleted keys are removed from storage
+    outright, not just left out of a future write - this is what lets the
+    exact same row come back, freshly inserted rather than silently kept
+    deleted, the next time its xForm is re-uploaded.
+    """
+    existing = await _fetch_all(db)
+    if key not in existing:
+        raise BadRequestException("Unknown administrative unit.")
+
+    children_of: Dict[Optional[str], List[str]] = {}
+    for doc in existing.values():
+        children_of.setdefault(doc.get("parent_key"), []).append(doc["_key"])
+
+    label = existing[key].get("label")
+    to_delete: set = set()
+    stack = [key]
+    while stack:
+        current = stack.pop()
+        if current in to_delete:
+            continue
+        to_delete.add(current)
+        stack.extend(children_of.get(current, []))
+
+    for k in to_delete:
+        existing.pop(k, None)
+
+    recompute_aggregates(existing)
+    await _delete_many(db, list(to_delete))
+    await _write_all(db, list(existing.values()))
+
+    descendants = len(to_delete) - 1
+    message = f"Deleted {label}" + (f" and {descendants} descendant(s)." if descendants else ".")
+
+    return ResponseMainModel(
+        data={
+            "configured": bool(existing),
+            "max_level": max((d["level"] for d in existing.values()), default=0),
+            "periods": _periods_present(existing),
+            "tree": _build_tree(existing),
+        },
+        message=message,
+    )
+
+
 # ── Read access for other services (completeness: submitted vs expected) ────
 
 async def get_expected_deaths_by_value(db: StandardDatabase) -> Dict[Tuple[int, str], Dict[str, int]]:
@@ -466,6 +613,18 @@ async def get_expected_deaths_by_value(db: StandardDatabase) -> Dict[Tuple[int, 
     only has a raw admin-unit code and the level it was grouped at (e.g. the
     submissions summary table, grouped by region/district/ward) to look up
     its expected-deaths-per-period in one query instead of one per row.
+
+    Deliberately exact-match only, on `value` (the xForm's `name` column),
+    never `label` - the same identity rule parse_expected_deaths_hierarchy
+    itself uses for linkage. A caller's raw admin-unit code failing to match
+    here means its own location field (Settings > Configuration > Field
+    Mapping) is pointed at a different choice list than the one
+    expected_deaths was uploaded against - e.g. a label-cased "notification"
+    question instead of the deployment's actual, name-coded location
+    question. That is a field-mapping configuration bug to go fix there, not
+    something to paper over with fuzzy matching here: a silent fallback
+    would hide exactly that misconfiguration instead of surfacing it as the
+    empty Expected/Completeness columns that make it obvious.
     """
     existing = await _fetch_all(db)
     return {
