@@ -193,6 +193,32 @@ class TestFetchSubmissionsStatisticsExpectedColumn:
 
         assert result.data[0]["expected"] == 10.0  # 1 month * 120/12
 
+    async def test_a_row_whose_location_value_only_matches_by_label_not_value_gets_no_expected_figure(self):
+        # Deliberate: the lookup is exact-value-only, the same identity rule
+        # parse_expected_deaths_hierarchy itself uses for linkage - never a
+        # label. If a deployment's Field Mapping (Settings > Configuration)
+        # points this level at a label-cased question ("Kang Meas") instead
+        # of the name-coded one expected_deaths was actually uploaded
+        # against ("kang_meas"), that must show up as a missing figure here
+        # - the symptom that makes the misconfiguration visible - not be
+        # quietly bridged by matching on the label.
+        rows = [
+            {"region": "Kampong Cham", "district": "Kang Meas", "count": 20,
+             "firstSubmission": "2024-01-01", "lastSubmission": "2024-12-31",
+             "adults": 20, "children": 0, "neonates": 0, "male": 10, "female": 10},
+        ]
+        fake_db = FakeDB(responder=lambda query, bind_vars: FakeCursor(list(rows)))
+        fake_index = {(2, "kang_meas"): {"2024": 1200}}  # keyed by value only, as get_expected_deaths_by_value does
+
+        with _patch_config(), \
+             patch("app.statistics.services.submissions.get_expected_deaths_by_value",
+                   new=AsyncMock(return_value=fake_index)):
+            result = await fetch_submissions_statistics.__wrapped__(current_user={}, group_level=2, db=fake_db)
+
+        row = result.data[0]
+        assert row["expected"] is None
+        assert row["completeness"] is None
+
     async def test_query_computes_unclassified_counts_for_age_and_gender(self):
         # Regression test for the dashboard investigation: count can exceed
         # adults+children+neonates (or male+female) for records missing
