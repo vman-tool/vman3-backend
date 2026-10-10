@@ -29,6 +29,22 @@ SNAPSHOT_TTL      = 300   # seconds — snapshot is refreshed every page; if the
                            # dies the guard auto-unlocks within this window
 ACTIVE_TASK_KEY   = "sync:active_task_id"  # single Redis key tracking the running sync
 
+# Progress used to be reported once per ODK page (up to `top` records, 100 by
+# default) - fine for a huge sync, but a routine day-to-day sync often pulls
+# well under one page of new records, so the whole thing landed in a single
+# insert with nothing to report in between: the UI sat at 0% for the entire
+# download+insert, then jumped straight to 100% on the one update it ever
+# got. Inserting (and reporting) in smaller sub-batches within a page fixes
+# this regardless of how many records a sync involves.
+INSERT_CHUNK_SIZE = 20
+# Reporting after every chunk would still flood the socket on a huge sync
+# (tens of thousands of records -> thousands of messages), so actual publishes
+# are also throttled by time - a chunk only "counts" as a reportable moment if
+# enough wall-clock time has passed since the last one. The first and last
+# chunk of every page always publish regardless, so progress never visibly
+# stalls right after a page boundary and the final figure is never stale.
+MIN_PROGRESS_PUBLISH_INTERVAL = 0.4  # seconds
+
 
 # ── Redis helpers ─────────────────────────────────────────────────────────────
 
@@ -84,6 +100,63 @@ def _clear_snapshot(task_id: str) -> None:
         r.delete(f"sync:snapshot:{task_id}")
     except Exception:
         pass
+
+
+# ── Progress reporting cadence ────────────────────────────────────────────────
+
+class ProgressReporter:
+    """Decides when a progress update is worth publishing, and builds its
+    payload - split out from `sync_odk_data_task` so this cadence logic can
+    be unit tested without any Celery/Redis/ODK plumbing.
+
+    Reporting after *every* insert chunk (see INSERT_CHUNK_SIZE) would flood
+    the socket on a huge sync (tens of thousands of records -> thousands of
+    messages), so actual publishes are throttled by wall-clock time: a chunk
+    only counts as reportable if enough time has passed since the last one.
+    The very first call always publishes (nothing has been shown yet), and a
+    caller can force one regardless of timing - used for the last chunk of
+    every ODK page, so progress is never stale right as the next page starts.
+    """
+
+    def __init__(
+        self,
+        total_data_count: int,
+        server_total: int,
+        local_count: int,
+        min_interval: float = MIN_PROGRESS_PUBLISH_INTERVAL,
+        now_fn=time.time,
+    ):
+        self.total_data_count = total_data_count
+        self.server_total = server_total
+        self.local_count = local_count
+        self.min_interval = min_interval
+        self._now = now_fn
+        self._last_publish_time: Optional[float] = None
+
+    def should_publish(self, force: bool = False) -> bool:
+        if force or self._last_publish_time is None:
+            return True
+        return (self._now() - self._last_publish_time) >= self.min_interval
+
+    def build_payload(self, records_saved: int, start_time: float) -> dict:
+        now = self._now()
+        progress = (
+            min((records_saved / self.total_data_count) * 100, 100.0)
+            if self.total_data_count else 0
+        )
+        return {
+            "total_records": self.total_data_count,
+            "server_total": self.server_total,
+            "local_count": self.local_count,
+            "progress": progress,
+            "elapsed_time": now - start_time,
+            "records_processed": records_saved,
+            "status": "running",
+            "message": f"Syncing... {records_saved:,}/{self.total_data_count:,} new records",
+        }
+
+    def mark_published(self) -> None:
+        self._last_publish_time = self._now()
 
 
 def _clear_active_task() -> None:
@@ -167,10 +240,18 @@ def sync_odk_data_task(
         try:
             config_obj = loop.run_until_complete(fetch_odk_config(db))
             records_saved = 0
+            progress_reporter = ProgressReporter(total_data_count, _server_total, local_count)
 
             async def fetch_and_process() -> Tuple[int, bool]:
                 nonlocal records_saved
                 was_cancelled = False
+
+                def report_progress(force: bool = False) -> None:
+                    if not progress_reporter.should_publish(force=force):
+                        return
+                    _update_snapshot(task_id, records_saved, start_time, user_name, method, total_data_count)
+                    publish_progress(task_id, progress_reporter.build_payload(records_saved, start_time))
+                    progress_reporter.mark_published()
 
                 async def fetch_page_with_retry(odk_client, max_attempts=3, **kwargs):
                     last_exc = None
@@ -232,23 +313,20 @@ def sync_odk_data_task(
                         df = df.loc[:, ~df.columns.duplicated()]
                         records = loads(df.to_json(orient='records'))
 
-                        await insert_many_data_to_arangodb(records, overwrite_mode='replace')
-                        records_saved += len(records)
-                        _update_snapshot(task_id, records_saved, start_time, user_name, method, total_data_count)
-
-                        progress = min((records_saved / total_data_count) * 100, 100.0)
-                        elapsed = time.time() - start_time
-
-                        publish_progress(task_id, {
-                            "total_records": total_data_count,
-                            "server_total": _server_total,
-                            "local_count": local_count,
-                            "progress": progress,
-                            "elapsed_time": elapsed,
-                            "records_processed": records_saved,
-                            "status": "running",
-                            "message": f"Syncing... {records_saved:,}/{total_data_count:,} new records",
-                        })
+                        # Inserted (and reported) in sub-batches rather than
+                        # one bulk call for the whole page - see
+                        # INSERT_CHUNK_SIZE's comment for why. The very first
+                        # chunk of the whole sync always publishes (nothing
+                        # has been shown yet - ProgressReporter handles that
+                        # on its own); the last chunk of every page is forced
+                        # too, so progress is never stale right as the next
+                        # page starts.
+                        for i in range(0, len(records), INSERT_CHUNK_SIZE):
+                            chunk = records[i:i + INSERT_CHUNK_SIZE]
+                            await insert_many_data_to_arangodb(chunk, overwrite_mode='replace')
+                            records_saved += len(chunk)
+                            is_last_chunk_of_page = (i + INSERT_CHUNK_SIZE) >= len(records)
+                            report_progress(force=is_last_chunk_of_page)
 
                         next_link = data.get('@odata.nextLink')
                         if not next_link:

@@ -25,6 +25,7 @@ from app.settings.services.cron import BackupSettings, CronSettings, fetch_backu
 from app.settings.services.data_reset import preview_reset, reset_va_data
 from app.settings.services.xform_dictionary import enrich_questions_from_xform, get_data_dictionary, update_question_label
 from app.settings.services.expected_deaths import (
+    delete_expected_deaths_node,
     get_expected_deaths_tree,
     import_expected_deaths_from_xform,
     update_expected_deaths_value,
@@ -169,7 +170,7 @@ async def get_configs_settings(
 
 @settings_router.get("/version", status_code=status.HTTP_200_OK)
 async def get_version():
-    return '3.3.1'
+    return '3.4.0'
 
 @settings_router.post("/system_configs", status_code=status.HTTP_200_OK, response_model=ResponseMainModel)
 async def save_configs_settings(
@@ -934,6 +935,19 @@ async def patch_expected_deaths(
     unit with no children can be edited directly - totals above it are
     recomputed automatically."""
     return await update_expected_deaths_value(key, period, expected_deaths, db)
+
+
+@settings_router.delete("/expected-deaths/{key}", status_code=status.HTTP_200_OK, response_model=ResponseMainModel)
+async def delete_expected_deaths(
+    key: str,
+    current_user=Depends(get_current_user),
+    required_privs: List[str] = Depends(check_privileges([AccessPrivileges.SETTINGS_CREATE_SYSTEM_CONFIGS])),
+    db: StandardDatabase = Depends(get_arangodb_session),
+):
+    """Delete an administrative unit and its whole subtree. Re-uploading the
+    same xForm afterwards re-creates it (and anything else missing) fresh -
+    deletion here only ever removes from storage, never from the file."""
+    return await delete_expected_deaths_node(key, db)
 
 
 # ── Danger zone: deleting VA data ────────────────────────────────────────────

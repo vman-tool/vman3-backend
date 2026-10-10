@@ -237,6 +237,15 @@ async def fetch_submissions_statistics( current_user: dict,paging: bool = True, 
         # this table is currently grouped down to (region/district/ward),
         # against the expected_deaths hierarchy imported under Settings >
         # Configuration > Data Dictionary > Expected Number of Deaths.
+        #
+        # Exact match only, deliberately: `value` here is field_mapping's
+        # own location field for this level, and it must be the same
+        # name-coded choice list expected_deaths was uploaded against - if a
+        # row's value never matches, that is Field Mapping (Settings >
+        # Configuration) pointing this level at the wrong question (e.g. a
+        # label-cased "notification" field instead of the deployment's real,
+        # name-coded location question), and the fix is to correct the
+        # mapping, not to fuzzy-match around it here.
         expected_index = await get_expected_deaths_by_value(db)
         deepest_alias = group_fields[-1][0]
         deepest_level = len(group_fields)
