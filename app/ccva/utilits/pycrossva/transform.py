@@ -13,8 +13,10 @@ import numpy as np
 from app.ccva.utilits.pycrossva.configuration import Configuration, CrossVA
 from app.ccva.utilits.pycrossva.utils import flexible_read
 
-SUPPORTED_INPUTS = ["2016WHOv151", "2016WHOv141", "2012WHO", "PHMRCShort"]
-SUPPORTED_OUTPUTS = ["InterVA5", "InterVA4", "InSilicoVA", "InSilicoVA_2012"]
+SUPPORTED_INPUTS = ["2016WHOv151", "2016WHOv141", "2012WHO", "PHMRCShort",
+                    "2022WHOv0101"]
+SUPPORTED_OUTPUTS = ["InterVA5", "InterVA4", "InSilicoVA", "InSilicoVA_2012",
+                     "InterVA_2022"]
 
 
 def transform(mapping, raw_data, raw_data_id=None, lower=False,

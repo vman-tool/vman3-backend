@@ -12,7 +12,7 @@ from celery import Celery
 from decouple import config
 
 # Redis configuration - Read from environment
-REDIS_URL = config('REDIS_CELERY_URL', default='redis://redis:6379')
+REDIS_URL = config('REDIS_CELERY_URL', default='redis://redis-vman3:6379')
 REDIS_PASSWORD = config('REDIS_PASSWORD', default='vman@1029')
 
 import urllib.parse
