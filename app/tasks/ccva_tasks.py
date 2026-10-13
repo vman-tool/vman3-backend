@@ -71,6 +71,7 @@ def run_ccva_task(
     end_date: Optional[str] = None,
     malaria_status: Optional[str] = None,
     hiv_status: Optional[str] = None,
+    covid_status: Optional[str] = None,
     ccva_algorithm: Optional[str] = None,
     user_id: str = "unknown",
     date_type: Optional[str] = None,
@@ -192,9 +193,10 @@ def run_ccva_task(
             publish_progress(task_id, progress)
         
         # Run CCVA (this is synchronous)
+        algo_label = ccva_algorithm or "InterVA5"
         publish_progress(task_id, {
             "progress": 5,
-            "message": "Running InterVA5 analysis...",
+            "message": f"Running {algo_label} analysis...",
             "status": "running",
             "task_id": task_id,
             "total_records": len(database_dataframe),
@@ -212,6 +214,7 @@ def run_ccva_task(
             algorithm=ccva_algorithm,
             malaria=malaria_status,
             hiv=hiv_status,
+            covid=covid_status or "v",
             user_id=user_id
         )
         
