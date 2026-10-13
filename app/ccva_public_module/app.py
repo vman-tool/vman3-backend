@@ -2,6 +2,8 @@
 Standalone FastAPI application for CCVA Public Module
 Can be run independently or integrated into main app
 """
+import utils.transport
+import utils.session
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware

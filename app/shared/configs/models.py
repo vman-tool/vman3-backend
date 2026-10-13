@@ -361,7 +361,7 @@ class VManBaseModel(BaseModel):
         return query, bind_vars
     
     @classmethod
-    async def run_custom_query(cls, query: str = None, bind_vars: Dict = None,count: bool = True, db: StandardDatabase = None):
+    async def run_custom_query(cls, query: str = None, bind_vars: Dict = None, count: bool = True, db: StandardDatabase = None):
         """
             This function will run a custom query and return the results.
 

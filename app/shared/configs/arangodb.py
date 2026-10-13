@@ -272,7 +272,7 @@ def clean_document(data):
                 new_dict[key] = cleaned_value
         return new_dict
     elif isinstance(data, list):
-        return [clean_document(element) for element in data if clean_document(element) is not None]
+        return [cleaned for element in data if (cleaned := clean_document(element)) is not None]
     elif isinstance(data, float):
         if math.isinf(data) or math.isnan(data):
             return None

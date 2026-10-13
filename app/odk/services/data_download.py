@@ -300,15 +300,15 @@ async def insert_data_to_arangodb(data: dict,data_source:str=None):
         raise e
     
     
-async def insert_many_data_to_arangodb(data: List[dict], overwrite_mode: str = 'ignore'):
+async def insert_many_data_to_arangodb(data: List[dict], overwrite_mode: str = 'ignore', collection_name = db_collections.VA_TABLE):
 
     try:
         # Optimize: Use clean_document which does both null removal and sanitization in one pass
         data = [clean_document(item) for item in data]
-  
+        
         db:ArangoDBClient = await get_arangodb_client()
         # Pass sanitize=False since we already cleaned/sanitized above
-        return await db.insert_many(collection_name=db_collections.VA_TABLE, documents=data, overwrite_mode=overwrite_mode, sanitize=False)
+        return await db.insert_many(collection_name=collection_name, documents=data, overwrite_mode=overwrite_mode, sanitize=False)
 
     except Exception as e:
         raise e
