@@ -135,3 +135,13 @@ class PCVAConfigurations(VManBaseModel):
     @classmethod
     def get_collection_name(cls) -> str:
         return db_collections.PCVA_CONFIGURATION
+    
+
+class PCVAImportsDetails(VManBaseModel):
+    fileName: str
+    extension: str
+    numberOfRecords: int
+
+    @classmethod
+    def get_collection_name(cls):
+        return db_collections.IMPORTS_VA_DETAILS

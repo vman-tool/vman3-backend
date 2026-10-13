@@ -6,6 +6,8 @@ class db_collections():
     Constants class for NoSQL database Collections. Use this class to call your collection
     """
     VA_TABLE: str = 'form_submissions'
+    IMPORTS_VA_TABLE: str = 'imports_form_submissions'
+    IMPORTS_VA_DETAILS: str = 'imports_form_submisison_details'
     VA_QUESTIONS: str = 'form_questions'
     USERS: str = 'users'
     USER_TOKENS: str = 'user_tokens'
@@ -61,6 +63,31 @@ collections_with_indexes = {
         {"fields": ["instanceid"], "unique": False, "type": "persistent", "name": "idx_instanceid"},
         
         # {"fields": ["age_group"], "unique": False, "type": "persistent", "name": "idx_age_group"},
+        {"fields": ["id10007"], "unique": False, "type": "persistent", "name": "idx_interviewer"}
+    ],
+    db_collections.IMPORTS_VA_TABLE: [
+        {"fields": ["__id"], "unique": True, "type": "persistent", "name": "idx___id"},
+         {"fields": ["vman_data_source"], "unique": False, "type": "persistent", "name": "idx_vman_data_source"},
+        {"fields": ["vman_data_name"], "unique": False, "type": "persistent", "name": "idx_vman_data_name"},
+        {"fields": ["__id", "vman_data_source"], "unique": True, "type": "persistent", "name": "idx___id_vman_data_source"},
+        
+        {"fields": ["id10005r"], "unique": False, "type": "persistent", "name": "idx_region"},
+        {"fields": ["id10012"], "unique": False, "type": "persistent", "name": "idx_date"},
+        {"fields": ["today"], "unique": False, "type": "persistent", "name": "idx_submission"},
+        
+        # New Optimization Indexes
+        {"fields": ["id10005d"], "unique": False, "type": "persistent", "name": "idx_district"},
+        {"fields": ["id10023"], "unique": False, "type": "persistent", "name": "idx_death_date"},
+        {"fields": ["id10005r", "today"], "unique": False, "type": "persistent", "name": "idx_region_submission"},
+        {"fields": ["id10005d", "today"], "unique": False, "type": "persistent", "name": "idx_district_submission"},
+        {"fields": ["id10005r", "id10005d"], "unique": False, "type": "persistent", "name": "idx_region_district"},
+        
+        # Export optimization - join with CCVA/PCVA by instanceid
+        {"fields": ["instanceid"], "unique": False, "type": "persistent", "name": "idx_instanceid"},
+        
+        # Import detail reference index
+        {"fields": ["importDetail"], "unique": False, "type": "persistent", "name": "idx_import_detail"},
+        
         {"fields": ["id10007"], "unique": False, "type": "persistent", "name": "idx_interviewer"}
     ],
     db_collections.USERS: [
@@ -123,6 +150,10 @@ collections_with_indexes = {
     db_collections.DOWNLOAD_PROCESS_TRACKER: [],
     db_collections.SYSTEM_CONFIGS: [],
     db_collections.VA_QUESTIONS: [],
+    db_collections.IMPORTS_VA_DETAILS: [
+        {"fields": ["is_deleted"], "type": "persistent", "name": "pvaid_is_active"},
+        {"fields": ["fileName"], "unique": False, "type": "persistent", "name": "idx_file_name"}
+    ],
     db_collections.CCVA_RESULTS: [
              {"fields": ["CAUSE1"], "type": "persistent", "name": "cause_idx"}
         #   {"fields": ["ID"], "unique": True, "type": "persistent", "name": "idx_interva5_id"},

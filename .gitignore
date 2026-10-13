@@ -68,7 +68,6 @@ logs/
 */session.json
 session.json
 */.env
-.env
 settings.json
 */settings.json
 
@@ -94,3 +93,5 @@ vmanenv
 ./deployment/.env
 
 results.csv
+config.bat
+node_modules
