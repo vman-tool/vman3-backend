@@ -50,10 +50,9 @@ class BadRequestException(CustomHTTPException):
         )
 
 class ForbiddenException(CustomHTTPException):
-    def __init__(self):
+    def __init__(self, detail: str = "You do not have permission to access this resource."):
         super().__init__(
             status_code=403,
-            detail="You do not have permission to access this resource.",
+            detail=detail,
             error_code="FORBIDDEN_ACCESS",
-            path = self.request.url.path
         )
