@@ -3,15 +3,34 @@ from typing import List, Optional
 
 from arango import ArangoError
 from arango.database import StandardDatabase
+from fastapi import HTTPException
 from fastapi.concurrency import run_in_threadpool
 
 from app.shared.configs.constants import db_collections
 from app.shared.configs.models import ResponseMainModel
-from app.shared.middlewares.exceptions import BadRequestException
+from app.shared.configs.security import build_location_limit_filter, get_location_limit_groups
+from app.shared.middlewares.exceptions import BadRequestException, ForbiddenException
+
+
+def _is_within_location_scope(current_user: dict, va_record: Optional[dict]) -> bool:
+    """True if `va_record` is within current_user's access_limit restriction,
+    or the user is unrestricted. False (never True) when `va_record` is
+    None and the user IS restricted - an unknown/missing record can't be
+    proven in-scope."""
+    groups = get_location_limit_groups(current_user)
+    if not groups:
+        return True
+    if va_record is None:
+        return False
+    return any(
+        str(va_record.get(field)) in {str(v) for v in values}
+        for field, values in groups
+    )
 
 
 async def fetch_error_list(
     db: StandardDatabase,
+    current_user: dict,
     paging: bool = True,
     page_number: int = 1,
     limit: int = 10,
@@ -22,20 +41,34 @@ async def fetch_error_list(
     locations: Optional[List[str]] = None
 ) -> ResponseMainModel:
     try:
-        print(error_type)
-        # config = await fetch_odk_config(db)
-        # date_field = config.field_mapping.date
-        # region_field = config.field_mapping.location_level1
-
-        collection = db.collection(db_collections.CCVA_ERRORS)
-        # query = f"FOR doc IN {collection.name} "
         bind_vars = {}
 
-        
+        error_type_filter = ""
+        if error_type:
+            error_type_filter = "FILTER e.error_type == @error_type"
+            bind_vars["error_type"] = error_type
+
+        # Only materialised when the user is actually restricted, so an
+        # unrestricted admin's query is byte-for-byte the same shape as
+        # before this filter existed - zero behavior/cost change for them.
+        location_limit_filter = build_location_limit_filter(current_user, bind_vars, alias="fs")
+        scope_join = ""
+        if location_limit_filter:
+            scope_join = f"""
+                FOR fs IN {db_collections.VA_TABLE}
+                    FILTER fs.__id == CONCAT("uuid:", e.uuid)
+                    FILTER {location_limit_filter}
+            """
+
+        offset = (max(page_number, 1) - 1) * limit if paging else 0
+        bind_vars["offset"] = offset
+        bind_vars["size"] = limit if paging else 1_000_000
+
         query = f"""
         LET groupedErrorsCounts = (
             FOR e IN {db_collections.CCVA_ERRORS}
-           // {"FILTER e.error_type == @error_type" if error_type else ""}
+            {error_type_filter}
+            {scope_join}
             COLLECT errorType = e.error_type INTO groupedDocs
             LET uniqueUuids = UNIQUE(groupedDocs[*].e.uuid)
             RETURN {{
@@ -44,14 +77,14 @@ async def fetch_error_list(
             }}
         )
 
-        LET individualErrorsResults = (
+        LET matchingUuids = (
             FOR e IN {db_collections.CCVA_ERRORS}
-            {"FILTER e.error_type == @error_type" if error_type else ""}
+            {error_type_filter}
+            {scope_join}
             COLLECT uuid = e.uuid, group = e.group INTO groupedErrors
             LET error_types = UNIQUE(groupedErrors[*].e.error_type)
             LET error_messages = UNIQUE(groupedErrors[*].e.error_message)
             SORT uuid ASC
-            LIMIT @offset, @size
             RETURN {{
                 uuid: uuid,
                 error_types: error_types,
@@ -62,39 +95,24 @@ async def fetch_error_list(
 
         RETURN {{
             groupedErrorsCounts: groupedErrorsCounts,
-            individualErrorsResults: individualErrorsResults
+            individualErrorsResults: SLICE(matchingUuids, @offset, @size),
+            totalMatching: LENGTH(matchingUuids)
         }}
         """
 
-
-     
-        bind_vars.update({
-            "offset": 0,
-            "size": 1000
-        })
-
-        if error_type:
-            bind_vars["error_type"] = error_type
-        
         def execute_query():
             cursor = db.aql.execute(query, bind_vars=bind_vars)
-            return [document for document in cursor]
+            return cursor.next()
 
-        data = await run_in_threadpool(execute_query)
-
-        # Fetch total count of documents
-        count_query = f"RETURN LENGTH({collection.name})"
-        
-        def execute_count_query():
-            total_records_cursor = db.aql.execute(count_query)
-            return total_records_cursor.next()
-
-        total_records = await run_in_threadpool(execute_count_query)
+        result = await run_in_threadpool(execute_query)
 
         return ResponseMainModel(
-            data=data[0] if data else {},
+            data={
+                "groupedErrorsCounts": result["groupedErrorsCounts"],
+                "individualErrorsResults": result["individualErrorsResults"],
+            } if result else {},
             message="Records fetched successfully",
-            total=total_records
+            total=result["totalMatching"] if result else 0
         )
     except ArangoError as e:
         print(e)
@@ -102,8 +120,8 @@ async def fetch_error_list(
     except Exception as e:
         print(e)
         raise BadRequestException(f"Failed to fetch records: {str(e)}",str(e))
-    
-async def fetch_error_details(db: StandardDatabase, error_id: str) -> ResponseMainModel:
+
+async def fetch_error_details(db: StandardDatabase, error_id: str, current_user: dict) -> ResponseMainModel:
     try:
         # Original query — unchanged so it stays reliable
         query = f"""
@@ -137,6 +155,12 @@ async def fetch_error_details(db: StandardDatabase, error_id: str) -> ResponseMa
         if not result:
             raise BadRequestException("Error not found", f"No error found with id {error_id}")
 
+        form_data = result.get("form_data")
+        if not _is_within_location_scope(current_user, form_data):
+            if form_data is None:
+                raise BadRequestException("Error not found", f"No VA record found for uuid {error_id}")
+            raise ForbiddenException("You do not have permission to view this record.")
+
         # Fetch audit trail separately so a missing/empty collection never breaks the main load
         audit_trail = []
         try:
@@ -162,6 +186,8 @@ async def fetch_error_details(db: StandardDatabase, error_id: str) -> ResponseMa
             message="Error details fetched successfully",
             total=1
         )
+    except HTTPException:
+        raise
     except Exception as e:
         print(e)
         raise BadRequestException(f"Failed to fetch error details: {str(e)}", str(e))
@@ -223,7 +249,7 @@ async def update_form_data(db: StandardDatabase, form_id: str, updated_data: dic
 
 
 async def save_corrections_data(
-    db: StandardDatabase, uuid: str, updated_data: dict, changed_by: dict
+    db: StandardDatabase, uuid: str, updated_data: dict, changed_by: dict, current_user: dict
 ) -> ResponseMainModel:
     """Update the VA record in VA_TABLE and log a structured audit entry."""
     try:
@@ -243,6 +269,9 @@ async def save_corrections_data(
         current = await run_in_threadpool(execute_fetch)
         if not current:
             raise BadRequestException("Form data not found", f"No VA record found with uuid {uuid}")
+
+        if not _is_within_location_scope(current_user, current):
+            raise ForbiddenException("You do not have permission to edit this record.")
 
         changes = [
             {"field": field, "old_value": current.get(field), "new_value": new_val}
@@ -284,6 +313,8 @@ async def save_corrections_data(
             message="Form data updated successfully",
             total=1
         )
+    except HTTPException:
+        raise
     except Exception as e:
         print(e)
         raise BadRequestException(f"Failed to update form data: {str(e)}", str(e))

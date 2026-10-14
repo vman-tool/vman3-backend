@@ -36,7 +36,15 @@ async def websocket_broadcast(task_id: str, progress_data: dict):
         progress_data = progress_data.model_dump()
     elif hasattr(progress_data, 'dict'):
         progress_data = progress_data.dict()
-        
+    elif isinstance(progress_data, str):
+        # Some callers pass an already-serialized payload (e.g.
+        # `SomeModel(...).model_dump_json()`). Re-dumping that string as-is
+        # would send a JSON-encoded string over the socket instead of a JSON
+        # object, so the frontend's `JSON.parse(event.data)` yields a string
+        # primitive and every field access (progress, status, ...) is
+        # undefined - silently dropped by applyUpdate()'s guard.
+        progress_data = json.loads(progress_data)
+
     await websocket__manager.broadcast(task_id, json.dumps(progress_data, default=str))
 
 async def get_record_to_run_ccva(current_user:dict,db: StandardDatabase,data_source:Optional[str], task_id: Optional[str], task_results: Dict,start_date: Optional[date] = None, end_date: Optional[date] = None,date_type:Optional[str]=None, top:Optional[int]=None):

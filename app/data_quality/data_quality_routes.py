@@ -39,7 +39,7 @@ async def get_interview_duration_stats(
     current_user = Depends(get_current_user)
 ):
     try:
-        return await fetch_interview_duration_stats(db)
+        return await fetch_interview_duration_stats(db, current_user=current_user)
     except Exception as e:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
 
@@ -61,7 +61,7 @@ async def get_ics_stats(
     current_user = Depends(get_current_user)
 ):
     try:
-        return await fetch_ics_stats(db)
+        return await fetch_ics_stats(db, current_user=current_user)
     except Exception as e:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
 
@@ -72,7 +72,7 @@ async def get_rrs_stats(
     current_user = Depends(get_current_user)
 ):
     try:
-        return await fetch_rrs_stats(db)
+        return await fetch_rrs_stats(db, current_user=current_user)
     except Exception as e:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
 
@@ -83,7 +83,7 @@ async def get_ici_stats(
     current_user = Depends(get_current_user)
 ):
     try:
-        return await fetch_ici_stats(db)
+        return await fetch_ici_stats(db, current_user=current_user)
     except Exception as e:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
 
@@ -94,7 +94,7 @@ async def get_dqa_analytics(
     current_user=Depends(get_current_user),
 ):
     try:
-        snapshot = await fetch_dqa_analytics_snapshot(db)
+        snapshot = await fetch_dqa_analytics_snapshot(db, current_user)
         return {"data": snapshot, "message": "ok"}
     except Exception as e:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
@@ -180,24 +180,23 @@ async def get_error_list(
     end_date: Optional[date] = None,
     locations: Optional[List[str]] = Query(None),
     db: StandardDatabase = Depends(get_arangodb_session),
-    # current_user = Depends(get_current_user)
+    current_user = Depends(get_current_user)
 ):
     try:
-        print(error_type)
         errors = await fetch_error_list(
-            db,
-            page,
-            0,
-            limit,
-            
-            error_type,
-            group,
-            start_date,
-            end_date,
-            locations
+            db=db,
+            current_user=current_user,
+            page_number=page,
+            limit=limit,
+            error_type=error_type,
+            group=group,
+            start_date=start_date,
+            end_date=end_date,
+            locations=locations,
         )
-        # print(errors)
         return errors
+    except HTTPException as he:
+        raise he
     except Exception as e:
         print(e)
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
@@ -206,10 +205,10 @@ async def get_error_list(
 async def get_error_details(
     error_id: str,
     db: StandardDatabase = Depends(get_arangodb_session),
-    # current_user = Depends(get_current_user)
+    current_user = Depends(get_current_user)
 ):
     try:
-        error_details = await fetch_error_details(db, error_id)
+        error_details = await fetch_error_details(db, error_id, current_user)
         if not error_details:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Error not found")
         return error_details
@@ -242,8 +241,8 @@ async def update_form_data_route(
     current_user = Depends(get_current_user)
 ):
     try:
-        changed_by = {"name": getattr(current_user, "name", ""), "email": getattr(current_user, "email", "")}
-        updated_form = await save_corrections_data(db, form_id, updated_data, changed_by)
+        changed_by = {"name": current_user.get("name", ""), "email": current_user.get("email", "")}
+        updated_form = await save_corrections_data(db, form_id, updated_data, changed_by, current_user)
         if not updated_form:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Form data not found or could not be updated")
         return {"message": "Form data updated successfully", "updated_form": updated_form}
