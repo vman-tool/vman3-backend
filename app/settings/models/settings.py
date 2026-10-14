@@ -82,7 +82,7 @@ class AidThresholds(BaseModel):
     min_normal:  float = 30.0
     max_normal:  float = 60.0
     tier_short:  TierConfig = Field(default_factory=lambda: TierConfig(label="Too Short", color="red"))
-    tier_normal: TierConfig = Field(default_factory=lambda: TierConfig(label="Normal", color="none"))
+    tier_normal: TierConfig = Field(default_factory=lambda: TierConfig(label="Normal", color="green"))
     tier_long:   TierConfig = Field(default_factory=lambda: TierConfig(label="Too Long", color="red"))
 
 class DqaThresholds(BaseModel):
