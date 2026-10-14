@@ -1,3 +1,4 @@
+import hashlib
 from typing import Optional
 
 import pandas as pd
@@ -10,7 +11,11 @@ from vman_dq.dqa import ICI_RULE_DESCRIPTIONS
 from app.settings.services.odk_configs import fetch_odk_config
 from app.shared.configs.constants import db_collections
 from app.shared.configs.models import ResponseMainModel
-from app.shared.configs.security import build_location_limit_filter, build_locations_query_filter
+from app.shared.configs.security import (
+    build_location_limit_filter,
+    build_locations_query_filter,
+    get_location_limit_groups,
+)
 
 # ---------------------------------------------------------------------------
 # Shared helper: fetch every VA record into a DataFrame for vman_dq
@@ -50,12 +55,12 @@ def _stat_block(series: pd.Series) -> dict:
     }
 
 
-async def _breakdowns(db: StandardDatabase, df: pd.DataFrame, series: pd.Series) -> dict:
-    """overall / by_age_group / by_gender_adult breakdowns for a per-record
-    indicator series, grouped using this deployment's configured field
-    mapping (is_adult/is_child/is_neonate/deceased_gender) - unlike the
-    indicator formulas themselves, these grouping fields remain configurable
-    per deployment, matching the previous AQL implementation.
+async def _dqa_group_masks(db: StandardDatabase, df: pd.DataFrame) -> dict:
+    """adult/child/neonate/male_adult/female_adult boolean masks over the
+    full df, derived once from this deployment's configured field mapping
+    (is_adult/is_child/is_neonate/deceased_gender) and reused for both the
+    overall breakdown and every per-location group - avoids re-deriving the
+    same masks from scratch on every call/location.
     """
     config = await fetch_odk_config(db, True)
     fm = config.field_mapping
@@ -65,23 +70,66 @@ async def _breakdowns(db: StandardDatabase, df: pd.DataFrame, series: pd.Series)
             return df[name].astype(str)
         return pd.Series("", index=df.index)
 
-    adult = col(fm.is_adult)
-    child = col(fm.is_child)
-    neonate = col(fm.is_neonate)
+    adult = col(fm.is_adult) == "1"
+    child = col(fm.is_child) == "1"
+    neonate = col(fm.is_neonate) == "1"
     gender = col(fm.deceased_gender).str.lower()
 
     return {
-        "overall": _stat_block(series),
+        "fm": fm,
+        "adult": adult,
+        "child": child,
+        "neonate": neonate,
+        "male_adult": adult & (gender == "male"),
+        "female_adult": adult & (gender == "female"),
+    }
+
+
+def _breakdowns_sync(series: pd.Series, masks: dict, loc_mask: Optional[pd.Series] = None) -> dict:
+    """overall / by_age_group / by_gender_adult breakdowns for a per-record
+    indicator series, given the masks _dqa_group_masks already computed.
+    When `loc_mask` is given, every cell is additionally restricted to that
+    location's rows - this is what lets a per-location snapshot reuse the
+    exact same breakdown shape as the global one.
+    """
+    def pick(group_mask: pd.Series) -> dict:
+        combined = group_mask if loc_mask is None else (group_mask & loc_mask)
+        return _stat_block(series[combined])
+
+    overall = series if loc_mask is None else series[loc_mask]
+    return {
+        "overall": _stat_block(overall),
         "by_age_group": {
-            "adults": _stat_block(series[adult == "1"]),
-            "children": _stat_block(series[child == "1"]),
-            "neonates": _stat_block(series[neonate == "1"]),
+            "adults": pick(masks["adult"]),
+            "children": pick(masks["child"]),
+            "neonates": pick(masks["neonate"]),
         },
         "by_gender_adult": {
-            "male_adults": _stat_block(series[(adult == "1") & (gender == "male")]),
-            "female_adults": _stat_block(series[(adult == "1") & (gender == "female")]),
+            "male_adults": pick(masks["male_adult"]),
+            "female_adults": pick(masks["female_adult"]),
         },
     }
+
+
+async def _breakdowns(db: StandardDatabase, df: pd.DataFrame, series: pd.Series) -> dict:
+    """Unchanged signature/behavior - thin wrapper around _breakdowns_sync so
+    every existing caller keeps working exactly as before."""
+    masks = await _dqa_group_masks(db, df)
+    return _breakdowns_sync(series, masks)
+
+
+def _filter_df_by_location(df: pd.DataFrame, current_user: dict) -> pd.DataFrame:
+    """Restricts `df` to the rows within current_user's access_limit, for
+    the *live* (non-cached) stat endpoints - a no-op for an unrestricted
+    user, matching every other location-scoped view in this app."""
+    groups = get_location_limit_groups(current_user)
+    if not groups:
+        return df
+    mask = pd.Series(False, index=df.index)
+    for field, values in groups:
+        if field in df.columns:
+            mask = mask | df[field].astype(str).isin({str(v) for v in values})
+    return df[mask]
 
 
 # ---------------------------------------------------------------------------
@@ -114,13 +162,21 @@ def _compute_ics_chunked(df: pd.DataFrame) -> pd.Series:
         for start in range(0, len(df), _ICS_CHUNK_ROWS)
     ]
     return pd.concat(parts)
-async def fetch_ics_stats(db: StandardDatabase, df: pd.DataFrame = None) -> ResponseMainModel:
+async def fetch_ics_stats(
+    db: StandardDatabase, df: pd.DataFrame = None, series: pd.Series = None, current_user: dict = None
+) -> ResponseMainModel:
     try:
         df = df if df is not None else await _fetch_va_dataframe(db)
+        # Only the *live* path (no df/series handed in by the nightly batch
+        # job) needs scoping here - the batch job always supplies its own
+        # already-loaded, unfiltered df/series and does its own location
+        # breakdown separately (compute_and_store_dqa_location_snapshots).
+        if current_user is not None and series is None:
+            df = _filter_df_by_location(df, current_user)
         if df.empty:
             return ResponseMainModel(data=None, message="No VA records found")
 
-        ics = await run_in_threadpool(_compute_ics_chunked, df)
+        ics = series if series is not None else await run_in_threadpool(_compute_ics_chunked, df)
         data = await _breakdowns(db, df, ics)
         return ResponseMainModel(data=data, message="ICS statistics fetched successfully")
 
@@ -131,13 +187,17 @@ async def fetch_ics_stats(db: StandardDatabase, df: pd.DataFrame = None) -> Resp
 # ---------------------------------------------------------------------------
 # Respondent Reliability Score (RRS) Stats
 # ---------------------------------------------------------------------------
-async def fetch_rrs_stats(db: StandardDatabase, df: pd.DataFrame = None) -> ResponseMainModel:
+async def fetch_rrs_stats(
+    db: StandardDatabase, df: pd.DataFrame = None, series: pd.Series = None, current_user: dict = None
+) -> ResponseMainModel:
     try:
         df = df if df is not None else await _fetch_va_dataframe(db)
+        if current_user is not None and series is None:
+            df = _filter_df_by_location(df, current_user)
         if df.empty:
             return ResponseMainModel(data=None, message="No VA records found")
 
-        rrs = await run_in_threadpool(compute_rrs, df)
+        rrs = series if series is not None else await run_in_threadpool(compute_rrs, df)
         data = await _breakdowns(db, df, rrs)
         return ResponseMainModel(data=data, message="RRS statistics fetched successfully")
 
@@ -206,13 +266,17 @@ async def fetch_ics_value_sample(db: StandardDatabase) -> ResponseMainModel:
 # ---------------------------------------------------------------------------
 # Interview Duration Stats (AID)
 # ---------------------------------------------------------------------------
-async def fetch_interview_duration_stats(db: StandardDatabase, df: pd.DataFrame = None) -> ResponseMainModel:
+async def fetch_interview_duration_stats(
+    db: StandardDatabase, df: pd.DataFrame = None, series: pd.Series = None, current_user: dict = None
+) -> ResponseMainModel:
     try:
         df = df if df is not None else await _fetch_va_dataframe(db)
+        if current_user is not None and series is None:
+            df = _filter_df_by_location(df, current_user)
         if df.empty:
             return ResponseMainModel(data=None, message="No VA records found")
 
-        aid = await run_in_threadpool(compute_aid, df)
+        aid = series if series is not None else await run_in_threadpool(compute_aid, df)
         data = await _breakdowns(db, df, aid)
         return ResponseMainModel(data=data, message="Interview duration statistics fetched successfully")
 
@@ -223,7 +287,13 @@ async def fetch_interview_duration_stats(db: StandardDatabase, df: pd.DataFrame 
 # ---------------------------------------------------------------------------
 # Internal Consistency Index (ICI) Stats
 # ---------------------------------------------------------------------------
-async def fetch_ici_stats(db: StandardDatabase, df: pd.DataFrame = None) -> ResponseMainModel:
+async def fetch_ici_stats(
+    db: StandardDatabase,
+    df: pd.DataFrame = None,
+    series: pd.Series = None,
+    flags: pd.DataFrame = None,
+    current_user: dict = None,
+) -> ResponseMainModel:
     """
     ICI = (records with ZERO logical contradictions / total records) x 100
 
@@ -237,13 +307,18 @@ async def fetch_ici_stats(db: StandardDatabase, df: pd.DataFrame = None) -> Resp
         gender_field = config.field_mapping.deceased_gender
 
         df = df if df is not None else await _fetch_va_dataframe(db)
+        if current_user is not None and series is None:
+            df = _filter_df_by_location(df, current_user)
         if df.empty:
             return ResponseMainModel(data=None, message="No VA records found")
 
-        def _compute():
-            return compute_ici(df, gender_field=gender_field)
+        if series is not None and flags is not None:
+            ici, flags = series, flags
+        else:
+            def _compute():
+                return compute_ici(df, gender_field=gender_field)
 
-        ici, flags, _rule_computable = await run_in_threadpool(_compute)
+            ici, flags, _rule_computable = await run_in_threadpool(_compute)
 
         interviewer_col = next((c for c in df.columns if c.lower() == "id10010"), None)
         if interviewer_col:
@@ -306,7 +381,14 @@ def _clean(v):
     return v
 
 
-async def compute_and_store_dqa_map_points(db: StandardDatabase, df: pd.DataFrame) -> int:
+async def compute_and_store_dqa_map_points(
+    db: StandardDatabase,
+    df: pd.DataFrame,
+    rrs: pd.Series = None,
+    ics: pd.Series = None,
+    aid: pd.Series = None,
+    ici: pd.Series = None,
+) -> int:
     """Persist one row per VA record with GPS + admin location + each
     indicator's raw score, for the Data Map's DQA-indicator coloring.
 
@@ -318,7 +400,11 @@ async def compute_and_store_dqa_map_points(db: StandardDatabase, df: pd.DataFram
     Reuses the exact per-record Series fetch_rrs_stats/fetch_ics_stats/
     fetch_interview_duration_stats/fetch_ici_stats already produce
     internally from this same `df` - the only new cost is zipping them with
-    coordinates/location (already columns in `df`) and writing rows.
+    coordinates/location (already columns in `df`) and writing rows. The
+    caller (compute_and_store_dqa_analytics) now computes these once and
+    passes them in; falling back to computing them here keeps this function
+    usable standalone (and keeps existing tests, which call it with just
+    `(db, df)`, unaffected).
     """
     if df.empty:
         await run_in_threadpool(
@@ -341,15 +427,19 @@ async def compute_and_store_dqa_map_points(db: StandardDatabase, df: pd.DataFram
     date_col = col(fm.interview_date)
     va_id_col = col("_key")
 
-    rrs = await run_in_threadpool(compute_rrs, df)
-    ics = await run_in_threadpool(_compute_ics_chunked, df)
-    aid = await run_in_threadpool(compute_aid, df)
+    if rrs is None:
+        rrs = await run_in_threadpool(compute_rrs, df)
+    if ics is None:
+        ics = await run_in_threadpool(_compute_ics_chunked, df)
+    if aid is None:
+        aid = await run_in_threadpool(compute_aid, df)
 
-    def _compute_ici_series():
-        ici_series, _flags, _computable = compute_ici(df, gender_field=fm.deceased_gender)
-        return ici_series
+    if ici is None:
+        def _compute_ici_series():
+            ici_series, _flags, _computable = compute_ici(df, gender_field=fm.deceased_gender)
+            return ici_series
 
-    ici = await run_in_threadpool(_compute_ici_series)
+        ici = await run_in_threadpool(_compute_ici_series)
 
     def run():
         rows = []
@@ -464,7 +554,14 @@ async def fetch_dqa_map_points(
         return ResponseMainModel(data=None, message="Failed to fetch DQA map points", error=str(e))
 
 
-async def compute_and_store_dqa_trend_points(db: StandardDatabase, df: pd.DataFrame) -> int:
+async def compute_and_store_dqa_trend_points(
+    db: StandardDatabase,
+    df: pd.DataFrame,
+    rrs: pd.Series = None,
+    ics: pd.Series = None,
+    aid: pd.Series = None,
+    ici: pd.Series = None,
+) -> int:
     """Persist one row per VA record with its submission month + each
     indicator's raw score, for the General DQA page's Trend Analysis chart.
 
@@ -501,15 +598,19 @@ async def compute_and_store_dqa_trend_points(db: StandardDatabase, df: pd.DataFr
     ward = col(fm.location_level3)
     va_id_col = col("_key")
 
-    rrs = await run_in_threadpool(compute_rrs, df)
-    ics = await run_in_threadpool(_compute_ics_chunked, df)
-    aid = await run_in_threadpool(compute_aid, df)
+    if rrs is None:
+        rrs = await run_in_threadpool(compute_rrs, df)
+    if ics is None:
+        ics = await run_in_threadpool(_compute_ics_chunked, df)
+    if aid is None:
+        aid = await run_in_threadpool(compute_aid, df)
 
-    def _compute_ici_series():
-        ici_series, _flags, _computable = compute_ici(df, gender_field=fm.deceased_gender)
-        return ici_series
+    if ici is None:
+        def _compute_ici_series():
+            ici_series, _flags, _computable = compute_ici(df, gender_field=fm.deceased_gender)
+            return ici_series
 
-    ici = await run_in_threadpool(_compute_ici_series)
+        ici = await run_in_threadpool(_compute_ici_series)
 
     def run():
         rows = []
@@ -598,3 +699,136 @@ async def fetch_dqa_trend_points(current_user: dict, db: StandardDatabase = None
 
     except Exception as e:
         return ResponseMainModel(data=None, message="Failed to fetch DQA trend points", error=str(e))
+
+
+# ---------------------------------------------------------------------------
+# Per-location DQA indicator snapshots (restricted users' Data Quality
+# overview) - one pre-aggregated stat-block set per distinct location value,
+# computed during the same nightly batch run as the global snapshot.
+# ---------------------------------------------------------------------------
+
+def _location_snapshot_key(field: str, value: str) -> str:
+    """Deterministic, collision-resistant _key for one location group's
+    pre-aggregated stats. `value` is free-text and routinely contains
+    characters Arango _key disallows (spaces, '/', etc.), so the key is a
+    hash of (field, value); the raw field/value pair is kept as plain
+    attributes on the document body for lookups/debugging/readability -
+    this hash is only ever used as the storage handle."""
+    digest = hashlib.sha1(f"{field}::{value}".encode("utf-8")).hexdigest()[:16]
+    return f"loc::{digest}"
+
+
+def _ici_block_for(
+    loc_mask: pd.Series,
+    ici_series: pd.Series,
+    flags: pd.DataFrame,
+    interviewer: pd.Series,
+    checks_applied: list,
+) -> dict:
+    idx = loc_mask[loc_mask].index
+    total = len(idx)
+    if total == 0:
+        return {
+            "overall_ici": None, "overall_total": 0, "overall_passed": 0,
+            "interviewers": [], "checks_applied": checks_applied,
+        }
+
+    n_errors = flags.loc[idx].sum(axis=1) if not flags.empty else pd.Series(0, index=idx)
+    passed_mask = n_errors == 0
+    passed = int(passed_mask.sum())
+    overall_ici = passed * 100.0 / total
+
+    grouped = (
+        pd.DataFrame({"interviewer": interviewer.loc[idx], "passed": passed_mask.astype(int)})
+        .groupby("interviewer")
+        .agg(total=("interviewer", "count"), passed=("passed", "sum"))
+        .reset_index()
+    )
+    grouped["errors"] = grouped["total"] - grouped["passed"]
+    grouped["ici"] = grouped["passed"] * 100.0 / grouped["total"]
+    grouped = grouped.sort_values("ici", ascending=False)
+
+    by_interviewer = [
+        {
+            "interviewer": row["interviewer"], "total": int(row["total"]),
+            "errors": int(row["errors"]), "passed": int(row["passed"]), "ici": float(row["ici"]),
+        }
+        for _, row in grouped.iterrows()
+    ]
+    return {
+        "overall_ici": overall_ici, "overall_total": total, "overall_passed": passed,
+        "interviewers": by_interviewer, "checks_applied": checks_applied,
+    }
+
+
+async def compute_and_store_dqa_location_snapshots(
+    db: StandardDatabase,
+    df: pd.DataFrame,
+    rrs: pd.Series,
+    ics: pd.Series,
+    aid: pd.Series,
+    ici_series: pd.Series,
+    ici_flags: pd.DataFrame,
+) -> int:
+    """Persists one pre-aggregated stat-block document per distinct
+    (location_field, value) pair found in `df`, reusing the Series already
+    computed once over the full dataframe by slicing them per location
+    (vman_dq's compute_* functions are all per-record/row-wise - confirmed
+    by reading vman_dq/dqa.py directly - so slicing an already-computed
+    Series by a location mask gives identical values to recomputing on a
+    location-filtered sub-dataframe, the same property _compute_ics_chunked
+    already relies on for arbitrary row-range chunking). This is what lets
+    `fetch_dqa_analytics_snapshot` serve a restricted user's own numbers
+    without ever running the heavy per-request computation live.
+    """
+    if df.empty:
+        return 0
+
+    from app.data_quality.services.dqa_analytics_service import _upsert_doc_sync
+
+    masks = await _dqa_group_masks(db, df)
+    fm = masks["fm"]
+    location_fields = [
+        f for f in (fm.location_level1, fm.location_level2, fm.location_level3)
+        if f and f in df.columns
+    ]
+    if not location_fields:
+        return 0
+
+    interviewer_col = next((c for c in df.columns if c.lower() == "id10010"), None)
+    if interviewer_col:
+        interviewer = df[interviewer_col].astype(str).str.strip()
+        interviewer = interviewer.mask(interviewer.eq(""), "Unknown")
+    else:
+        interviewer = pd.Series("Unknown", index=df.index)
+    checks_applied = [ICI_RULE_DESCRIPTIONS[r] for r in ici_flags.columns] if not ici_flags.empty else []
+
+    from datetime import datetime
+    computed_at = datetime.utcnow().isoformat() + "Z"
+
+    def _write_all():
+        written = 0
+        for field in location_fields:
+            for raw_value in df[field].dropna().unique():
+                value = str(raw_value).strip()
+                if not value:
+                    continue
+                loc_mask = df[field] == raw_value
+                if not loc_mask.any():
+                    continue
+                doc = {
+                    "_key": _location_snapshot_key(field, value),
+                    "field": field,
+                    "value": value,
+                    "status": "completed",
+                    "computed_at": computed_at,
+                    "rrs": _breakdowns_sync(rrs, masks, loc_mask),
+                    "ics": _breakdowns_sync(ics, masks, loc_mask),
+                    "aid": _breakdowns_sync(aid, masks, loc_mask),
+                    "ici": _ici_block_for(loc_mask, ici_series, ici_flags, interviewer, checks_applied),
+                }
+                _upsert_doc_sync(db, db_collections.DQA_ANALYTICS, doc)
+                written += 1
+        return written
+
+    return await run_in_threadpool(_write_all)
