@@ -44,18 +44,46 @@ class FakeCollection:
         self.name = name
         self.inserted: list[Any] = []
         self.truncated = False
+        # In-memory key-value backing for get/has/update, independent of
+        # `inserted` (which some tests assert against as an ordered list) -
+        # mirrors a real ArangoDB document collection closely enough for
+        # the _upsert_doc_sync-style read/write-by-_key usage this supports.
+        self._docs: dict[str, Any] = {}
 
     def insert(self, document, **kwargs):
         self.inserted.append(document)
-        return {**document, "_key": document.get("_key", "fake-key")}
+        doc = {**document, "_key": document.get("_key", "fake-key")}
+        self._docs[doc["_key"]] = doc
+        return doc
 
     def insert_many(self, documents, **kwargs):
         self.inserted.extend(documents)
-        return [{**d, "_key": d.get("_key", "fake-key")} for d in documents]
+        result = [{**d, "_key": d.get("_key", "fake-key")} for d in documents]
+        for doc in result:
+            self._docs[doc["_key"]] = doc
+        return result
 
     def truncate(self):
         self.truncated = True
         self.inserted = []
+        self._docs = {}
+
+    def has(self, key: str) -> bool:
+        return key in self._docs
+
+    def get(self, key: str):
+        return self._docs.get(key)
+
+    def get_many(self, keys):
+        return [self._docs[k] for k in keys if k in self._docs]
+
+    def update(self, document, merge: bool = True, **kwargs):
+        key = document["_key"]
+        if merge and key in self._docs:
+            self._docs[key] = {**self._docs[key], **document}
+        else:
+            self._docs[key] = dict(document)
+        return self._docs[key]
 
 
 class FakeDB:
