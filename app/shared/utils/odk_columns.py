@@ -1,5 +1,7 @@
 from typing import Iterable, List
 
+import pandas as pd
+
 MIN_SEGMENT_LEN = 3
 
 
@@ -26,3 +28,42 @@ def clean_odk_column_name(col: str, sep: str = '-') -> str:
 
 def clean_odk_columns(columns: Iterable[str], sep: str = '-') -> List[str]:
     return [clean_odk_column_name(col, sep=sep) for col in columns]
+
+
+def synthesize_coordinates_from_latlon(df: pd.DataFrame) -> pd.DataFrame:
+    """Rebuilds the single `coordinates` [lng, lat, alt] array column the
+    Data Map reads (both fetch_va_map_records, which requires exactly 3
+    elements, and compute_and_store_dqa_map_points, which only needs the
+    first 2), for CSV-uploaded records that don't have one.
+
+    ODK Central's CSV export represents a geopoint question as separate
+    <field>-Latitude/-Longitude/-Altitude(/-Accuracy) columns, which collapse
+    to bare "latitude"/"longitude"/"altitude" after clean_odk_column_name's
+    group-prefix stripping (keeps only the last '-'-separated segment). The
+    API sync path doesn't have this problem: ODK's own GeoJSON geopoint
+    encoding already nests the [lng, lat, alt] array under a "coordinates"
+    key one level below the question's own name, and that same stripping
+    logic (run with sep='/' there) preserves "coordinates" as-is. A CSV
+    upload never has that nested structure, so without rebuilding it here,
+    CSV-uploaded records have no "coordinates" field at all and the Data Map
+    silently skips every one of them - the whole point of this function.
+
+    Order is [lng, lat, alt], matching compute_and_store_dqa_map_points' own
+    `lng, lat = coord[0], coord[1]` unpacking (GeoJSON Point order, not the
+    [lat, lng] order latitude/longitude naming might suggest) and
+    fetch_va_map_records' `LENGTH(doc.coordinates) == 3` filter. Altitude
+    defaults to 0 when the CSV has no altitude column, or a row's value
+    isn't numeric - a geopoint with unknown altitude, not a missing one.
+    """
+    if 'latitude' not in df.columns or 'longitude' not in df.columns:
+        return df
+
+    lat = pd.to_numeric(df['latitude'], errors='coerce')
+    lng = pd.to_numeric(df['longitude'], errors='coerce')
+    alt = pd.to_numeric(df['altitude'], errors='coerce') if 'altitude' in df.columns else pd.Series(0, index=df.index)
+    alt = alt.fillna(0)
+    df['coordinates'] = [
+        None if pd.isna(lat_v) or pd.isna(lng_v) else [lng_v, lat_v, alt_v]
+        for lat_v, lng_v, alt_v in zip(lat, lng, alt)
+    ]
+    return df
