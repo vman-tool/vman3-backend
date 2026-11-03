@@ -5,7 +5,7 @@ from app.statistics.services.charts import _resolve_location_nodes, fetch_charts
 from tests.support.fakes import FakeCursor, FakeDB
 
 
-def _fake_config(district_field=None):
+def _fake_config(district_field=None, consent_field=None):
     return SimpleNamespace(
         field_mapping=SimpleNamespace(
             location_level1="region",
@@ -17,13 +17,14 @@ def _fake_config(district_field=None):
             submitted_date="today",
             interview_date="id10012",
             deceased_gender="id10019",
+            consent_id=consent_field,
         )
     )
 
 
-def _patch_config(district_field=None):
+def _patch_config(district_field=None, consent_field=None):
     async def fake_fetch_odk_config(db, *args, **kwargs):
-        return _fake_config(district_field)
+        return _fake_config(district_field, consent_field)
     return patch("app.statistics.services.charts.fetch_odk_config", new=fake_fetch_odk_config)
 
 
@@ -53,6 +54,29 @@ async def test_includes_district_in_the_combined_query_when_location_level2_is_m
     assert "distinctDistricts = LENGTH(geoData)" in query
 
 
+async def test_omits_consented_count_from_the_combined_query_when_consent_id_is_unmapped():
+    # Same blank-field-name hazard as district: interpolating an unmapped
+    # consent_id as `doc.` would be invalid AQL and crash the whole
+    # combined query.
+    fake_db = FakeDB(responder=lambda query, bind_vars: FakeCursor([{}]))
+
+    with _patch_config(consent_field=None):
+        await fetch_charts_statistics(current_user={}, db=fake_db)
+
+    query = fake_db.aql.queries[0][0]
+    assert "LET consentedCount    = 0" in query
+
+
+async def test_includes_consented_count_in_the_combined_query_when_consent_id_is_mapped():
+    fake_db = FakeDB(responder=lambda query, bind_vars: FakeCursor([{}]))
+
+    with _patch_config(consent_field="id10013"):
+        await fetch_charts_statistics(current_user={}, db=fake_db)
+
+    query = fake_db.aql.queries[0][0]
+    assert "LOWER(TRIM(TO_STRING(doc.id10013))) == 'yes'" in query
+
+
 def _combined_query_result():
     return {
         "monthly_submissions": [{"month": 1, "year": 2024, "count": 5}],
@@ -64,6 +88,7 @@ def _combined_query_result():
             "last_submission": "2024-01-31",
             "distinct_regions": 1,
             "distinct_districts": 1,
+            "consented": 4,
         },
     }
 

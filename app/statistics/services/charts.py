@@ -50,6 +50,7 @@ async def fetch_charts_statistics( current_user: dict,paging: bool = True, page_
         is_adult_field = config.field_mapping.is_adult
         is_child_field = config.field_mapping.is_child
         is_neonate_field = config.field_mapping.is_neonate
+        consent_field = config.field_mapping.consent_id
         #
         print(date_type)
         death_date = config.field_mapping.death_date 
@@ -104,6 +105,14 @@ async def fetch_charts_statistics( current_user: dict,paging: bool = True, page_
         # so district is only added to the query when it's actually mapped.
         geo_district_field = f", district: doc.{district_field}" if district_field else ""
         distinct_districts_expr = "LENGTH(geoData)" if district_field else "0"
+
+        # consent_id isn't always mapped (same blank-field-name hazard as
+        # district above) - skip the aggregation rather than interpolate
+        # `doc.` into the AQL, which would fail the whole combined query.
+        consented_count_expr = (
+            f"SUM(FOR doc IN {collection.name} {filter_query} "
+            f"FILTER LOWER(TRIM(TO_STRING(doc.{consent_field}))) == 'yes' RETURN 1)"
+        ) if consent_field else "0"
 
         combined_query = f"""
             LET monthlySubmissions = (
@@ -195,6 +204,7 @@ async def fetch_charts_statistics( current_user: dict,paging: bool = True, page_
             )
             LET distinctRegions   = LENGTH(UNIQUE(geoData[*].region))
             LET distinctDistricts = {distinct_districts_expr}
+            LET consentedCount    = {consented_count_expr}
 
             RETURN {{
                 monthly_submissions: monthlySubmissions,
@@ -205,7 +215,8 @@ async def fetch_charts_statistics( current_user: dict,paging: bool = True, page_
                     first_submission: dataOverview.first_submission,
                     last_submission: dataOverview.last_submission,
                     distinct_regions: distinctRegions,
-                    distinct_districts: distinctDistricts
+                    distinct_districts: distinctDistricts,
+                    consented: consentedCount
                 }}
             }}
         """
