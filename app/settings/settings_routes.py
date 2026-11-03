@@ -39,7 +39,7 @@ from app.settings.services.odk_configs import (
     save_system_images,
 )
 from app.shared.utils.cache import invalidate_cache_pattern
-from app.shared.utils.odk_columns import clean_odk_columns
+from app.shared.utils.odk_columns import clean_odk_columns, synthesize_coordinates_from_latlon
 from datetime import datetime, timezone
 from app.shared.configs.arangodb import get_arangodb_session
 from app.shared.configs.constants import AccessPrivileges, data_sources, db_collections
@@ -416,6 +416,12 @@ async def upload_csv(
         df.columns = clean_odk_columns(df.columns, sep='-')
         df.columns = df.columns.str.lower()
         df = df.loc[:, ~df.columns.duplicated()]
+
+        # See synthesize_coordinates_from_latlon's own docstring: without
+        # this, a CSV's geopoint column(s) land as bare latitude/longitude
+        # fields instead of the single "coordinates" array the Data Map
+        # reads, so uploaded records never show up on it.
+        df = synthesize_coordinates_from_latlon(df)
 
         unique_id = (unique_id or 'KEY').strip().lower()
 
