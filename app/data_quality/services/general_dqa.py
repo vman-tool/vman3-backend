@@ -70,9 +70,26 @@ async def _dqa_group_masks(db: StandardDatabase, df: pd.DataFrame) -> dict:
             return df[name].astype(str)
         return pd.Series("", index=df.index)
 
-    adult = col(fm.is_adult) == "1"
-    child = col(fm.is_child) == "1"
-    neonate = col(fm.is_neonate) == "1"
+    def is_flag_set(name):
+        """True where this column's value means "yes" (1/"1"/1.0/True),
+        for a nominally 0/1 flag field. A plain `col(name) == "1"` string
+        comparison breaks the instant *any* row in the whole collection has
+        a missing value for that field: pandas can't represent NaN in an
+        int64 column, so it silently upcasts the entire column to float64,
+        and `.astype(str)` on a float then yields "1.0"/"0.0"/"nan" - none
+        of which ever equal "1", so every single row fails the check, not
+        just the ones actually missing a value. Comparing numerically
+        instead handles int, float, numeric-string, and bool values alike,
+        and a genuinely missing value (NaN) correctly still doesn't count
+        as either adult, child, or neonate.
+        """
+        if not name or name not in df.columns:
+            return pd.Series(False, index=df.index)
+        return pd.to_numeric(df[name], errors="coerce") == 1
+
+    adult = is_flag_set(fm.is_adult)
+    child = is_flag_set(fm.is_child)
+    neonate = is_flag_set(fm.is_neonate)
     gender = col(fm.deceased_gender).str.lower()
 
     return {

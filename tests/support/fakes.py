@@ -77,6 +77,9 @@ class FakeCollection:
     def get_many(self, keys):
         return [self._docs[k] for k in keys if k in self._docs]
 
+    def all(self):
+        return list(self._docs.values())
+
     def update(self, document, merge: bool = True, **kwargs):
         key = document["_key"]
         if merge and key in self._docs:

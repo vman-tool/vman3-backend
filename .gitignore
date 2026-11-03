@@ -73,6 +73,7 @@ logs/
 */session.json
 session.json
 */.env
+.env
 
 
 # just ignore
