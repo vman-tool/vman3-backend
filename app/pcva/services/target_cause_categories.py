@@ -98,6 +98,17 @@ _INTERVA5_CAUSE_TO_GROUP: Dict[str, str] = {
 }
 
 CategoryLookup = Tuple[Dict[str, Tuple[Optional[str], Optional[str]]], List[Tuple[str, Optional[str]]]]
+IcdUuidCategoryLookup = Dict[str, Tuple[Optional[str], Optional[str]]]
+
+
+async def _load_icd10_tables(db: StandardDatabase):
+    def execute():
+        icd10 = list(db.collection(db_collections.ICD10).all())
+        categories = {c["uuid"]: c for c in db.collection(db_collections.ICD10_CATEGORY).all()}
+        types = {t["uuid"]: t["name"] for t in db.collection(db_collections.ICD10_CATEGORY_TYPE).all()}
+        return icd10, categories, types
+
+    return await run_in_threadpool(execute)
 
 
 async def get_cause_category_lookup(db: StandardDatabase) -> CategoryLookup:
@@ -112,13 +123,7 @@ async def get_cause_category_lookup(db: StandardDatabase) -> CategoryLookup:
     deployment may have edited or extended its target cause list under
     Settings > PCVA Configuration (see target_cause_seed.py).
     """
-    def execute():
-        icd10 = list(db.collection(db_collections.ICD10).all())
-        categories = {c["uuid"]: c for c in db.collection(db_collections.ICD10_CATEGORY).all()}
-        types = {t["uuid"]: t["name"] for t in db.collection(db_collections.ICD10_CATEGORY_TYPE).all()}
-        return icd10, categories, types
-
-    icd10, categories, types = await run_in_threadpool(execute)
+    icd10, categories, types = await _load_icd10_tables(db)
 
     group_to_category: Dict[str, Tuple[Optional[str], Optional[str]]] = {}
     for entry in icd10:
@@ -139,6 +144,28 @@ async def get_cause_category_lookup(db: StandardDatabase) -> CategoryLookup:
         if category.get("name")
     ]
     return group_to_category, category_names
+
+
+async def get_icd10_uuid_category_lookup(db: StandardDatabase) -> IcdUuidCategoryLookup:
+    """icd10 uuid -> (major_cause, broad_group).
+
+    For classifying a PCVA coding's own ICD10 selection (frameA.a/b/c/d,
+    stored as icd10 uuids) directly - unlike classify_cause() above, no
+    name-matching is needed here since PCVA already records the precise
+    icd10 entry a coder picked, not a free-text/predicted cause name.
+    """
+    icd10, categories, types = await _load_icd10_tables(db)
+
+    lookup: IcdUuidCategoryLookup = {}
+    for entry in icd10:
+        uuid = entry.get("uuid")
+        if not uuid:
+            continue
+        category = categories.get(entry.get("category"))
+        if not category:
+            continue
+        lookup[uuid] = (category.get("name"), types.get(category.get("type")))
+    return lookup
 
 
 def _keyword_match(cause_name: str, category_names: List[Tuple[str, Optional[str]]]) -> Optional[Tuple[Optional[str], Optional[str]]]:
