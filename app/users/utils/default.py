@@ -30,7 +30,13 @@ async def default_account_creation( ):
         
         name = config("DEFAULT_ACCOUNT_NAME", default="admin")
         email = config("DEFAULT_ACCOUNT_EMAIL", default="admin@vman.net")
-        password = config("DEFAULT_ACCOUNT_PASSWORD", default="***REMOVED***")
+        # No hardcoded fallback: a publicly-known default password baked
+        # into source let anyone sign in to any deployment that didn't
+        # override it. config() with no default raises UndefinedValueError
+        # when the env var is unset, caught by this function's own
+        # try/except below - the app still starts, it just skips creating
+        # a default admin account until the operator sets one explicitly.
+        password = config("DEFAULT_ACCOUNT_PASSWORD")
         user_data = RegisterUserRequest(name=name, email=email, password = password, confirm_password=password, created_by="")
 
         
