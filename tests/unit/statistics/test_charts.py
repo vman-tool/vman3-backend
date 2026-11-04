@@ -5,7 +5,7 @@ from app.statistics.services.charts import _resolve_location_nodes, fetch_charts
 from tests.support.fakes import FakeCursor, FakeDB
 
 
-def _fake_config(district_field=None, consent_field=None):
+def _fake_config(district_field=None, consent_field=None, age_years_field="ageinyears"):
     return SimpleNamespace(
         field_mapping=SimpleNamespace(
             location_level1="region",
@@ -13,6 +13,7 @@ def _fake_config(district_field=None, consent_field=None):
             is_adult="isadult",
             is_child="ischild",
             is_neonate="isneonatal",
+            age_years=age_years_field,
             death_date="id10023",
             submitted_date="today",
             interview_date="id10012",
@@ -22,9 +23,9 @@ def _fake_config(district_field=None, consent_field=None):
     )
 
 
-def _patch_config(district_field=None, consent_field=None):
+def _patch_config(district_field=None, consent_field=None, age_years_field="ageinyears"):
     async def fake_fetch_odk_config(db, *args, **kwargs):
-        return _fake_config(district_field, consent_field)
+        return _fake_config(district_field, consent_field, age_years_field)
     return patch("app.statistics.services.charts.fetch_odk_config", new=fake_fetch_odk_config)
 
 
@@ -82,6 +83,8 @@ def _combined_query_result():
         "monthly_submissions": [{"month": 1, "year": 2024, "count": 5}],
         "distribution_by_age": [{"adult": 3, "child": 1, "neonatal": 1}],
         "gender_distribution": [{"male": 2, "female": 3, "other": 0}],
+        "death_pyramid_raw": [],
+        "death_pyramid_other_sex_excluded": 0,
         "data_overview": {
             "total": 5,
             "first_submission": "2024-01-01",
@@ -91,6 +94,69 @@ def _combined_query_result():
             "consented": 4,
         },
     }
+
+
+class TestDeathPyramid:
+    # death_pyramid is zero-filled in Python from the raw (bucketIndex, sex)
+    # counts AQL returns - only combinations actually present in the data
+    # come back from the fake query, same as a real ArangoDB COLLECT would
+    # only emit groups that exist.
+
+    async def test_zero_fills_every_bucket_and_places_unmatched_rows_in_unknown(self):
+        result = _combined_query_result()
+        result["death_pyramid_raw"] = [
+            {"bucketIndex": 0, "sex": "male", "count": 3},
+            {"bucketIndex": 0, "sex": "female", "count": 2},
+            {"bucketIndex": 16, "sex": "female", "count": 5},  # 80+
+            {"bucketIndex": -1, "sex": "male", "count": 7},    # unknown age
+        ]
+        result["death_pyramid_other_sex_excluded"] = 9
+        fake_db = FakeDB(responder=lambda query, bind_vars: FakeCursor([result]))
+
+        with _patch_config(district_field="district"), \
+             patch("app.statistics.services.charts.get_expected_deaths_total_for_nodes",
+                   new=AsyncMock(return_value={})):
+            response = await fetch_charts_statistics(current_user={}, db=fake_db)
+
+        buckets = response.data["death_pyramid"]["buckets"]
+        assert len(buckets) == 18  # 17 five-year bins (0-4 .. 80+) + Unknown
+        assert buckets[0] == {"bucket": "0-4", "male": 3, "female": 2}
+        assert buckets[1] == {"bucket": "5-9", "male": 0, "female": 0}  # zero-filled
+        assert buckets[16] == {"bucket": "80+", "male": 0, "female": 5}
+        assert buckets[17] == {"bucket": "Unknown", "male": 7, "female": 0}
+        assert response.data["death_pyramid"]["other_sex_excluded"] == 9
+
+    async def test_defaults_to_empty_pyramid_and_zero_excluded_when_the_query_returns_nothing(self):
+        result = _combined_query_result()  # death_pyramid_raw: [], other_sex_excluded: 0
+        fake_db = FakeDB(responder=lambda query, bind_vars: FakeCursor([result]))
+
+        with _patch_config(district_field="district"), \
+             patch("app.statistics.services.charts.get_expected_deaths_total_for_nodes",
+                   new=AsyncMock(return_value={})):
+            response = await fetch_charts_statistics(current_user={}, db=fake_db)
+
+        buckets = response.data["death_pyramid"]["buckets"]
+        assert len(buckets) == 18
+        assert all(b["male"] == 0 and b["female"] == 0 for b in buckets)
+        assert response.data["death_pyramid"]["other_sex_excluded"] == 0
+
+    async def test_uses_the_configured_age_years_field_when_mapped(self):
+        fake_db = FakeDB(responder=lambda query, bind_vars: FakeCursor([_combined_query_result()]))
+
+        with _patch_config(district_field="district", age_years_field="ageatdeath"):
+            await fetch_charts_statistics(current_user={}, db=fake_db)
+
+        query = fake_db.aql.queries[0][0]
+        assert "doc.ageatdeath" in query
+
+    async def test_falls_back_to_ageinyears_when_age_years_is_unmapped(self):
+        fake_db = FakeDB(responder=lambda query, bind_vars: FakeCursor([_combined_query_result()]))
+
+        with _patch_config(district_field="district", age_years_field=None):
+            await fetch_charts_statistics(current_user={}, db=fake_db)
+
+        query = fake_db.aql.queries[0][0]
+        assert "doc.ageinyears" in query
 
 
 class TestMonthlyTarget:
