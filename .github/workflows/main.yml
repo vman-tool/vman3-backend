@@ -27,6 +27,16 @@ jobs:
         run: pip install -r requirements-dev.txt
 
       - name: Run tests
+        # These secret-shaped vars are required at import time (Settings,
+        # ArangoDBClient, celery_app no longer ship a hardcoded default -
+        # see the "remove ***REMOVED*** redaction leftovers" commit) but
+        # tests never connect to a real Redis/ArangoDB with them, so plain
+        # placeholders are fine here - no real secret belongs in this file.
+        env:
+          JWT_SECRET: test-jwt-secret
+          SECRET_KEY: test-app-secret-key
+          REDIS_PASSWORD: test-redis-password
+          ARANGO_ROOT_PASSWORD: test-arango-password
         run: pytest
 
   build-and-deploy-back:
