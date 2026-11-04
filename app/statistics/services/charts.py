@@ -204,8 +204,8 @@ async def fetch_charts_statistics( current_user: dict,paging: bool = True, page_
                         RETURN key
                 )
                 FILTER sex != null
-                COLLECT bucketIndex = bucketIndex, sex = sex WITH COUNT INTO count
-                RETURN {{ bucketIndex, sex, count }}
+                COLLECT bucket = bucketIndex, sexGroup = sex WITH COUNT INTO count
+                RETURN {{ bucketIndex: bucket, sex: sexGroup, count }}
             )
 
             LET deathPyramidOtherSexExcluded = FIRST(
