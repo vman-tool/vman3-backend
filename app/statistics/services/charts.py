@@ -15,6 +15,12 @@ from app.shared.configs.security import (
 )
 
 
+# 5-year age bins for the Death Pyramid, top-coded at 80+ (standard
+# population-pyramid convention). Index into this list is the AQL query's
+# `bucketIndex` (-1 means "no usable age value" -> the separate "Unknown" bucket).
+AGE_PYRAMID_BUCKETS = [f"{i}-{i + 4}" for i in range(0, 80, 5)] + ["80+"]
+
+
 def _resolve_location_nodes(locations_json, field_mapping):
     """Maps the dashboard's `locations` filter - raw field/value pairs like
     [("region", "Dar_es_Salaam")] - onto (level, value) pairs matching the
@@ -71,6 +77,7 @@ async def fetch_charts_statistics( current_user: dict,paging: bool = True, page_
             today_field = submitted_date
 
         deceased_gender = config.field_mapping.deceased_gender
+        age_years_field = config.field_mapping.age_years or 'ageinyears'
 
         print(date_type, today_field, 'today_field')
 
@@ -183,6 +190,32 @@ async def fetch_charts_statistics( current_user: dict,paging: bool = True, page_
                 )
             )
 
+            LET deathPyramidRaw = (
+                FOR doc IN {collection.name}
+                {filter_query}
+                LET ageVal = doc.{age_years_field}
+                LET hasAge = ageVal != null AND TO_STRING(ageVal) != ''
+                LET ageNum = hasAge ? TO_NUMBER(ageVal) : null
+                LET bucketIndex = hasAge ? (ageNum >= 80 ? 16 : FLOOR(ageNum / 5)) : -1
+                LET sex = FIRST(
+                    FOR key IN ["male", "female"]
+                        FILTER (key == "male" AND doc.{deceased_gender} == "male") OR
+                               (key == "female" AND doc.{deceased_gender} == "female")
+                        RETURN key
+                )
+                FILTER sex != null
+                COLLECT bucket = bucketIndex, sexGroup = sex WITH COUNT INTO count
+                RETURN {{ bucketIndex: bucket, sex: sexGroup, count }}
+            )
+
+            LET deathPyramidOtherSexExcluded = FIRST(
+                FOR doc IN {collection.name}
+                {filter_query}
+                FILTER doc.{deceased_gender} != "male" AND doc.{deceased_gender} != "female"
+                COLLECT WITH COUNT INTO c
+                RETURN c
+            )
+
             LET dataOverview = FIRST(
                 FOR doc IN {collection.name}
                 {filter_query}
@@ -210,6 +243,8 @@ async def fetch_charts_statistics( current_user: dict,paging: bool = True, page_
                 monthly_submissions: monthlySubmissions,
                 distribution_by_age: distributionByAge,
                 gender_distribution: genderDistribution,
+                death_pyramid_raw: deathPyramidRaw,
+                death_pyramid_other_sex_excluded: deathPyramidOtherSexExcluded,
                 data_overview: {{
                     total: dataOverview.total,
                     first_submission: dataOverview.first_submission,
@@ -255,6 +290,28 @@ async def fetch_charts_statistics( current_user: dict,paging: bool = True, page_
         distribution_by_gender = result['gender_distribution'][0]
         data_overview = result.get('data_overview', {})
 
+        # Zero-filled 17 five-year bins + "Unknown" (bucketIndex -1), built in
+        # Python rather than nested inside the AQL MERGE template the other
+        # branches use - 17x2 combinations make that template unreadable for
+        # not much benefit.
+        pyramid_counts = {
+            (row["bucketIndex"], row["sex"]): row["count"]
+            for row in (result.get("death_pyramid_raw") or [])
+        }
+        death_pyramid_buckets = [
+            {
+                "bucket": label,
+                "male": pyramid_counts.get((i, "male"), 0),
+                "female": pyramid_counts.get((i, "female"), 0),
+            }
+            for i, label in enumerate(AGE_PYRAMID_BUCKETS)
+        ]
+        death_pyramid_buckets.append({
+            "bucket": "Unknown",
+            "male": pyramid_counts.get((-1, "male"), 0),
+            "female": pyramid_counts.get((-1, "female"), 0),
+        })
+
         # Structure the combined response
         response_data = {
             "monthly_submissions": monthly_submissions_data,
@@ -265,6 +322,10 @@ async def fetch_charts_statistics( current_user: dict,paging: bool = True, page_
                 "adults": distribution_by_age_data["adult"],
             },
             "distribution_by_gender": distribution_by_gender,
+            "death_pyramid": {
+                "buckets": death_pyramid_buckets,
+                "other_sex_excluded": result.get("death_pyramid_other_sex_excluded") or 0,
+            },
             "data_overview": data_overview,
         }
 

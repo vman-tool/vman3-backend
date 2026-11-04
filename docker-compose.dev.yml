@@ -23,7 +23,7 @@ services:
   redis:
     container_name: redis-vman3
     image: redis:7.4-alpine
-    command: redis-server --requirepass ***REMOVED***
+    command: redis-server --requirepass ${REDIS_PASSWORD}
     ports:
       - "6370:6379"
     restart: always
@@ -58,7 +58,7 @@ services:
       # Overrides the host value in .env: inside the network the
       # broker is reached by service name, not localhost:6370.
       REDIS_CELERY_URL: "redis://redis:6379"
-      REDIS_PASSWORD: "***REMOVED***"
+      REDIS_PASSWORD: "${REDIS_PASSWORD}"
       # ArangoDB — use explicit container name to avoid conflict with deployment
       # arangodb (deployment) and backend-arangodb-1 (dev) both live on vman3-net;
       # point the worker at the dev instance that the FastAPI backend also uses.
@@ -99,7 +99,7 @@ services:
       # Overrides the host value in .env: inside the network the
       # broker is reached by service name, not localhost:6370.
       REDIS_CELERY_URL: "redis://redis:6379"
-      REDIS_PASSWORD: "***REMOVED***"
+      REDIS_PASSWORD: "${REDIS_PASSWORD}"
       DB_URL: "http://backend-arangodb-1:8529"
       DB_NAME: "vman3"
       DB_ROOT_USER: "root"
@@ -133,7 +133,7 @@ services:
       # Overrides the host value in .env: inside the network the
       # broker is reached by service name, not localhost:6370.
       REDIS_CELERY_URL: "redis://redis:6379"
-      REDIS_PASSWORD: "***REMOVED***"
+      REDIS_PASSWORD: "${REDIS_PASSWORD}"
     depends_on:
       - redis
       - celery-worker

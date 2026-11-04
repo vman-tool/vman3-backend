@@ -40,6 +40,8 @@ class FieldMapping(BaseModel):
     is_adult:str  # Optional field
     is_child: str  # Optional field
     is_neonate: str  # Optional field
+    age_years: Optional[str] = None  # ODK-calculated numeric age-at-death in years
+                                      # (e.g. "ageinyears"); used only by the Death Pyramid chart
     interviewer_name: str
     interviewer_phone: str  # Optional field
     interviewer_sex: str  # Optional field
