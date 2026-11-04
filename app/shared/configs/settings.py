@@ -19,14 +19,17 @@ class Settings(BaseSettings):
     FRONTEND_HOST: str = config("FRONTEND_HOST", "https://vman3.vatools.net")
 
   
-    # JWT Secret Key
-    JWT_SECRET: str = config("JWT_SECRET", "***REMOVED***")
+    # JWT Secret Key - no hardcoded fallback: this signs every auth token, so a
+    # known default would let anyone forge one. config() with no default raises
+    # UndefinedValueError at import time, failing the app loudly instead of
+    # silently running with a predictable secret.
+    JWT_SECRET: str = config("JWT_SECRET")
     JWT_ALGORITHM: str = config("ACCESS_TOKEN_ALGORITHM", "HS256")
     ACCESS_TOKEN_EXPIRE_MINUTES: float = config("ACCESS_TOKEN_EXPIRE_MINUTES", default=10, cast=float)
     REFRESH_TOKEN_EXPIRE_MINUTES: float = config("REFRESH_TOKEN_EXPIRE_MINUTES", default=1440, cast=float)
 
-    # App Secret Key
-    SECRET_KEY: str = config("SECRET_KEY", default="***REMOVED***")
+    # App Secret Key - same reasoning as JWT_SECRET above.
+    SECRET_KEY: str = config("SECRET_KEY")
 
 
 @lru_cache()

@@ -17,7 +17,9 @@ class ArangoDBClient:
         self.client = ArangoClient(hosts=config("DB_URL", default="http://localhost:8529"))
         self.db_name = config("DB_NAME", default="vman3")
         self.username = config("DB_ROOT_USER", default="root")
-        self.password = config("ARANGO_ROOT_PASSWORD", default="***REMOVED***")
+        # No hardcoded fallback: a known default root password would let
+        # anyone connect to any deployment that didn't override it.
+        self.password = config("ARANGO_ROOT_PASSWORD")
         self.db = None
 
     async def connect(self):

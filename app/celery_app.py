@@ -14,7 +14,9 @@ from decouple import config
 
 # Redis configuration - Read from environment
 REDIS_URL = config('REDIS_CELERY_URL', default='redis://redis:6379')
-REDIS_PASSWORD = config('REDIS_PASSWORD', default='***REMOVED***')
+# No hardcoded fallback: a known default password would let anyone connect
+# to this broker on any deployment that didn't override it.
+REDIS_PASSWORD = config('REDIS_PASSWORD')
 
 import urllib.parse
 
