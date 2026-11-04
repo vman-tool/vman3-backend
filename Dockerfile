@@ -27,6 +27,11 @@ RUN apt-get update \
     && pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cpu \
     && pip install --no-cache-dir -r requirements.txt \
     && pip install -e . \
+    # xgboost (pulled in transitively via vman_ml) depends on nvidia-nccl-cu12
+    # for multi-GPU training even on this CPU-only deployment (torch above is
+    # already the CPU build) - nothing in this codebase runs on a GPU, and
+    # stripping it saves ~470MB per image with no functional loss.
+    && pip uninstall -y nvidia-nccl-cu12 \
     && apt-get remove -y gcc git libffi-dev build-essential \
     && apt-get autoremove -y \
     && apt-get clean \
