@@ -118,6 +118,7 @@ _CCVA_GROUPABLE_FIELDS = {
     "ward": "doc.locationLevel3",
     "gender": "doc.gender",
     "age_group": "doc.age_group",
+    "cause_specific": "doc.CAUSE1",
 }
 _CCVA_CATEGORY_GROUP_FIELDS = {"broad", "major"}
 
