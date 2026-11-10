@@ -439,6 +439,18 @@ class TestFetchCcvaGroupedResults:
         data_query = [q for q, _ in fake_db.aql.queries][0]
         assert "COLLECT grouped_value = doc.locationLevel1 WITH COUNT INTO count" in data_query
 
+    async def test_groups_by_cause_specific_on_the_raw_cause1_field(self):
+        fake_db = FakeDB(responder=self._responder([
+            {"group": "Stroke", "count": 4}, {"group": "Undeterminant", "count": 1},
+        ]))
+
+        result = await fetch_ccva_grouped_results("t1", "cause_specific", db=fake_db)
+
+        assert result.data == [{"group": "Stroke", "count": 4}, {"group": "Undeterminant", "count": 1}]
+        assert result.total == 5
+        data_query = [q for q, _ in fake_db.aql.queries][0]
+        assert "COLLECT grouped_value = doc.CAUSE1 WITH COUNT INTO count" in data_query
+
     async def test_groups_by_broad_category_via_a_cause1_translate_map(self):
         fake_db = FakeDB(responder=self._responder([
             {"group": "Group II: Non-Communicable", "count": 4},
