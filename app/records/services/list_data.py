@@ -5,6 +5,7 @@ from arango import ArangoError
 from arango.database import StandardDatabase
 from fastapi.concurrency import run_in_threadpool
 
+from app.pcva.services.target_cause_categories import get_cause_category_lookup
 from app.records.responses.data import map_to_data_response
 from app.settings.services.odk_configs import fetch_odk_config
 from app.shared.configs.constants import db_collections
@@ -14,7 +15,40 @@ from app.shared.middlewares.exceptions import BadRequestException
 from app.utilits.logger import app_logger
 
 
-async def fetch_va_records(current_user:dict,paging: bool = True, page_number: int = 1, limit: int = 10, start_date: Optional[date] = None, end_date: Optional[date] = None, locations: Optional[str] = None, date_type:Optional[str]=None, search_by: Optional[str] = None, search_value: Optional[str] = None, db: StandardDatabase = None) -> ResponseMainModel:
+# The 4 CCVA columns denormalized onto form_submissions by
+# _sync_ccva_default_to_va_records (ccva_data_services.py) - sortable by
+# any of them; Specific Cause has too many distinct values to be a useful
+# filter dropdown (same reasoning as CCVA's own Filter By, which also
+# excludes raw CAUSE1), so only the other 3 are filterable.
+_VA_RECORDS_CCVA_SORT_FIELDS = {
+    'ccvaCauseBroad': 'ccva_cause1_broad',
+    'ccvaCauseMajor': 'ccva_cause1_major',
+    'ccvaCauseSpecific': 'ccva_cause1',
+    'ccvaAlgorithm': 'ccva_algorithm',
+}
+_VA_RECORDS_CCVA_FILTERABLE_FIELDS = {
+    'ccvaCauseBroad': 'ccva_cause1_broad',
+    'ccvaCauseMajor': 'ccva_cause1_major',
+    'ccvaAlgorithm': 'ccva_algorithm',
+}
+
+
+async def get_va_records_ccva_filter_options(db: StandardDatabase) -> ResponseMainModel:
+    """Distinct Broad/Major Category + Algorithm values for the VA Records
+    table's Filter By dropdown - the full configured target cause list
+    (Settings > PCVA Configuration), not just whatever the currently
+    default CCVA run happens to use, so the dropdown's meaning doesn't
+    shift every time the default run is changed."""
+    _, category_names = await get_cause_category_lookup(db)
+    majors = sorted({name for name, _ in category_names if name})
+    broads = sorted({broad for _, broad in category_names if broad})
+    return ResponseMainModel(
+        data={"broad": broads, "major": majors, "algorithm": ["InterVA5", "VManML10"]},
+        message="VA Records CCVA filter options fetched successfully",
+    )
+
+
+async def fetch_va_records(current_user:dict,paging: bool = True, page_number: int = 1, limit: int = 10, start_date: Optional[date] = None, end_date: Optional[date] = None, locations: Optional[str] = None, date_type:Optional[str]=None, search_by: Optional[str] = None, search_value: Optional[str] = None, sort_by: Optional[str] = None, sort_dir: str = "asc", filter_by: Optional[str] = None, filter_value: Optional[str] = None, db: StandardDatabase = None) -> ResponseMainModel:
     try:
         config = await fetch_odk_config(db)
         region_field = config.field_mapping.location_level1
@@ -82,8 +116,16 @@ async def fetch_va_records(current_user:dict,paging: bool = True, page_number: i
                 filters.append(f"LIKE(LOWER(TO_STRING(doc.{field_name})), @search_value_pattern, true)")
                 bind_vars["search_value_pattern"] = f"%{search_value.lower()}%"
 
+        if filter_by in _VA_RECORDS_CCVA_FILTERABLE_FIELDS and filter_value:
+            filters.append(f"doc.{_VA_RECORDS_CCVA_FILTERABLE_FIELDS[filter_by]} == @ccva_filter_value")
+            bind_vars["ccva_filter_value"] = filter_value
+
         if filters:
             query += "FILTER " + " AND ".join(filters) + " "
+
+        if sort_by in _VA_RECORDS_CCVA_SORT_FIELDS:
+            direction = "DESC" if str(sort_dir).lower() == "desc" else "ASC"
+            query += f"SORT doc.{_VA_RECORDS_CCVA_SORT_FIELDS[sort_by]} {direction} "
 
         if paging and page_number and limit:
             query += "LIMIT @offset, @size "

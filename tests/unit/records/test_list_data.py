@@ -1,7 +1,7 @@
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
-from app.records.services.list_data import fetch_va_records
+from app.records.services.list_data import fetch_va_records, get_va_records_ccva_filter_options
 from tests.support.fakes import FakeCursor, FakeDB
 
 
@@ -98,3 +98,70 @@ async def test_no_search_filter_applied_without_both_search_by_and_search_value(
 
     query = fake_db.aql.queries[0][0]
     assert "LIKE" not in query
+
+
+# The 4 CCVA columns denormalized onto form_submissions by
+# _sync_ccva_default_to_va_records (ccva_data_services.py) - sortable/
+# filterable here like any other stored column.
+async def test_sorting_by_a_ccva_column_adds_a_sort_clause_on_the_denormalized_field():
+    fake_db = FakeDB(responder=_responder)
+
+    with _patch_config():
+        await fetch_va_records(current_user={}, sort_by="ccvaCauseBroad", sort_dir="desc", db=fake_db)
+
+    query = fake_db.aql.queries[0][0]
+    assert "SORT doc.ccva_cause1_broad DESC" in query
+
+
+async def test_sorting_by_an_unrecognized_field_adds_no_sort_clause():
+    fake_db = FakeDB(responder=_responder)
+
+    with _patch_config():
+        await fetch_va_records(current_user={}, sort_by="notARealField", db=fake_db)
+
+    query = fake_db.aql.queries[0][0]
+    assert "SORT" not in query
+
+
+async def test_filtering_by_a_ccva_column_adds_a_filter_clause_on_the_denormalized_field():
+    fake_db = FakeDB(responder=_responder)
+
+    with _patch_config():
+        await fetch_va_records(current_user={}, filter_by="ccvaAlgorithm", filter_value="VManML10", db=fake_db)
+
+    query, bind_vars = fake_db.aql.queries[0]
+    assert "doc.ccva_algorithm == @ccva_filter_value" in query
+    assert bind_vars["ccva_filter_value"] == "VManML10"
+
+
+async def test_specific_cause_is_not_a_filterable_field():
+    # Too many distinct values for a useful filter dropdown - same
+    # reasoning as CCVA's own Filter By, which also excludes raw CAUSE1.
+    fake_db = FakeDB(responder=_responder)
+
+    with _patch_config():
+        await fetch_va_records(current_user={}, filter_by="ccvaCauseSpecific", filter_value="Stroke", db=fake_db)
+
+    query = fake_db.aql.queries[0][0]
+    assert "ccva_cause1 ==" not in query
+
+
+async def test_get_va_records_ccva_filter_options_returns_the_configured_categories_and_algorithms():
+    lookup = (
+        {},
+        [
+            ("Diseases of the circulatory system", "Group II: Non-Communicable"),
+            ("Road traffic accidents", "Group III: Injuries"),
+        ],
+    )
+    with patch(
+        "app.records.services.list_data.get_cause_category_lookup",
+        new=AsyncMock(return_value=lookup),
+    ):
+        result = await get_va_records_ccva_filter_options(db=FakeDB())
+
+    assert result.data == {
+        "broad": ["Group II: Non-Communicable", "Group III: Injuries"],
+        "major": ["Diseases of the circulatory system", "Road traffic accidents"],
+        "algorithm": ["InterVA5", "VManML10"],
+    }

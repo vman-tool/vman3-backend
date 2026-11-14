@@ -31,6 +31,18 @@ def no_real_cache():
         yield
 
 
+@pytest.fixture(autouse=True)
+def no_va_records_sync():
+    # set/clear default's VA-Records-column sync is exercised directly in
+    # test_ccva_data_services.py - stubbed out here so these route tests
+    # don't also have to shape their FakeDB responder around its queries.
+    with patch(
+        "app.ccva.services.ccva_data_services._sync_ccva_default_to_va_records",
+        new=AsyncMock(),
+    ):
+        yield
+
+
 def test_clear_default_endpoint_returns_200_and_the_updated_doc():
     def responder(query, bind_vars):
         assert bind_vars == {"ccva_id": "56007"}

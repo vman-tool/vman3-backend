@@ -775,6 +775,80 @@ async def update_ccva_entry(ccva_id: str, update_data: dict, db: StandardDatabas
         raise BadRequestException("Failed to update record", str(e))
     except Exception as e:
         raise BadRequestException(f"Failed to update record: {str(e)}", str(e))        
+async def _sync_ccva_default_to_va_records(
+    task_id: Optional[str], algorithm: Optional[str], db: StandardDatabase
+) -> None:
+    """Denormalizes the default run's Broad/Major/Specific Cause + Algorithm
+    onto each matching `form_submissions` doc (VA Records table columns).
+
+    The VA Records table paginates/sorts/filters server-side like any other
+    column - doing that against a *joined* value (one `FIRST(FOR r IN
+    ccva_results ...)` per row) would force AQL to evaluate the join for
+    every row before it can sort/filter/paginate, i.e. a full join over the
+    whole table on every single page load. Writing the result onto the
+    document itself instead moves that cost to here - once, only when the
+    default run changes - and turns every later read into an ordinary
+    indexed column lookup, the same as any other VA Records field.
+
+    Always resets every VA record first (so clearing the default, or a
+    record no longer matching the new default, correctly lands on "-" /
+    null rather than keeping a stale value), then - when `task_id` is given
+    - re-populates only the records with a match in that run.
+    """
+    va_collection = db.collection(db_collections.VA_TABLE)
+
+    reset_query = f"""
+        FOR doc IN {va_collection.name}
+            FILTER doc.ccva_cause1 != null OR doc.ccva_cause1_broad != null
+                OR doc.ccva_cause1_major != null OR doc.ccva_algorithm != null
+            UPDATE doc WITH {{
+                ccva_cause1: null, ccva_cause1_broad: null,
+                ccva_cause1_major: null, ccva_algorithm: null
+            }} IN {va_collection.name}
+    """
+
+    def execute_reset():
+        db.aql.execute(reset_query)
+
+    await run_in_threadpool(execute_reset)
+
+    if not task_id:
+        return
+
+    config = await fetch_odk_config(db, True)
+    instance_id_field = config.field_mapping.instance_id or "instanceid"
+    cause_to_major, cause_to_broad = await _cause_category_maps(task_id, db)
+
+    sync_query = f"""
+        FOR ccva IN {db_collections.CCVA_RESULTS}
+            FILTER ccva.task_id == @task_id AND ccva.CAUSE1 != null AND ccva.CAUSE1 != ""
+            LET submission = FIRST(
+                FOR s IN {va_collection.name}
+                    FILTER s.{instance_id_field} == ccva.ID OR s.{instance_id_field} == ccva.uid
+                    LIMIT 1
+                    RETURN s
+            )
+            FILTER submission != null
+            UPDATE submission WITH {{
+                ccva_cause1: ccva.CAUSE1,
+                ccva_cause1_broad: TRANSLATE(ccva.CAUSE1, @broad_map, "Unclassified"),
+                ccva_cause1_major: TRANSLATE(ccva.CAUSE1, @major_map, "Unclassified"),
+                ccva_algorithm: @algorithm
+            }} IN {va_collection.name}
+    """
+    bind_vars = {
+        "task_id": task_id,
+        "broad_map": cause_to_broad,
+        "major_map": cause_to_major,
+        "algorithm": algorithm or "InterVA5",
+    }
+
+    def execute_sync():
+        db.aql.execute(sync_query, bind_vars=bind_vars)
+
+    await run_in_threadpool(execute_sync)
+
+
 async def set_ccva_as_default(ccva_id: str, db: StandardDatabase) -> ResponseMainModel:
     try:
         # Define the collection
@@ -805,6 +879,8 @@ async def set_ccva_as_default(ccva_id: str, db: StandardDatabase) -> ResponseMai
         updated_doc = await run_in_threadpool(execute_toggle_default)
         if not updated_doc:
             raise BadRequestException(f"CCVA entry with id {ccva_id} not found")
+
+        await _sync_ccva_default_to_va_records(updated_doc.get("task_id"), updated_doc.get("algorithm"), db)
 
         await invalidate_cache_pattern("ccva_*")
         # Step 3: Return the updated document as a response
@@ -838,6 +914,8 @@ async def clear_ccva_default(ccva_id: str, db: StandardDatabase) -> ResponseMain
         updated_doc = await run_in_threadpool(execute_clear_default)
         if not updated_doc:
             raise BadRequestException(f"CCVA entry with id {ccva_id} not found or not currently default")
+
+        await _sync_ccva_default_to_va_records(None, None, db)
 
         await invalidate_cache_pattern("ccva_*")
         return ResponseMainModel(
