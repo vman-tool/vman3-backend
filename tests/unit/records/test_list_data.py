@@ -1,8 +1,11 @@
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
-from app.records.services.list_data import fetch_va_records, get_va_records_ccva_filter_options
+from app.records.services.list_data import fetch_va_records, fetch_va_records_grouped, get_va_records_ccva_filter_options
+from app.shared.middlewares.exceptions import BadRequestException
 from tests.support.fakes import FakeCursor, FakeDB
+
+import pytest
 
 
 def _fake_config():
@@ -167,3 +170,55 @@ async def test_get_va_records_ccva_filter_options_returns_the_configured_categor
         "major": ["Diseases of the circulatory system", "Road traffic accidents"],
         "specific": ["Malaria", "Stroke"],
     }
+
+
+# Group By - same 3 fields Filter By offers (Broad/Major/Specific Cause),
+# backing the summary table that replaces the individual-record rows when
+# a Group By is active.
+class TestFetchVaRecordsGrouped:
+    async def test_rejects_an_unsupported_group_by_value(self):
+        fake_db = FakeDB()
+
+        with pytest.raises(BadRequestException):
+            await fetch_va_records_grouped(current_user={}, group_by="not-a-real-field", db=fake_db)
+
+    async def test_groups_by_the_denormalized_field_with_an_unclassified_bucket(self):
+        def responder(query, bind_vars):
+            return FakeCursor([
+                {"group": "Group I: Communicable", "count": 7},
+                {"group": "Unclassified", "count": 3},
+            ])
+        fake_db = FakeDB(responder=responder)
+
+        with _patch_config():
+            result = await fetch_va_records_grouped(current_user={}, group_by="ccvaCauseBroad", db=fake_db)
+
+        assert result.data == [
+            {"group": "Group I: Communicable", "count": 7},
+            {"group": "Unclassified", "count": 3},
+        ]
+        assert result.total == 10
+        query = fake_db.aql.queries[0][0]
+        assert 'COLLECT grouped_value = doc.ccva_cause1_broad != null ? doc.ccva_cause1_broad : "Unclassified" WITH COUNT INTO count' in query
+
+    async def test_applies_the_same_shared_filters_as_the_individual_list(self):
+        fake_db = FakeDB(responder=lambda query, bind_vars: FakeCursor([]))
+
+        with _patch_config():
+            await fetch_va_records_grouped(
+                current_user={}, group_by="ccvaCauseMajor",
+                filter_by="ccvaCauseBroad", filter_value="Group I: Communicable", db=fake_db,
+            )
+
+        query, bind_vars = fake_db.aql.queries[0]
+        assert "doc.ccva_cause1_broad == @ccva_filter_value" in query
+        assert bind_vars["ccva_filter_value"] == "Group I: Communicable"
+
+    async def test_empty_result_returns_an_empty_group_list(self):
+        fake_db = FakeDB(responder=lambda query, bind_vars: FakeCursor([]))
+
+        with _patch_config():
+            result = await fetch_va_records_grouped(current_user={}, group_by="ccvaCauseSpecific", db=fake_db)
+
+        assert result.data == []
+        assert result.total == 0

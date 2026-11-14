@@ -1,5 +1,5 @@
 from datetime import date
-from typing import Optional
+from typing import Dict, List, Optional, Tuple
 
 from arango import ArangoError
 from arango.database import StandardDatabase
@@ -66,77 +66,98 @@ async def get_va_records_ccva_filter_options(db: StandardDatabase) -> ResponseMa
     )
 
 
+async def _build_va_records_filters(
+    current_user: dict,
+    start_date: Optional[date],
+    end_date: Optional[date],
+    locations: Optional[str],
+    date_type: Optional[str],
+    search_by: Optional[str],
+    search_value: Optional[str],
+    filter_by: Optional[str],
+    filter_value: Optional[str],
+    db: StandardDatabase,
+) -> Tuple[List[str], Dict, object]:
+    """The location-limit/date/location/search/CCVA-filter AQL clauses
+    shared by every form_submissions read (the individual list and the
+    Group By summary) - kept in one place so the two stay in sync, same
+    reasoning as CCVA's own _build_ccva_result_filters. Also returns the
+    resolved field-mapping config, since fetch_va_records needs it again
+    for map_to_data_response and refetching it there would be redundant.
+    """
+    config = await fetch_odk_config(db)
+    region_field = config.field_mapping.location_level1
+    district_field = config.field_mapping.location_level2
+    # Two distinct, independently-configurable fields (Settings >
+    # Configuration > Field Mapping) - va_id is whatever this deployment
+    # has mapped as the VA ID, instance_id is the record's own uuid:...
+    # identifier. Both are offered as separate search-by options rather
+    # than one silently standing in for the other.
+    va_id_field = config.field_mapping.va_id
+    instance_id_field = config.field_mapping.instance_id or 'instanceid'
+    interviewer_field = config.field_mapping.interviewer_name
+
+    death_date = config.field_mapping.death_date
+    submitted_date = config.field_mapping.submitted_date
+    interview_date = config.field_mapping.interview_date or 'id10012'
+
+    if date_type == 'submission_date':
+        today_field = submitted_date
+    elif date_type == 'death_date':
+        today_field = death_date
+    else:
+        today_field = interview_date
+
+    bind_vars: Dict = {}
+    filters: List[str] = []
+
+    location_limit_filter = build_location_limit_filter(current_user, bind_vars)
+    if location_limit_filter:
+        filters.append(location_limit_filter)
+
+    if start_date:
+        filters.append(f"doc.{today_field} >= @start_date")
+        bind_vars["start_date"] = str(start_date)
+
+    if end_date:
+        filters.append(f"doc.{today_field} <= @end_date")
+        bind_vars["end_date"] = str(end_date)
+
+    locations_filter = build_locations_query_filter(locations, bind_vars)
+    if locations_filter:
+        filters.append(locations_filter)
+
+    if search_by and search_value:
+        search_field_map = {
+            'vaId': va_id_field,
+            'instanceId': instance_id_field,
+            'region': region_field,
+            'district': district_field,
+            'location_level1': region_field,
+            'location_level2': district_field,
+            'interviewer_name': interviewer_field,
+            'interviewerName': interviewer_field,
+            'interviewDay': today_field,
+        }
+        field_name = search_field_map.get(search_by)
+        if field_name:
+            filters.append(f"LIKE(LOWER(TO_STRING(doc.{field_name})), @search_value_pattern, true)")
+            bind_vars["search_value_pattern"] = f"%{search_value.lower()}%"
+
+    if filter_by in _VA_RECORDS_CCVA_FILTERABLE_FIELDS and filter_value:
+        filters.append(f"doc.{_VA_RECORDS_CCVA_FILTERABLE_FIELDS[filter_by]} == @ccva_filter_value")
+        bind_vars["ccva_filter_value"] = filter_value
+
+    return filters, bind_vars, config
+
+
 async def fetch_va_records(current_user:dict,paging: bool = True, page_number: int = 1, limit: int = 10, start_date: Optional[date] = None, end_date: Optional[date] = None, locations: Optional[str] = None, date_type:Optional[str]=None, search_by: Optional[str] = None, search_value: Optional[str] = None, sort_by: Optional[str] = None, sort_dir: str = "asc", filter_by: Optional[str] = None, filter_value: Optional[str] = None, db: StandardDatabase = None) -> ResponseMainModel:
     try:
-        config = await fetch_odk_config(db)
-        region_field = config.field_mapping.location_level1
-        district_field = config.field_mapping.location_level2
-        # Two distinct, independently-configurable fields (Settings >
-        # Configuration > Field Mapping) - va_id is whatever this
-        # deployment has mapped as the VA ID, instance_id is the record's
-        # own uuid:... identifier. Both are offered as separate search-by
-        # options rather than one silently standing in for the other.
-        va_id_field = config.field_mapping.va_id
-        instance_id_field = config.field_mapping.instance_id or 'instanceid'
-        interviewer_field = config.field_mapping.interviewer_name
-
-        death_date = config.field_mapping.death_date
-        submitted_date = config.field_mapping.submitted_date
-        interview_date = config.field_mapping.interview_date or 'id10012'
-
-        if date_type is not None:
-            if date_type == 'submission_date':
-                today_field = submitted_date
-            elif date_type == 'death_date':
-                today_field = death_date
-            elif date_type == 'interview_date':
-                today_field = interview_date
-            else:
-                today_field = interview_date
-        else:
-            today_field = interview_date
-
+        filters, bind_vars, config = await _build_va_records_filters(
+            current_user, start_date, end_date, locations, date_type, search_by, search_value, filter_by, filter_value, db
+        )
         collection = db.collection(db_collections.VA_TABLE)  # Use the actual collection name here
         query = f"FOR doc IN {collection.name} "
-        bind_vars = {}
-        filters = []
-       ## filter by location limits
-        location_limit_filter = build_location_limit_filter(current_user, bind_vars)
-        if location_limit_filter:
-            filters.append(location_limit_filter)
-        ##
-        if start_date:
-            filters.append(f"doc.{today_field} >= @start_date")
-            bind_vars["start_date"] = str(start_date)
-        
-        if end_date:
-            filters.append(f"doc.{today_field} <= @end_date")
-            bind_vars["end_date"] = str(end_date)
-
-        locations_filter = build_locations_query_filter(locations, bind_vars)
-        if locations_filter:
-            filters.append(locations_filter)
-
-        if search_by and search_value:
-            search_field_map = {
-                'vaId': va_id_field,
-                'instanceId': instance_id_field,
-                'region': region_field,
-                'district': district_field,
-                'location_level1': region_field,
-                'location_level2': district_field,
-                'interviewer_name': interviewer_field,
-                'interviewerName': interviewer_field,
-                'interviewDay': today_field,
-            }
-            field_name = search_field_map.get(search_by)
-            if field_name:
-                filters.append(f"LIKE(LOWER(TO_STRING(doc.{field_name})), @search_value_pattern, true)")
-                bind_vars["search_value_pattern"] = f"%{search_value.lower()}%"
-
-        if filter_by in _VA_RECORDS_CCVA_FILTERABLE_FIELDS and filter_value:
-            filters.append(f"doc.{_VA_RECORDS_CCVA_FILTERABLE_FIELDS[filter_by]} == @ccva_filter_value")
-            bind_vars["ccva_filter_value"] = filter_value
 
         if filters:
             query += "FILTER " + " AND ".join(filters) + " "
@@ -164,7 +185,7 @@ async def fetch_va_records(current_user:dict,paging: bool = True, page_number: i
         if filters:
             count_query += "FILTER " + " AND ".join(filters) + " "
         count_query += "RETURN 1)"
-        
+
         def execute_count_query():
             # Avoid passing pagination bind vars (offset/size) to the count query
             count_bind_vars = {k: v for k, v in bind_vars.items() if k not in ("offset", "size")}
@@ -184,8 +205,63 @@ async def fetch_va_records(current_user:dict,paging: bool = True, page_number: i
     except Exception as e:
         print(e)
         raise BadRequestException(f"Failed to fetch records: {str(e)}",str(e))
-    
-    
+
+
+async def fetch_va_records_grouped(
+    current_user: dict,
+    group_by: str,
+    start_date: Optional[date] = None,
+    end_date: Optional[date] = None,
+    locations: Optional[str] = None,
+    date_type: Optional[str] = None,
+    search_by: Optional[str] = None,
+    search_value: Optional[str] = None,
+    filter_by: Optional[str] = None,
+    filter_value: Optional[str] = None,
+    db: StandardDatabase = None,
+) -> ResponseMainModel:
+    """Counts of (already filtered) VA records grouped by one of the same
+    3 fields Filter By offers (Broad/Major/Specific Cause) - backs the
+    Group By control's summary table. Small result set (a handful of
+    group values) - no pagination, same as CCVA's own grouped results
+    (fetch_ccva_grouped_results in ccva_data_services.py), which this
+    mirrors. A record with no result under the default CCVA run (so the
+    denormalized field is null) collects into an explicit "Unclassified"
+    bucket rather than being silently dropped.
+    """
+    if group_by not in _VA_RECORDS_CCVA_FILTERABLE_FIELDS:
+        raise BadRequestException(f"Unsupported group_by value: {group_by}", group_by)
+    try:
+        filters, bind_vars, _ = await _build_va_records_filters(
+            current_user, start_date, end_date, locations, date_type, search_by, search_value, filter_by, filter_value, db
+        )
+        collection = db.collection(db_collections.VA_TABLE)
+        query = f"FOR doc IN {collection.name} "
+        if filters:
+            query += "FILTER " + " AND ".join(filters) + " "
+
+        group_field = _VA_RECORDS_CCVA_FILTERABLE_FIELDS[group_by]
+        query += f"""
+        COLLECT grouped_value = doc.{group_field} != null ? doc.{group_field} : "Unclassified" WITH COUNT INTO count
+        RETURN {{"group": grouped_value, "count": count}}
+        """
+
+        def execute_query():
+            cursor = db.aql.execute(query, bind_vars=bind_vars)
+            return [document for document in cursor]
+
+        data = await run_in_threadpool(execute_query)
+        total = sum(row["count"] for row in data)
+
+        return ResponseMainModel(
+            data=data,
+            message="VA records grouped results fetched successfully",
+            total=total,
+        )
+    except ArangoError as e:
+        raise BadRequestException("Failed to fetch grouped VA records", str(e))
+    except Exception as e:
+        raise BadRequestException(f"Failed to fetch grouped VA records: {str(e)}", str(e))
 
 
 
