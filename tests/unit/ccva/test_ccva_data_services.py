@@ -5,6 +5,7 @@ import pytest
 from types import SimpleNamespace
 
 from app.ccva.services.ccva_data_services import (
+    _sync_ccva_default_to_va_records,
     clear_ccva_default,
     fetch_all_processed_ccva_graphs,
     fetch_ccva_grouped_results,
@@ -28,6 +29,19 @@ def no_real_cache():
         yield
 
 
+@pytest.fixture(autouse=True)
+def no_va_records_sync():
+    # set/clear default's VA-Records-column sync is exercised on its own
+    # terms below (TestSyncCcvaDefaultToVaRecords) - stubbed out here so
+    # the set/clear tests don't also have to shape their FakeDB responder
+    # around its extra queries.
+    with patch(
+        "app.ccva.services.ccva_data_services._sync_ccva_default_to_va_records",
+        new=AsyncMock(),
+    ) as mock:
+        yield mock
+
+
 class TestSetCcvaAsDefault:
     def _responder(self, ccva_id: str, matched: bool = True):
         def responder(query: str, bind_vars):
@@ -37,7 +51,7 @@ class TestSetCcvaAsDefault:
             assert bind_vars == {"ccva_id": ccva_id}
             if not matched:
                 return FakeCursor([])
-            return FakeCursor([{"_key": ccva_id, "isDefault": True}])
+            return FakeCursor([{"_key": ccva_id, "isDefault": True, "task_id": "t1", "algorithm": "VManML10"}])
         return responder
 
     async def test_unsets_the_previous_default_before_setting_the_new_one(self):
@@ -45,7 +59,7 @@ class TestSetCcvaAsDefault:
 
         result = await set_ccva_as_default("56007", fake_db)
 
-        assert result.data == {"_key": "56007", "isDefault": True}
+        assert result.data == {"_key": "56007", "isDefault": True, "task_id": "t1", "algorithm": "VManML10"}
         assert "56007 set as default successfully" in result.message
         queries = [q for q, _ in fake_db.aql.queries]
         assert any("isDefault: false" in q and "@ccva_id" not in q for q in queries)
@@ -56,6 +70,13 @@ class TestSetCcvaAsDefault:
 
         with pytest.raises(BadRequestException):
             await set_ccva_as_default("missing-id", fake_db)
+
+    async def test_syncs_the_new_default_run_onto_va_records(self, no_va_records_sync):
+        fake_db = FakeDB(responder=self._responder("56007"))
+
+        await set_ccva_as_default("56007", fake_db)
+
+        no_va_records_sync.assert_awaited_once_with("t1", "VManML10", fake_db)
 
 
 async def test_clear_ccva_default_clears_and_returns_the_updated_doc():
@@ -76,6 +97,81 @@ async def test_clear_ccva_default_raises_when_not_found_or_not_currently_default
 
     with pytest.raises(BadRequestException):
         await clear_ccva_default("56007", fake_db)
+
+
+async def test_clear_ccva_default_resets_the_va_records_sync(no_va_records_sync):
+    fake_db = FakeDB(responder=lambda query, bind_vars: FakeCursor([{"_key": "56007", "isDefault": False}]))
+
+    await clear_ccva_default("56007", fake_db)
+
+    no_va_records_sync.assert_awaited_once_with(None, None, fake_db)
+
+
+class TestSyncCcvaDefaultToVaRecords:
+    @pytest.fixture(autouse=True)
+    def cause_category_lookup(self):
+        lookup = (
+            {"04": ("Diseases of the circulatory system", "Group II: Non-Communicable")},
+            [("Diseases of the circulatory system", "Group II: Non-Communicable")],
+        )
+        with patch(
+            "app.ccva.services.ccva_data_services.get_cause_category_lookup",
+            new=AsyncMock(return_value=lookup),
+        ):
+            yield
+
+    def _fake_config(self, instance_id="instanceid"):
+        return SimpleNamespace(field_mapping=SimpleNamespace(instance_id=instance_id))
+
+    def _patch_config(self, instance_id="instanceid"):
+        return patch(
+            "app.ccva.services.ccva_data_services.fetch_odk_config",
+            new=AsyncMock(return_value=self._fake_config(instance_id)),
+        )
+
+    async def test_clearing_the_default_only_resets_every_va_record(self):
+        fake_db = FakeDB(responder=lambda query, bind_vars: FakeCursor([]))
+
+        await _sync_ccva_default_to_va_records(None, None, fake_db)
+
+        queries = [q for q, _ in fake_db.aql.queries]
+        assert len(queries) == 1
+        assert "ccva_cause1: null" in queries[0]
+
+    async def test_setting_a_default_resets_then_repopulates_matching_records(self):
+        def responder(query, bind_vars):
+            if "COLLECT cause = doc.CAUSE1" in query:
+                return FakeCursor(["Stroke"])
+            return FakeCursor([])
+
+        fake_db = FakeDB(responder=responder)
+
+        with self._patch_config():
+            await _sync_ccva_default_to_va_records("t1", "VManML10", fake_db)
+
+        queries = [(q, b) for q, b in fake_db.aql.queries if "COLLECT cause = doc.CAUSE1" not in q]
+        reset_query, _ = queries[0]
+        sync_query, sync_bind_vars = queries[1]
+        assert "ccva_cause1: null" in reset_query
+        assert "FOR ccva IN ccva_results" in sync_query
+        assert "s.instanceid == ccva.ID OR s.instanceid == ccva.uid" in sync_query
+        assert sync_bind_vars["task_id"] == "t1"
+        assert sync_bind_vars["algorithm"] == "VManML10"
+        assert sync_bind_vars["broad_map"] == {"Stroke": "Group II: Non-Communicable"}
+
+    async def test_defaults_the_algorithm_label_when_none_is_given(self):
+        def responder(query, bind_vars):
+            if "COLLECT cause = doc.CAUSE1" in query:
+                return FakeCursor([])
+            return FakeCursor([])
+
+        fake_db = FakeDB(responder=responder)
+
+        with self._patch_config():
+            await _sync_ccva_default_to_va_records("t1", None, fake_db)
+
+        sync_bind_vars = [b for q, b in fake_db.aql.queries if "FOR ccva IN" in q][0]
+        assert sync_bind_vars["algorithm"] == "InterVA5"
 
 
 class TestFetchAllProcessedCcvaGraphs:

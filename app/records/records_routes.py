@@ -5,7 +5,7 @@ from typing import Optional
 from arango.database import StandardDatabase
 from fastapi import APIRouter, Depends, Query, status
 
-from app.records.services.list_data import fetch_va_records
+from app.records.services.list_data import fetch_va_records, fetch_va_records_grouped, fetch_va_records_map_points, get_va_records_ccva_filter_options
 from app.records.services.map_data import fetch_va_map_records
 from app.records.services.regions_data import get_unique_regions
 from app.records.services.export_va_records import export_va_records_multi_sheet
@@ -44,6 +44,13 @@ async def get_va_records(
     locations: Optional[str] = Query(None, alias="locations"),
     search_by: Optional[str] = Query(None, alias="search_by"),
     search_value: Optional[str] = Query(None, alias="search_value"),
+    # Sort/filter on the denormalized CCVA columns (Broad/Major/Specific
+    # Cause, Algorithm) - see _VA_RECORDS_CCVA_SORT_FIELDS/
+    # _VA_RECORDS_CCVA_FILTERABLE_FIELDS in list_data.py.
+    sort_by: Optional[str] = Query(None, alias="sort_by"),
+    sort_dir: str = Query("asc", alias="sort_dir"),
+    filter_by: Optional[str] = Query(None, alias="filter_by"),
+    filter_value: Optional[str] = Query(None, alias="filter_value"),
     db: StandardDatabase = Depends(get_arangodb_session)):
 
     allow_paging = False if paging is not None and paging.lower() == 'false' else True
@@ -58,8 +65,74 @@ async def get_va_records(
         date_type=date_type,
         search_by=search_by,
         search_value=search_value,
+        sort_by=sort_by,
+        sort_dir=sort_dir,
+        filter_by=filter_by,
+        filter_value=filter_value,
         db=db)
     return response
+
+
+@data_router.get("/grouped", status_code=status.HTTP_200_OK, response_model=ResponseMainModel)
+async def get_va_records_grouped(
+    current_user = Depends(get_current_user),
+    group_by: str = Query(...),
+    start_date: Optional[date] = Query(None, alias="start_date"),
+    end_date: Optional[date] = Query(None, alias="end_date"),
+    date_type: Optional[str] = Query(None, alias="date_type"),
+    locations: Optional[str] = Query(None, alias="locations"),
+    search_by: Optional[str] = Query(None, alias="search_by"),
+    search_value: Optional[str] = Query(None, alias="search_value"),
+    filter_by: Optional[str] = Query(None, alias="filter_by"),
+    filter_value: Optional[str] = Query(None, alias="filter_value"),
+    db: StandardDatabase = Depends(get_arangodb_session)):
+
+    return await fetch_va_records_grouped(
+        current_user=current_user,
+        group_by=group_by,
+        start_date=start_date,
+        end_date=end_date,
+        locations=locations,
+        date_type=date_type,
+        search_by=search_by,
+        search_value=search_value,
+        filter_by=filter_by,
+        filter_value=filter_value,
+        db=db)
+
+
+@data_router.get("/table-map-points", status_code=status.HTTP_200_OK, response_model=ResponseMainModel)
+async def get_va_records_table_map_points(
+    current_user = Depends(get_current_user),
+    start_date: Optional[date] = Query(None, alias="start_date"),
+    end_date: Optional[date] = Query(None, alias="end_date"),
+    date_type: Optional[str] = Query(None, alias="date_type"),
+    locations: Optional[str] = Query(None, alias="locations"),
+    search_by: Optional[str] = Query(None, alias="search_by"),
+    search_value: Optional[str] = Query(None, alias="search_value"),
+    filter_by: Optional[str] = Query(None, alias="filter_by"),
+    filter_value: Optional[str] = Query(None, alias="filter_value"),
+    db: StandardDatabase = Depends(get_arangodb_session)):
+
+    return await fetch_va_records_map_points(
+        current_user=current_user,
+        start_date=start_date,
+        end_date=end_date,
+        locations=locations,
+        date_type=date_type,
+        search_by=search_by,
+        search_value=search_value,
+        filter_by=filter_by,
+        filter_value=filter_value,
+        db=db)
+
+
+@data_router.get("/ccva-filter-options", status_code=status.HTTP_200_OK, response_model=ResponseMainModel)
+async def get_va_records_ccva_filter_options_route(
+    current_user = Depends(get_current_user),
+    db: StandardDatabase = Depends(get_arangodb_session)):
+
+    return await get_va_records_ccva_filter_options(db=db)
 #@log_to_db(context="get_fetch_va_map_records", log_args=True)      
 @data_router.get("/maps", status_code=status.HTTP_200_OK, response_model=ResponseMainModel)
 # @cache(namespace='maps',expire=6000)

@@ -80,7 +80,17 @@ collections_with_indexes = {
         {"fields": ["instanceid"], "unique": False, "type": "persistent", "name": "idx_instanceid"},
         
         # {"fields": ["age_group"], "unique": False, "type": "persistent", "name": "idx_age_group"},
-        {"fields": ["id10007"], "unique": False, "type": "persistent", "name": "idx_interviewer"}
+        {"fields": ["id10007"], "unique": False, "type": "persistent", "name": "idx_interviewer"},
+
+        # VA Records table's Broad/Major/Specific Cause + Algorithm columns -
+        # denormalized here (see _sync_ccva_default_to_va_records in
+        # ccva_data_services.py, run when a CCVA run is set/cleared as
+        # default) so these can be sorted/filtered like any other column
+        # instead of joining ccva_results on every list request.
+        {"fields": ["ccva_cause1"], "unique": False, "type": "persistent", "name": "idx_ccva_cause1"},
+        {"fields": ["ccva_cause1_broad"], "unique": False, "type": "persistent", "name": "idx_ccva_cause1_broad"},
+        {"fields": ["ccva_cause1_major"], "unique": False, "type": "persistent", "name": "idx_ccva_cause1_major"},
+        {"fields": ["ccva_algorithm"], "unique": False, "type": "persistent", "name": "idx_ccva_algorithm"},
     ],
     db_collections.USERS: [
          {"fields": ["is_active"], "type": "persistent", "name": "u_is_active"},
@@ -149,6 +159,11 @@ collections_with_indexes = {
              {"fields": ["CAUSE1"], "type": "persistent", "name": "cause_idx"},
              {"fields": ["task_id"], "type": "persistent", "name": "idx_ccva_results_task_id"},
         #   {"fields": ["ID"], "unique": True, "type": "persistent", "name": "idx_interva5_id"},
+             # Non-unique (ID repeats once per run) - speeds up the per-VA
+             # cause-of-death join (records/cause_of_death.py) and the Set
+             # Default -> VA Records sync (ccva_data_services.py), both of
+             # which look up by task_id + ID together.
+             {"fields": ["task_id", "ID"], "unique": False, "type": "persistent", "name": "idx_ccva_results_task_id_id"},
           ],
     db_collections.CCVA_GRAPH_RESULTS: [
         {"fields": ["created_at"], "type": "persistent", "name": "idx_ccva_graph_created_at"},

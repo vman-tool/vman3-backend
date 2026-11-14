@@ -1,8 +1,16 @@
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
-from app.records.services.list_data import fetch_va_records
+from app.records.services.list_data import (
+    fetch_va_records,
+    fetch_va_records_grouped,
+    fetch_va_records_map_points,
+    get_va_records_ccva_filter_options,
+)
+from app.shared.middlewares.exceptions import BadRequestException
 from tests.support.fakes import FakeCursor, FakeDB
+
+import pytest
 
 
 def _fake_config():
@@ -98,3 +106,182 @@ async def test_no_search_filter_applied_without_both_search_by_and_search_value(
 
     query = fake_db.aql.queries[0][0]
     assert "LIKE" not in query
+
+
+# The 4 CCVA columns denormalized onto form_submissions by
+# _sync_ccva_default_to_va_records (ccva_data_services.py) - sortable/
+# filterable here like any other stored column.
+async def test_sorting_by_a_ccva_column_adds_a_sort_clause_on_the_denormalized_field():
+    fake_db = FakeDB(responder=_responder)
+
+    with _patch_config():
+        await fetch_va_records(current_user={}, sort_by="ccvaCauseBroad", sort_dir="desc", db=fake_db)
+
+    query = fake_db.aql.queries[0][0]
+    assert "SORT doc.ccva_cause1_broad DESC" in query
+
+
+async def test_sorting_by_an_unrecognized_field_adds_no_sort_clause():
+    fake_db = FakeDB(responder=_responder)
+
+    with _patch_config():
+        await fetch_va_records(current_user={}, sort_by="notARealField", db=fake_db)
+
+    query = fake_db.aql.queries[0][0]
+    assert "SORT" not in query
+
+
+async def test_filtering_by_a_ccva_column_adds_a_filter_clause_on_the_denormalized_field():
+    fake_db = FakeDB(responder=_responder)
+
+    with _patch_config():
+        await fetch_va_records(current_user={}, filter_by="ccvaCauseSpecific", filter_value="Stroke", db=fake_db)
+
+    query, bind_vars = fake_db.aql.queries[0]
+    assert "doc.ccva_cause1 == @ccva_filter_value" in query
+    assert bind_vars["ccva_filter_value"] == "Stroke"
+
+
+async def test_algorithm_is_not_a_filterable_field():
+    # Only ever 1-2 distinct values in play at a time (whichever engine(s)
+    # produced the currently default run) - a filter adds little over just
+    # looking at the column.
+    fake_db = FakeDB(responder=_responder)
+
+    with _patch_config():
+        await fetch_va_records(current_user={}, filter_by="ccvaAlgorithm", filter_value="InterVA5", db=fake_db)
+
+    query = fake_db.aql.queries[0][0]
+    assert "ccva_algorithm ==" not in query
+
+
+async def test_get_va_records_ccva_filter_options_returns_the_configured_categories_and_distinct_causes():
+    lookup = (
+        {},
+        [
+            ("Diseases of the circulatory system", "Group II: Non-Communicable"),
+            ("Road traffic accidents", "Group III: Injuries"),
+        ],
+    )
+    fake_db = FakeDB(responder=lambda query, bind_vars: FakeCursor(["Stroke", "Malaria"]))
+    with patch(
+        "app.records.services.list_data.get_cause_category_lookup",
+        new=AsyncMock(return_value=lookup),
+    ):
+        result = await get_va_records_ccva_filter_options(db=fake_db)
+
+    assert result.data == {
+        "broad": ["Group II: Non-Communicable", "Group III: Injuries"],
+        "major": ["Diseases of the circulatory system", "Road traffic accidents"],
+        "specific": ["Malaria", "Stroke"],
+    }
+
+
+# Group By - same 3 fields Filter By offers (Broad/Major/Specific Cause),
+# backing the summary table that replaces the individual-record rows when
+# a Group By is active.
+class TestFetchVaRecordsGrouped:
+    async def test_rejects_an_unsupported_group_by_value(self):
+        fake_db = FakeDB()
+
+        with pytest.raises(BadRequestException):
+            await fetch_va_records_grouped(current_user={}, group_by="not-a-real-field", db=fake_db)
+
+    async def test_groups_by_the_denormalized_field_with_an_unclassified_bucket(self):
+        def responder(query, bind_vars):
+            return FakeCursor([
+                {"group": "Group I: Communicable", "count": 7},
+                {"group": "Unclassified", "count": 3},
+            ])
+        fake_db = FakeDB(responder=responder)
+
+        with _patch_config():
+            result = await fetch_va_records_grouped(current_user={}, group_by="ccvaCauseBroad", db=fake_db)
+
+        assert result.data == [
+            {"group": "Group I: Communicable", "count": 7},
+            {"group": "Unclassified", "count": 3},
+        ]
+        assert result.total == 10
+        query = fake_db.aql.queries[0][0]
+        assert 'COLLECT grouped_value = doc.ccva_cause1_broad != null ? doc.ccva_cause1_broad : "Unclassified" WITH COUNT INTO count' in query
+
+    async def test_applies_the_same_shared_filters_as_the_individual_list(self):
+        fake_db = FakeDB(responder=lambda query, bind_vars: FakeCursor([]))
+
+        with _patch_config():
+            await fetch_va_records_grouped(
+                current_user={}, group_by="ccvaCauseMajor",
+                filter_by="ccvaCauseBroad", filter_value="Group I: Communicable", db=fake_db,
+            )
+
+        query, bind_vars = fake_db.aql.queries[0]
+        assert "doc.ccva_cause1_broad == @ccva_filter_value" in query
+        assert bind_vars["ccva_filter_value"] == "Group I: Communicable"
+
+    async def test_empty_result_returns_an_empty_group_list(self):
+        fake_db = FakeDB(responder=lambda query, bind_vars: FakeCursor([]))
+
+        with _patch_config():
+            result = await fetch_va_records_grouped(current_user={}, group_by="ccvaCauseSpecific", db=fake_db)
+
+        assert result.data == []
+        assert result.total == 0
+
+
+# The VA Records table's own Map view - a dedicated endpoint (not the
+# general-purpose /records/maps behind the standalone Data Map page) so it
+# can share every filter with the individual list/Group By summary.
+class TestFetchVaRecordsMapPoints:
+    async def test_filters_to_points_with_gps_coordinates_and_applies_the_shared_filters(self):
+        fake_db = FakeDB(responder=lambda query, bind_vars: FakeCursor([]))
+
+        with _patch_config():
+            await fetch_va_records_map_points(
+                current_user={}, search_by="vaId", search_value="2026-09", db=fake_db,
+            )
+
+        query, bind_vars = fake_db.aql.queries[0]
+        assert "doc.coordinates != null" in query
+        assert "LENGTH(doc.coordinates) == 3" in query
+        assert "doc.vaid" in query  # va_id_field from _fake_config
+        assert bind_vars["search_value_pattern"] == "%2026-09%"
+
+    async def test_projects_vaid_coordinates_location_and_the_denormalized_ccva_fields(self):
+        fake_db = FakeDB(responder=lambda query, bind_vars: FakeCursor([]))
+
+        with _patch_config():
+            await fetch_va_records_map_points(current_user={}, db=fake_db)
+
+        query = fake_db.aql.queries[0][0]
+        assert "vaId: doc.instanceid" in query
+        assert "lat: doc.coordinates[1]" in query
+        assert "lng: doc.coordinates[0]" in query
+        assert "region: doc.id10005r" in query
+        assert "district: doc.id10005d" in query
+        assert "ccvaCauseBroad: doc.ccva_cause1_broad" in query
+        assert "ccvaCauseMajor: doc.ccva_cause1_major" in query
+        assert "ccvaCauseSpecific: doc.ccva_cause1" in query
+        assert "ccvaAlgorithm: doc.ccva_algorithm" in query
+
+    async def test_truncates_at_the_cap_without_the_extra_probe_row(self):
+        rows = [{"vaId": f"va-{i}"} for i in range(5001)]
+        fake_db = FakeDB(responder=lambda query, bind_vars: FakeCursor(list(rows)))
+
+        with _patch_config():
+            result = await fetch_va_records_map_points(current_user={}, db=fake_db)
+
+        assert len(result.data) == 5000
+        assert result.total == 5000
+
+    async def test_applies_the_ccva_filter_by_value_the_same_as_the_individual_list(self):
+        fake_db = FakeDB(responder=lambda query, bind_vars: FakeCursor([]))
+
+        with _patch_config():
+            await fetch_va_records_map_points(
+                current_user={}, filter_by="ccvaCauseBroad", filter_value="Group I: Communicable", db=fake_db,
+            )
+
+        query, bind_vars = fake_db.aql.queries[0]
+        assert "doc.ccva_cause1_broad == @ccva_filter_value" in query
+        assert bind_vars["ccva_filter_value"] == "Group I: Communicable"
