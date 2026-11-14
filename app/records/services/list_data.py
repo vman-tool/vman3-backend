@@ -264,6 +264,91 @@ async def fetch_va_records_grouped(
         raise BadRequestException(f"Failed to fetch grouped VA records: {str(e)}", str(e))
 
 
+# Individual VA map points are capped well below the general-purpose
+# /records/maps endpoint's effectively-uncapped default (1_000_000) - a
+# Leaflet-clustered view of this table's own (already filtered) records
+# stays responsive at this size, same reasoning as CCVA's own
+# _CCVA_MAP_POINTS_LIMIT.
+_VA_RECORDS_MAP_POINTS_LIMIT = 5000
+
+
+async def fetch_va_records_map_points(
+    current_user: dict,
+    start_date: Optional[date] = None,
+    end_date: Optional[date] = None,
+    locations: Optional[str] = None,
+    date_type: Optional[str] = None,
+    search_by: Optional[str] = None,
+    search_value: Optional[str] = None,
+    filter_by: Optional[str] = None,
+    filter_value: Optional[str] = None,
+    db: StandardDatabase = None,
+) -> ResponseMainModel:
+    """GPS points for the VA Records table's own Map view - shares every
+    filter (date range/location/search/Filter By-Value) with the
+    individual list and Group By summary via _build_va_records_filters,
+    unlike the general-purpose /records/maps endpoint (fetch_va_map_records,
+    which backs the standalone Data Map page and has no search_by/filter_by
+    support at all). Mirrors CCVA's own dedicated fetch_ccva_map_points
+    rather than complicating that already-shared endpoint for a second,
+    narrower caller. Capped at _VA_RECORDS_MAP_POINTS_LIMIT (+1, fetched to
+    detect truncation the same way CCVA's does) rather than left uncapped.
+    """
+    try:
+        filters, bind_vars, config = await _build_va_records_filters(
+            current_user, start_date, end_date, locations, date_type, search_by, search_value, filter_by, filter_value, db
+        )
+        region_field = config.field_mapping.location_level1
+        district_field = config.field_mapping.location_level2
+        instance_id_field = config.field_mapping.instance_id or 'instanceid'
+        # location_level2 (district) isn't always mapped - some deployments
+        # only configure admin level 1. Interpolating a blank field name as
+        # `doc.` is invalid AQL and fails this whole query.
+        district_expr = f"doc.{district_field}" if district_field else "null"
+
+        collection = db.collection(db_collections.VA_TABLE)
+        all_filters = filters + ["doc.coordinates != null", "LENGTH(doc.coordinates) == 3"]
+        bind_vars["limit"] = _VA_RECORDS_MAP_POINTS_LIMIT + 1
+
+        query = f"""
+            FOR doc IN {collection.name}
+                FILTER {" AND ".join(all_filters)}
+                LIMIT @limit
+                RETURN {{
+                    vaId: doc.{instance_id_field},
+                    lat: doc.coordinates[1],
+                    lng: doc.coordinates[0],
+                    region: doc.{region_field},
+                    district: {district_expr},
+                    ccvaCauseBroad: doc.ccva_cause1_broad,
+                    ccvaCauseMajor: doc.ccva_cause1_major,
+                    ccvaCauseSpecific: doc.ccva_cause1,
+                    ccvaAlgorithm: doc.ccva_algorithm
+                }}
+        """
+
+        def execute_query():
+            cursor = db.aql.execute(query, bind_vars=bind_vars)
+            return [document for document in cursor]
+
+        rows = await run_in_threadpool(execute_query)
+        # Fetched one extra row (bind_vars["limit"]) purely to detect
+        # truncation - the frontend treats a result exactly at
+        # _VA_RECORDS_MAP_POINTS_LIMIT as "there may be more" and shows a
+        # note, so no separate response field is needed for this.
+        data = rows[:_VA_RECORDS_MAP_POINTS_LIMIT]
+
+        return ResponseMainModel(
+            data=data,
+            message="VA records map points fetched successfully",
+            total=len(data),
+        )
+    except ArangoError as e:
+        raise BadRequestException("Failed to fetch VA records map points", str(e))
+    except Exception as e:
+        raise BadRequestException(f"Failed to fetch VA records map points: {str(e)}", str(e))
+
+
 
 
 

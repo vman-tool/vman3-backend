@@ -1,7 +1,12 @@
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
-from app.records.services.list_data import fetch_va_records, fetch_va_records_grouped, get_va_records_ccva_filter_options
+from app.records.services.list_data import (
+    fetch_va_records,
+    fetch_va_records_grouped,
+    fetch_va_records_map_points,
+    get_va_records_ccva_filter_options,
+)
 from app.shared.middlewares.exceptions import BadRequestException
 from tests.support.fakes import FakeCursor, FakeDB
 
@@ -222,3 +227,61 @@ class TestFetchVaRecordsGrouped:
 
         assert result.data == []
         assert result.total == 0
+
+
+# The VA Records table's own Map view - a dedicated endpoint (not the
+# general-purpose /records/maps behind the standalone Data Map page) so it
+# can share every filter with the individual list/Group By summary.
+class TestFetchVaRecordsMapPoints:
+    async def test_filters_to_points_with_gps_coordinates_and_applies_the_shared_filters(self):
+        fake_db = FakeDB(responder=lambda query, bind_vars: FakeCursor([]))
+
+        with _patch_config():
+            await fetch_va_records_map_points(
+                current_user={}, search_by="vaId", search_value="2026-09", db=fake_db,
+            )
+
+        query, bind_vars = fake_db.aql.queries[0]
+        assert "doc.coordinates != null" in query
+        assert "LENGTH(doc.coordinates) == 3" in query
+        assert "doc.vaid" in query  # va_id_field from _fake_config
+        assert bind_vars["search_value_pattern"] == "%2026-09%"
+
+    async def test_projects_vaid_coordinates_location_and_the_denormalized_ccva_fields(self):
+        fake_db = FakeDB(responder=lambda query, bind_vars: FakeCursor([]))
+
+        with _patch_config():
+            await fetch_va_records_map_points(current_user={}, db=fake_db)
+
+        query = fake_db.aql.queries[0][0]
+        assert "vaId: doc.instanceid" in query
+        assert "lat: doc.coordinates[1]" in query
+        assert "lng: doc.coordinates[0]" in query
+        assert "region: doc.id10005r" in query
+        assert "district: doc.id10005d" in query
+        assert "ccvaCauseBroad: doc.ccva_cause1_broad" in query
+        assert "ccvaCauseMajor: doc.ccva_cause1_major" in query
+        assert "ccvaCauseSpecific: doc.ccva_cause1" in query
+        assert "ccvaAlgorithm: doc.ccva_algorithm" in query
+
+    async def test_truncates_at_the_cap_without_the_extra_probe_row(self):
+        rows = [{"vaId": f"va-{i}"} for i in range(5001)]
+        fake_db = FakeDB(responder=lambda query, bind_vars: FakeCursor(list(rows)))
+
+        with _patch_config():
+            result = await fetch_va_records_map_points(current_user={}, db=fake_db)
+
+        assert len(result.data) == 5000
+        assert result.total == 5000
+
+    async def test_applies_the_ccva_filter_by_value_the_same_as_the_individual_list(self):
+        fake_db = FakeDB(responder=lambda query, bind_vars: FakeCursor([]))
+
+        with _patch_config():
+            await fetch_va_records_map_points(
+                current_user={}, filter_by="ccvaCauseBroad", filter_value="Group I: Communicable", db=fake_db,
+            )
+
+        query, bind_vars = fake_db.aql.queries[0]
+        assert "doc.ccva_cause1_broad == @ccva_filter_value" in query
+        assert bind_vars["ccva_filter_value"] == "Group I: Communicable"
