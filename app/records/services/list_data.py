@@ -17,9 +17,10 @@ from app.utilits.logger import app_logger
 
 # The 4 CCVA columns denormalized onto form_submissions by
 # _sync_ccva_default_to_va_records (ccva_data_services.py) - sortable by
-# any of them; Specific Cause has too many distinct values to be a useful
-# filter dropdown (same reasoning as CCVA's own Filter By, which also
-# excludes raw CAUSE1), so only the other 3 are filterable.
+# any of them. All but Algorithm are also filterable - Algorithm only ever
+# has 1-2 distinct values in play at a time (whichever engine(s) produced
+# the currently default run), so a filter for it adds little over just
+# looking at the column.
 _VA_RECORDS_CCVA_SORT_FIELDS = {
     'ccvaCauseBroad': 'ccva_cause1_broad',
     'ccvaCauseMajor': 'ccva_cause1_major',
@@ -29,21 +30,38 @@ _VA_RECORDS_CCVA_SORT_FIELDS = {
 _VA_RECORDS_CCVA_FILTERABLE_FIELDS = {
     'ccvaCauseBroad': 'ccva_cause1_broad',
     'ccvaCauseMajor': 'ccva_cause1_major',
-    'ccvaAlgorithm': 'ccva_algorithm',
+    'ccvaCauseSpecific': 'ccva_cause1',
 }
 
 
 async def get_va_records_ccva_filter_options(db: StandardDatabase) -> ResponseMainModel:
-    """Distinct Broad/Major Category + Algorithm values for the VA Records
-    table's Filter By dropdown - the full configured target cause list
-    (Settings > PCVA Configuration), not just whatever the currently
-    default CCVA run happens to use, so the dropdown's meaning doesn't
-    shift every time the default run is changed."""
+    """Distinct Broad/Major Category + Specific Cause values for the VA
+    Records table's Filter By dropdown. Broad/Major come from the full
+    configured target cause list (Settings > PCVA Configuration), not just
+    whatever the currently default CCVA run happens to use, so the
+    dropdown's meaning doesn't shift every time the default run changes.
+    Specific Cause has no fixed universe to enumerate that way, so it's the
+    distinct values actually present on VA records right now instead."""
     _, category_names = await get_cause_category_lookup(db)
     majors = sorted({name for name, _ in category_names if name})
     broads = sorted({broad for _, broad in category_names if broad})
+
+    collection = db.collection(db_collections.VA_TABLE)
+    distinct_query = f"""
+        FOR doc IN {collection.name}
+            FILTER doc.ccva_cause1 != null AND doc.ccva_cause1 != ""
+            COLLECT cause = doc.ccva_cause1
+            RETURN cause
+    """
+
+    def execute_distinct():
+        cursor = db.aql.execute(distinct_query)
+        return sorted(document for document in cursor)
+
+    specific = await run_in_threadpool(execute_distinct)
+
     return ResponseMainModel(
-        data={"broad": broads, "major": majors, "algorithm": ["InterVA5", "VManML10"]},
+        data={"broad": broads, "major": majors, "specific": specific},
         message="VA Records CCVA filter options fetched successfully",
     )
 

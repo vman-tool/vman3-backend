@@ -127,26 +127,27 @@ async def test_filtering_by_a_ccva_column_adds_a_filter_clause_on_the_denormaliz
     fake_db = FakeDB(responder=_responder)
 
     with _patch_config():
-        await fetch_va_records(current_user={}, filter_by="ccvaAlgorithm", filter_value="VManML10", db=fake_db)
+        await fetch_va_records(current_user={}, filter_by="ccvaCauseSpecific", filter_value="Stroke", db=fake_db)
 
     query, bind_vars = fake_db.aql.queries[0]
-    assert "doc.ccva_algorithm == @ccva_filter_value" in query
-    assert bind_vars["ccva_filter_value"] == "VManML10"
+    assert "doc.ccva_cause1 == @ccva_filter_value" in query
+    assert bind_vars["ccva_filter_value"] == "Stroke"
 
 
-async def test_specific_cause_is_not_a_filterable_field():
-    # Too many distinct values for a useful filter dropdown - same
-    # reasoning as CCVA's own Filter By, which also excludes raw CAUSE1.
+async def test_algorithm_is_not_a_filterable_field():
+    # Only ever 1-2 distinct values in play at a time (whichever engine(s)
+    # produced the currently default run) - a filter adds little over just
+    # looking at the column.
     fake_db = FakeDB(responder=_responder)
 
     with _patch_config():
-        await fetch_va_records(current_user={}, filter_by="ccvaCauseSpecific", filter_value="Stroke", db=fake_db)
+        await fetch_va_records(current_user={}, filter_by="ccvaAlgorithm", filter_value="InterVA5", db=fake_db)
 
     query = fake_db.aql.queries[0][0]
-    assert "ccva_cause1 ==" not in query
+    assert "ccva_algorithm ==" not in query
 
 
-async def test_get_va_records_ccva_filter_options_returns_the_configured_categories_and_algorithms():
+async def test_get_va_records_ccva_filter_options_returns_the_configured_categories_and_distinct_causes():
     lookup = (
         {},
         [
@@ -154,14 +155,15 @@ async def test_get_va_records_ccva_filter_options_returns_the_configured_categor
             ("Road traffic accidents", "Group III: Injuries"),
         ],
     )
+    fake_db = FakeDB(responder=lambda query, bind_vars: FakeCursor(["Stroke", "Malaria"]))
     with patch(
         "app.records.services.list_data.get_cause_category_lookup",
         new=AsyncMock(return_value=lookup),
     ):
-        result = await get_va_records_ccva_filter_options(db=FakeDB())
+        result = await get_va_records_ccva_filter_options(db=fake_db)
 
     assert result.data == {
         "broad": ["Group II: Non-Communicable", "Group III: Injuries"],
         "major": ["Diseases of the circulatory system", "Road traffic accidents"],
-        "algorithm": ["InterVA5", "VManML10"],
+        "specific": ["Malaria", "Stroke"],
     }
