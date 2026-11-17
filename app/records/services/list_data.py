@@ -32,37 +32,73 @@ _VA_RECORDS_CCVA_FILTERABLE_FIELDS = {
     'ccvaCauseMajor': 'ccva_cause1_major',
     'ccvaCauseSpecific': 'ccva_cause1',
 }
+# Gender and Age Group aren't CCVA-denormalized - Gender is a plain
+# form_submissions field (deployment-configurable name), Age Group is
+# computed the same Neonate/Child/Adult way as the Instrument Type column
+# (map_to_data_response) rather than being a stored field at all. Both
+# still belong in Filter By/Group By, so _group_expression() resolves all
+# 5 dimensions through one place.
+_VA_RECORDS_FILTERABLE_DIMENSIONS = set(_VA_RECORDS_CCVA_FILTERABLE_FIELDS) | {'gender', 'age_group'}
+
+
+def _group_expression(config, dimension: str) -> Optional[str]:
+    """The raw AQL expression (no null-coalescing) for one Filter By/Group
+    By dimension, or None if unrecognized."""
+    if dimension in _VA_RECORDS_CCVA_FILTERABLE_FIELDS:
+        return f"doc.{_VA_RECORDS_CCVA_FILTERABLE_FIELDS[dimension]}"
+    if dimension == 'gender':
+        return f"doc.{config.field_mapping.deceased_gender}"
+    if dimension == 'age_group':
+        is_neonate = config.field_mapping.is_neonate
+        is_child = config.field_mapping.is_child
+        is_adult = config.field_mapping.is_adult
+        return (
+            f'TO_STRING(doc.{is_neonate}) == "1" ? "Neonate" : '
+            f'TO_STRING(doc.{is_child}) == "1" ? "Child" : '
+            f'TO_STRING(doc.{is_adult}) == "1" ? "Adult" : "Unclassified"'
+        )
+    return None
 
 
 async def get_va_records_ccva_filter_options(db: StandardDatabase) -> ResponseMainModel:
-    """Distinct Broad/Major Category + Specific Cause values for the VA
-    Records table's Filter By dropdown. Broad/Major come from the full
-    configured target cause list (Settings > PCVA Configuration), not just
-    whatever the currently default CCVA run happens to use, so the
-    dropdown's meaning doesn't shift every time the default run changes.
-    Specific Cause has no fixed universe to enumerate that way, so it's the
-    distinct values actually present on VA records right now instead."""
+    """Filter By dropdown options for all 5 VA Records dimensions.
+    Broad/Major Category come from the full configured target cause list
+    (Settings > PCVA Configuration), not just whatever the currently
+    default CCVA run happens to use, so the dropdown's meaning doesn't
+    shift every time the default run changes. Specific Cause and Gender
+    have no fixed universe to enumerate that way, so they're the distinct
+    values actually present on VA records right now instead. Age Group is
+    the fixed Neonate/Child/Adult/Unclassified set _group_expression()
+    always produces - nothing to query."""
+    config = await fetch_odk_config(db)
     _, category_names = await get_cause_category_lookup(db)
     majors = sorted({name for name, _ in category_names if name})
     broads = sorted({broad for _, broad in category_names if broad})
 
     collection = db.collection(db_collections.VA_TABLE)
-    distinct_query = f"""
-        FOR doc IN {collection.name}
-            FILTER doc.ccva_cause1 != null AND doc.ccva_cause1 != ""
-            COLLECT cause = doc.ccva_cause1
-            RETURN cause
-    """
 
-    def execute_distinct():
-        cursor = db.aql.execute(distinct_query)
+    def execute_distinct(field: str):
+        query = f"""
+            FOR doc IN {collection.name}
+                FILTER doc.{field} != null AND doc.{field} != ""
+                COLLECT value = doc.{field}
+                RETURN value
+        """
+        cursor = db.aql.execute(query)
         return sorted(document for document in cursor)
 
-    specific = await run_in_threadpool(execute_distinct)
+    specific = await run_in_threadpool(lambda: execute_distinct("ccva_cause1"))
+    genders = await run_in_threadpool(lambda: execute_distinct(config.field_mapping.deceased_gender))
 
     return ResponseMainModel(
-        data={"broad": broads, "major": majors, "specific": specific},
-        message="VA Records CCVA filter options fetched successfully",
+        data={
+            "broad": broads,
+            "major": majors,
+            "specific": specific,
+            "gender": genders,
+            "age_group": ["Neonate", "Child", "Adult", "Unclassified"],
+        },
+        message="VA Records filter options fetched successfully",
     )
 
 
@@ -144,8 +180,8 @@ async def _build_va_records_filters(
             filters.append(f"LIKE(LOWER(TO_STRING(doc.{field_name})), @search_value_pattern, true)")
             bind_vars["search_value_pattern"] = f"%{search_value.lower()}%"
 
-    if filter_by in _VA_RECORDS_CCVA_FILTERABLE_FIELDS and filter_value:
-        filters.append(f"doc.{_VA_RECORDS_CCVA_FILTERABLE_FIELDS[filter_by]} == @ccva_filter_value")
+    if filter_by in _VA_RECORDS_FILTERABLE_DIMENSIONS and filter_value:
+        filters.append(f"({_group_expression(config, filter_by)}) == @ccva_filter_value")
         bind_vars["ccva_filter_value"] = filter_value
 
     return filters, bind_vars, config
@@ -221,18 +257,19 @@ async def fetch_va_records_grouped(
     db: StandardDatabase = None,
 ) -> ResponseMainModel:
     """Counts of (already filtered) VA records grouped by one of the same
-    3 fields Filter By offers (Broad/Major/Specific Cause) - backs the
-    Group By control's summary table. Small result set (a handful of
-    group values) - no pagination, same as CCVA's own grouped results
-    (fetch_ccva_grouped_results in ccva_data_services.py), which this
-    mirrors. A record with no result under the default CCVA run (so the
-    denormalized field is null) collects into an explicit "Unclassified"
-    bucket rather than being silently dropped.
+    5 fields Filter By offers (Broad/Major/Specific Cause, Gender, Age
+    Group) - backs the Group By control's summary table. Small result set
+    (a handful of group values) - no pagination, same as CCVA's own
+    grouped results (fetch_ccva_grouped_results in ccva_data_services.py),
+    which this mirrors. A record with no value for the active dimension
+    (e.g. no CCVA result under the default run, or gender never recorded)
+    collects into an explicit "Unclassified" bucket rather than being
+    silently dropped.
     """
-    if group_by not in _VA_RECORDS_CCVA_FILTERABLE_FIELDS:
+    if group_by not in _VA_RECORDS_FILTERABLE_DIMENSIONS:
         raise BadRequestException(f"Unsupported group_by value: {group_by}", group_by)
     try:
-        filters, bind_vars, _ = await _build_va_records_filters(
+        filters, bind_vars, config = await _build_va_records_filters(
             current_user, start_date, end_date, locations, date_type, search_by, search_value, filter_by, filter_value, db
         )
         collection = db.collection(db_collections.VA_TABLE)
@@ -240,9 +277,9 @@ async def fetch_va_records_grouped(
         if filters:
             query += "FILTER " + " AND ".join(filters) + " "
 
-        group_field = _VA_RECORDS_CCVA_FILTERABLE_FIELDS[group_by]
+        group_expr = _group_expression(config, group_by)
         query += f"""
-        COLLECT grouped_value = doc.{group_field} != null ? doc.{group_field} : "Unclassified" WITH COUNT INTO count
+        COLLECT grouped_value = ({group_expr}) != null ? ({group_expr}) : "Unclassified" WITH COUNT INTO count
         RETURN {{"group": grouped_value, "count": count}}
         """
 
@@ -305,6 +342,8 @@ async def fetch_va_records_map_points(
         # only configure admin level 1. Interpolating a blank field name as
         # `doc.` is invalid AQL and fails this whole query.
         district_expr = f"doc.{district_field}" if district_field else "null"
+        gender_expr = _group_expression(config, 'gender')
+        age_group_expr = _group_expression(config, 'age_group')
 
         collection = db.collection(db_collections.VA_TABLE)
         all_filters = filters + ["doc.coordinates != null", "LENGTH(doc.coordinates) == 3"]
@@ -320,6 +359,8 @@ async def fetch_va_records_map_points(
                     lng: doc.coordinates[0],
                     region: doc.{region_field},
                     district: {district_expr},
+                    gender: {gender_expr},
+                    ageGroup: ({age_group_expr}),
                     ccvaCauseBroad: doc.ccva_cause1_broad,
                     ccvaCauseMajor: doc.ccva_cause1_major,
                     ccvaCauseSpecific: doc.ccva_cause1,

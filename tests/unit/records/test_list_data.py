@@ -138,7 +138,7 @@ async def test_filtering_by_a_ccva_column_adds_a_filter_clause_on_the_denormaliz
         await fetch_va_records(current_user={}, filter_by="ccvaCauseSpecific", filter_value="Stroke", db=fake_db)
 
     query, bind_vars = fake_db.aql.queries[0]
-    assert "doc.ccva_cause1 == @ccva_filter_value" in query
+    assert "(doc.ccva_cause1) == @ccva_filter_value" in query
     assert bind_vars["ccva_filter_value"] == "Stroke"
 
 
@@ -163,8 +163,11 @@ async def test_get_va_records_ccva_filter_options_returns_the_configured_categor
             ("Road traffic accidents", "Group III: Injuries"),
         ],
     )
+    # Both distinct-value queries (ccva_cause1, then the configured gender
+    # field) share the same FakeCursor responder here - identical shape is
+    # fine since the test only cares that both end up in the response.
     fake_db = FakeDB(responder=lambda query, bind_vars: FakeCursor(["Stroke", "Malaria"]))
-    with patch(
+    with _patch_config(), patch(
         "app.records.services.list_data.get_cause_category_lookup",
         new=AsyncMock(return_value=lookup),
     ):
@@ -174,6 +177,8 @@ async def test_get_va_records_ccva_filter_options_returns_the_configured_categor
         "broad": ["Group II: Non-Communicable", "Group III: Injuries"],
         "major": ["Diseases of the circulatory system", "Road traffic accidents"],
         "specific": ["Malaria", "Stroke"],
+        "gender": ["Malaria", "Stroke"],
+        "age_group": ["Neonate", "Child", "Adult", "Unclassified"],
     }
 
 
@@ -204,7 +209,7 @@ class TestFetchVaRecordsGrouped:
         ]
         assert result.total == 10
         query = fake_db.aql.queries[0][0]
-        assert 'COLLECT grouped_value = doc.ccva_cause1_broad != null ? doc.ccva_cause1_broad : "Unclassified" WITH COUNT INTO count' in query
+        assert 'COLLECT grouped_value = (doc.ccva_cause1_broad) != null ? (doc.ccva_cause1_broad) : "Unclassified" WITH COUNT INTO count' in query
 
     async def test_applies_the_same_shared_filters_as_the_individual_list(self):
         fake_db = FakeDB(responder=lambda query, bind_vars: FakeCursor([]))
@@ -216,7 +221,7 @@ class TestFetchVaRecordsGrouped:
             )
 
         query, bind_vars = fake_db.aql.queries[0]
-        assert "doc.ccva_cause1_broad == @ccva_filter_value" in query
+        assert "(doc.ccva_cause1_broad) == @ccva_filter_value" in query
         assert bind_vars["ccva_filter_value"] == "Group I: Communicable"
 
     async def test_empty_result_returns_an_empty_group_list(self):
@@ -283,5 +288,67 @@ class TestFetchVaRecordsMapPoints:
             )
 
         query, bind_vars = fake_db.aql.queries[0]
-        assert "doc.ccva_cause1_broad == @ccva_filter_value" in query
+        assert "(doc.ccva_cause1_broad) == @ccva_filter_value" in query
         assert bind_vars["ccva_filter_value"] == "Group I: Communicable"
+
+    async def test_projects_gender_and_age_group(self):
+        fake_db = FakeDB(responder=lambda query, bind_vars: FakeCursor([]))
+
+        with _patch_config():
+            await fetch_va_records_map_points(current_user={}, db=fake_db)
+
+        query = fake_db.aql.queries[0][0]
+        assert "gender: doc.id10019" in query
+        assert 'ageGroup: (TO_STRING(doc.isneonatal) == "1" ? "Neonate"' in query
+
+
+# Gender and Age Group - not CCVA-denormalized (Gender is a plain
+# form_submissions field, Age Group is computed the same Neonate/Child/
+# Adult way as the Instrument Type column) but still full Filter By/
+# Group By dimensions via _group_expression().
+class TestGenderAndAgeGroupDimensions:
+    async def test_filters_by_gender_on_the_configured_field(self):
+        fake_db = FakeDB(responder=_responder)
+
+        with _patch_config():
+            await fetch_va_records(current_user={}, filter_by="gender", filter_value="female", db=fake_db)
+
+        query, bind_vars = fake_db.aql.queries[0]
+        assert "(doc.id10019) == @ccva_filter_value" in query
+        assert bind_vars["ccva_filter_value"] == "female"
+
+    async def test_filters_by_age_group_using_the_instrument_type_classification(self):
+        fake_db = FakeDB(responder=_responder)
+
+        with _patch_config():
+            await fetch_va_records(current_user={}, filter_by="age_group", filter_value="Neonate", db=fake_db)
+
+        query, bind_vars = fake_db.aql.queries[0]
+        assert 'TO_STRING(doc.isneonatal) == "1" ? "Neonate"' in query
+        assert 'TO_STRING(doc.ischild) == "1" ? "Child"' in query
+        assert 'TO_STRING(doc.isadult) == "1" ? "Adult" : "Unclassified"' in query
+        assert bind_vars["ccva_filter_value"] == "Neonate"
+
+    async def test_groups_by_gender(self):
+        fake_db = FakeDB(responder=lambda query, bind_vars: FakeCursor([
+            {"group": "female", "count": 5}, {"group": "male", "count": 3},
+        ]))
+
+        with _patch_config():
+            result = await fetch_va_records_grouped(current_user={}, group_by="gender", db=fake_db)
+
+        assert result.total == 8
+        query = fake_db.aql.queries[0][0]
+        assert 'COLLECT grouped_value = (doc.id10019) != null ? (doc.id10019) : "Unclassified"' in query
+
+    async def test_groups_by_age_group(self):
+        fake_db = FakeDB(responder=lambda query, bind_vars: FakeCursor([
+            {"group": "Adult", "count": 9},
+        ]))
+
+        with _patch_config():
+            result = await fetch_va_records_grouped(current_user={}, group_by="age_group", db=fake_db)
+
+        assert result.total == 9
+        query = fake_db.aql.queries[0][0]
+        assert 'TO_STRING(doc.isadult) == "1" ? "Adult" : "Unclassified") != null' in query
