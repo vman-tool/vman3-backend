@@ -16,17 +16,22 @@ from app.shared.middlewares.exceptions import BadRequestException
 from app.utilits.logger import app_logger
 
 
-# The 4 CCVA columns denormalized onto form_submissions by
-# _sync_ccva_default_to_va_records (ccva_data_services.py) - sortable by
-# any of them. All but Algorithm are also filterable - Algorithm only ever
-# has 1-2 distinct values in play at a time (whichever engine(s) produced
-# the currently default run), so a filter for it adds little over just
-# looking at the column.
+# Table 1's 4 CCVA columns denormalized onto form_submissions by
+# _sync_ccva_default_to_va_records (ccva_data_services.py), plus Table 2's
+# 4 DQA score columns denormalized by sync_dqa_scores_to_va_records
+# (general_dqa.py) - sortable by any of them. All but Algorithm are also
+# filterable - Algorithm only ever has 1-2 distinct values in play at a
+# time (whichever engine(s) produced the currently default run), so a
+# filter for it adds little over just looking at the column.
 _VA_RECORDS_CCVA_SORT_FIELDS = {
     'ccvaCauseBroad': 'ccva_cause1_broad',
     'ccvaCauseMajor': 'ccva_cause1_major',
     'ccvaCauseSpecific': 'ccva_cause1',
     'ccvaAlgorithm': 'ccva_algorithm',
+    'dqaRrs': 'dqa_rrs',
+    'dqaIcs': 'dqa_ics',
+    'dqaIci': 'dqa_ici',
+    'dqaAid': 'dqa_aid',
 }
 _VA_RECORDS_CCVA_FILTERABLE_FIELDS = {
     'ccvaCauseBroad': 'ccva_cause1_broad',
