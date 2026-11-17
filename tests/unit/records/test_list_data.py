@@ -7,13 +7,14 @@ from app.records.services.list_data import (
     fetch_va_records_map_points,
     get_va_records_ccva_filter_options,
 )
+from app.settings.models.settings import AidThresholds, DqaThresholds, IndicatorThresholds, TierConfig
 from app.shared.middlewares.exceptions import BadRequestException
 from tests.support.fakes import FakeCursor, FakeDB
 
 import pytest
 
 
-def _fake_config():
+def _fake_config(dqa_thresholds=None):
     return SimpleNamespace(
         field_mapping=SimpleNamespace(
             location_level1="id10005r", location_level2="id10005d",
@@ -22,13 +23,17 @@ def _fake_config():
             death_date="id10023", submitted_date="today", interview_date="id10012",
             is_neonate="isneonatal", is_child="ischild", is_adult="isadult",
             deceased_gender="id10019",
-        )
+        ),
+        # None exercises the "admin hasn't configured thresholds yet" ->
+        # shipped-defaults fallback in _group_expression()/
+        # get_va_records_ccva_filter_options.
+        dqa_thresholds=dqa_thresholds,
     )
 
 
-def _patch_config():
+def _patch_config(dqa_thresholds=None):
     async def fake_fetch_odk_config(db, *args, **kwargs):
-        return _fake_config()
+        return _fake_config(dqa_thresholds)
     return patch("app.records.services.list_data.fetch_odk_config", new=fake_fetch_odk_config)
 
 
@@ -179,6 +184,10 @@ async def test_get_va_records_ccva_filter_options_returns_the_configured_categor
         "specific": ["Malaria", "Stroke"],
         "gender": ["Malaria", "Stroke"],
         "age_group": ["Neonate", "Child", "Adult", "Unclassified"],
+        "rrs": ["Excellent", "Good", "Critical"],
+        "ics": ["Excellent", "Good", "Critical"],
+        "ici": ["Excellent", "Good", "Critical"],
+        "aid": ["Too Short", "Normal", "Too Long"],
     }
 
 
@@ -352,3 +361,80 @@ class TestGenderAndAgeGroupDimensions:
         assert result.total == 9
         query = fake_db.aql.queries[0][0]
         assert 'TO_STRING(doc.isadult) == "1" ? "Adult" : "Unclassified") != null' in query
+
+
+# RRS/ICS/ICI/AID (Table 2's own dimensions) - continuous scores bucketed
+# into the same admin-configurable tiers DqaThresholdService already uses
+# on the frontend (Settings > Configuration > Data Quality Thresholds),
+# rather than a fixed stored category the way Gender/Age Group are.
+class TestDqaDimensions:
+    async def test_filters_by_rrs_using_the_shipped_default_thresholds(self):
+        fake_db = FakeDB(responder=_responder)
+
+        with _patch_config():
+            await fetch_va_records(current_user={}, filter_by="dqaRrs", filter_value="Excellent", db=fake_db)
+
+        query, bind_vars = fake_db.aql.queries[0]
+        assert 'doc.dqa_rrs == null ? "Unclassified"' in query
+        assert 'doc.dqa_rrs >= @rrs_high ? @rrs_tier1' in query
+        assert bind_vars["rrs_high"] == 80.0
+        assert bind_vars["rrs_mid"] == 50.0
+        assert bind_vars["rrs_tier1"] == "Excellent"
+        assert bind_vars["rrs_tier3"] == "Critical"
+        assert bind_vars["ccva_filter_value"] == "Excellent"
+
+    async def test_filters_by_aid_using_the_shipped_default_thresholds(self):
+        fake_db = FakeDB(responder=_responder)
+
+        with _patch_config():
+            await fetch_va_records(current_user={}, filter_by="dqaAid", filter_value="Too Long", db=fake_db)
+
+        query, bind_vars = fake_db.aql.queries[0]
+        assert 'doc.dqa_aid > @aid_max ? @aid_long' in query
+        assert 'doc.dqa_aid < @aid_min ? @aid_short' in query
+        assert bind_vars["aid_min"] == 30.0
+        assert bind_vars["aid_max"] == 60.0
+        assert bind_vars["aid_long"] == "Too Long"
+
+    async def test_filters_using_an_admin_overridden_threshold_config(self):
+        fake_db = FakeDB(responder=_responder)
+        custom_thresholds = DqaThresholds(
+            ics=IndicatorThresholds(
+                threshold_high=95.0, threshold_mid=60.0,
+                tier1=TierConfig(label="Great", color="green"),
+                tier2=TierConfig(label="OK", color="amber"),
+                tier3=TierConfig(label="Bad", color="red"),
+            ),
+        )
+
+        with _patch_config(dqa_thresholds=custom_thresholds):
+            await fetch_va_records(current_user={}, filter_by="dqaIcs", filter_value="Great", db=fake_db)
+
+        bind_vars = fake_db.aql.queries[0][1]
+        assert bind_vars["ics_high"] == 95.0
+        assert bind_vars["ics_tier1"] == "Great"
+        assert bind_vars["ics_tier3"] == "Bad"
+
+    async def test_groups_by_ici(self):
+        fake_db = FakeDB(responder=lambda query, bind_vars: FakeCursor([
+            {"group": "Excellent", "count": 6}, {"group": "Critical", "count": 2},
+        ]))
+
+        with _patch_config():
+            result = await fetch_va_records_grouped(current_user={}, group_by="dqaIci", db=fake_db)
+
+        assert result.total == 8
+        query = fake_db.aql.queries[0][0]
+        assert 'doc.dqa_ici == null ? "Unclassified"' in query
+
+    async def test_map_points_project_raw_dqa_scores_not_tier_labels(self):
+        fake_db = FakeDB(responder=lambda query, bind_vars: FakeCursor([]))
+
+        with _patch_config():
+            await fetch_va_records_map_points(current_user={}, db=fake_db)
+
+        query = fake_db.aql.queries[0][0]
+        assert "dqaRrs: doc.dqa_rrs" in query
+        assert "dqaIcs: doc.dqa_ics" in query
+        assert "dqaIci: doc.dqa_ici" in query
+        assert "dqaAid: doc.dqa_aid" in query

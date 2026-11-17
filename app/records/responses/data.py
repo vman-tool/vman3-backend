@@ -22,6 +22,13 @@ class DataResponse(BaseModel):
     ccvaCauseMajor: Optional[str] = None
     ccvaCauseSpecific: Optional[str] = None
     ccvaAlgorithm: Optional[str] = None
+    # Denormalized by every DQA analytics batch run (general_dqa.py's
+    # sync_dqa_scores_to_va_records) - None (rendered as "-" by the
+    # frontend) until that job has run at least once for this record.
+    dqaRrs: Optional[float] = None
+    dqaIcs: Optional[float] = None
+    dqaIci: Optional[float] = None
+    dqaAid: Optional[float] = None
 
 def map_to_data_response(config: SettingsConfigData, raw_data: dict) -> DataResponse:
     fm = config.field_mapping
@@ -53,4 +60,8 @@ def map_to_data_response(config: SettingsConfigData, raw_data: dict) -> DataResp
         ccvaCauseMajor=raw_data.get("ccva_cause1_major"),
         ccvaCauseSpecific=raw_data.get("ccva_cause1"),
         ccvaAlgorithm=raw_data.get("ccva_algorithm"),
+        dqaRrs=raw_data.get("dqa_rrs"),
+        dqaIcs=raw_data.get("dqa_ics"),
+        dqaIci=raw_data.get("dqa_ici"),
+        dqaAid=raw_data.get("dqa_aid"),
     )

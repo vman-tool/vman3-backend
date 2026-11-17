@@ -7,6 +7,7 @@ from fastapi.concurrency import run_in_threadpool
 
 from app.pcva.services.target_cause_categories import get_cause_category_lookup
 from app.records.responses.data import map_to_data_response
+from app.settings.models.settings import DqaThresholds
 from app.settings.services.odk_configs import fetch_odk_config
 from app.shared.configs.constants import db_collections
 from app.shared.configs.models import ResponseMainModel
@@ -35,15 +36,39 @@ _VA_RECORDS_CCVA_FILTERABLE_FIELDS = {
 # Gender and Age Group aren't CCVA-denormalized - Gender is a plain
 # form_submissions field (deployment-configurable name), Age Group is
 # computed the same Neonate/Child/Adult way as the Instrument Type column
-# (map_to_data_response) rather than being a stored field at all. Both
-# still belong in Filter By/Group By, so _group_expression() resolves all
-# 5 dimensions through one place.
-_VA_RECORDS_FILTERABLE_DIMENSIONS = set(_VA_RECORDS_CCVA_FILTERABLE_FIELDS) | {'gender', 'age_group'}
+# (map_to_data_response) rather than being a stored field at all. RRS/ICS/
+# ICI/AID (Table 2's own dimensions) aren't stored as discrete categories
+# either - each is a continuous score (dqa_rrs/dqa_ics/dqa_ici/dqa_aid,
+# denormalized by sync_dqa_scores_to_va_records in general_dqa.py) bucketed
+# into the same admin-configurable tiers DqaThresholdService already uses
+# on the frontend (Settings > Configuration > Data Quality Thresholds).
+# All 9 dimensions resolve through _group_expression() in one place.
+_VA_RECORDS_FILTERABLE_DIMENSIONS = set(_VA_RECORDS_CCVA_FILTERABLE_FIELDS) | {
+    'gender', 'age_group', 'dqaRrs', 'dqaIcs', 'dqaIci', 'dqaAid',
+}
 
 
-def _group_expression(config, dimension: str) -> Optional[str]:
+def _dqa_tier_expression(field: str, cfg, bind_vars: Dict, prefix: str) -> str:
+    """RRS/ICS/ICI share this shape (IndicatorThresholds: threshold_high/
+    threshold_mid + tier1/2/3 labels) - bound rather than inlined so a
+    label containing a quote can't break the query."""
+    bind_vars[f"{prefix}_high"] = cfg.threshold_high
+    bind_vars[f"{prefix}_mid"] = cfg.threshold_mid
+    bind_vars[f"{prefix}_tier1"] = cfg.tier1.label
+    bind_vars[f"{prefix}_tier2"] = cfg.tier2.label
+    bind_vars[f"{prefix}_tier3"] = cfg.tier3.label
+    return (
+        f'doc.{field} == null ? "Unclassified" : '
+        f'doc.{field} >= @{prefix}_high ? @{prefix}_tier1 : '
+        f'doc.{field} >= @{prefix}_mid ? @{prefix}_tier2 : @{prefix}_tier3'
+    )
+
+
+def _group_expression(config, dimension: str, bind_vars: Dict) -> Optional[str]:
     """The raw AQL expression (no null-coalescing) for one Filter By/Group
-    By dimension, or None if unrecognized."""
+    By dimension, or None if unrecognized. The 4 DQA dimensions need
+    bind_vars (admin-configurable thresholds/labels bound rather than
+    inlined) - every other dimension ignores it."""
     if dimension in _VA_RECORDS_CCVA_FILTERABLE_FIELDS:
         return f"doc.{_VA_RECORDS_CCVA_FILTERABLE_FIELDS[dimension]}"
     if dimension == 'gender':
@@ -57,20 +82,44 @@ def _group_expression(config, dimension: str) -> Optional[str]:
             f'TO_STRING(doc.{is_child}) == "1" ? "Child" : '
             f'TO_STRING(doc.{is_adult}) == "1" ? "Adult" : "Unclassified"'
         )
+    # No admin config saved yet -> the same shipped defaults
+    # DqaThresholdService's DEFAULT_DQA_THRESHOLDS uses on the frontend.
+    thresholds = config.dqa_thresholds or DqaThresholds()
+    if dimension == 'dqaRrs':
+        return _dqa_tier_expression('dqa_rrs', thresholds.rrs, bind_vars, 'rrs')
+    if dimension == 'dqaIcs':
+        return _dqa_tier_expression('dqa_ics', thresholds.ics, bind_vars, 'ics')
+    if dimension == 'dqaIci':
+        return _dqa_tier_expression('dqa_ici', thresholds.ici, bind_vars, 'ici')
+    if dimension == 'dqaAid':
+        aid = thresholds.aid
+        bind_vars["aid_min"] = aid.min_normal
+        bind_vars["aid_max"] = aid.max_normal
+        bind_vars["aid_short"] = aid.tier_short.label
+        bind_vars["aid_normal"] = aid.tier_normal.label
+        bind_vars["aid_long"] = aid.tier_long.label
+        return (
+            'doc.dqa_aid == null ? "Unclassified" : '
+            'doc.dqa_aid > @aid_max ? @aid_long : '
+            'doc.dqa_aid < @aid_min ? @aid_short : @aid_normal'
+        )
     return None
 
 
 async def get_va_records_ccva_filter_options(db: StandardDatabase) -> ResponseMainModel:
-    """Filter By dropdown options for all 5 VA Records dimensions.
+    """Filter By dropdown options for all 9 VA Records dimensions (Table 1
+    and Table 2 combined - the frontend picks whichever subset it needs).
     Broad/Major Category come from the full configured target cause list
     (Settings > PCVA Configuration), not just whatever the currently
     default CCVA run happens to use, so the dropdown's meaning doesn't
     shift every time the default run changes. Specific Cause and Gender
     have no fixed universe to enumerate that way, so they're the distinct
-    values actually present on VA records right now instead. Age Group is
-    the fixed Neonate/Child/Adult/Unclassified set _group_expression()
-    always produces - nothing to query."""
+    values actually present on VA records right now instead. Age Group
+    and the 4 DQA indicators are each a fixed, small set of tier labels
+    _group_expression() always produces - nothing to query, just read
+    straight off the same admin-configurable thresholds."""
     config = await fetch_odk_config(db)
+    dqa_thresholds = config.dqa_thresholds or DqaThresholds()
     _, category_names = await get_cause_category_lookup(db)
     majors = sorted({name for name, _ in category_names if name})
     broads = sorted({broad for _, broad in category_names if broad})
@@ -97,6 +146,10 @@ async def get_va_records_ccva_filter_options(db: StandardDatabase) -> ResponseMa
             "specific": specific,
             "gender": genders,
             "age_group": ["Neonate", "Child", "Adult", "Unclassified"],
+            "rrs": [dqa_thresholds.rrs.tier1.label, dqa_thresholds.rrs.tier2.label, dqa_thresholds.rrs.tier3.label],
+            "ics": [dqa_thresholds.ics.tier1.label, dqa_thresholds.ics.tier2.label, dqa_thresholds.ics.tier3.label],
+            "ici": [dqa_thresholds.ici.tier1.label, dqa_thresholds.ici.tier2.label, dqa_thresholds.ici.tier3.label],
+            "aid": [dqa_thresholds.aid.tier_short.label, dqa_thresholds.aid.tier_normal.label, dqa_thresholds.aid.tier_long.label],
         },
         message="VA Records filter options fetched successfully",
     )
@@ -181,7 +234,7 @@ async def _build_va_records_filters(
             bind_vars["search_value_pattern"] = f"%{search_value.lower()}%"
 
     if filter_by in _VA_RECORDS_FILTERABLE_DIMENSIONS and filter_value:
-        filters.append(f"({_group_expression(config, filter_by)}) == @ccva_filter_value")
+        filters.append(f"({_group_expression(config, filter_by, bind_vars)}) == @ccva_filter_value")
         bind_vars["ccva_filter_value"] = filter_value
 
     return filters, bind_vars, config
@@ -277,7 +330,7 @@ async def fetch_va_records_grouped(
         if filters:
             query += "FILTER " + " AND ".join(filters) + " "
 
-        group_expr = _group_expression(config, group_by)
+        group_expr = _group_expression(config, group_by, bind_vars)
         query += f"""
         COLLECT grouped_value = ({group_expr}) != null ? ({group_expr}) : "Unclassified" WITH COUNT INTO count
         RETURN {{"group": grouped_value, "count": count}}
@@ -342,8 +395,8 @@ async def fetch_va_records_map_points(
         # only configure admin level 1. Interpolating a blank field name as
         # `doc.` is invalid AQL and fails this whole query.
         district_expr = f"doc.{district_field}" if district_field else "null"
-        gender_expr = _group_expression(config, 'gender')
-        age_group_expr = _group_expression(config, 'age_group')
+        gender_expr = _group_expression(config, 'gender', bind_vars)
+        age_group_expr = _group_expression(config, 'age_group', bind_vars)
 
         collection = db.collection(db_collections.VA_TABLE)
         all_filters = filters + ["doc.coordinates != null", "LENGTH(doc.coordinates) == 3"]
@@ -364,7 +417,11 @@ async def fetch_va_records_map_points(
                     ccvaCauseBroad: doc.ccva_cause1_broad,
                     ccvaCauseMajor: doc.ccva_cause1_major,
                     ccvaCauseSpecific: doc.ccva_cause1,
-                    ccvaAlgorithm: doc.ccva_algorithm
+                    ccvaAlgorithm: doc.ccva_algorithm,
+                    dqaRrs: doc.dqa_rrs,
+                    dqaIcs: doc.dqa_ics,
+                    dqaIci: doc.dqa_ici,
+                    dqaAid: doc.dqa_aid
                 }}
         """
 

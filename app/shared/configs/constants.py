@@ -91,6 +91,15 @@ collections_with_indexes = {
         {"fields": ["ccva_cause1_broad"], "unique": False, "type": "persistent", "name": "idx_ccva_cause1_broad"},
         {"fields": ["ccva_cause1_major"], "unique": False, "type": "persistent", "name": "idx_ccva_cause1_major"},
         {"fields": ["ccva_algorithm"], "unique": False, "type": "persistent", "name": "idx_ccva_algorithm"},
+
+        # VA Records table's "Table 2" (RRS/ICS/ICI/AID columns) -
+        # denormalized here (see sync_dqa_scores_to_va_records in
+        # general_dqa.py, run as part of every DQA analytics batch job)
+        # so these can be sorted/filtered like any other column too.
+        {"fields": ["dqa_rrs"], "unique": False, "type": "persistent", "name": "idx_dqa_rrs"},
+        {"fields": ["dqa_ics"], "unique": False, "type": "persistent", "name": "idx_dqa_ics"},
+        {"fields": ["dqa_ici"], "unique": False, "type": "persistent", "name": "idx_dqa_ici"},
+        {"fields": ["dqa_aid"], "unique": False, "type": "persistent", "name": "idx_dqa_aid"},
     ],
     db_collections.USERS: [
          {"fields": ["is_active"], "type": "persistent", "name": "u_is_active"},

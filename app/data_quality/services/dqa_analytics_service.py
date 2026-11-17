@@ -240,6 +240,7 @@ async def compute_and_store_dqa_analytics(db: StandardDatabase) -> dict:
         compute_and_store_dqa_map_points,
         compute_and_store_dqa_trend_points,
         compute_and_store_dqa_location_snapshots,
+        sync_dqa_scores_to_va_records,
     )
 
     computed_at = datetime.utcnow().isoformat() + "Z"
@@ -313,6 +314,15 @@ async def compute_and_store_dqa_analytics(db: StandardDatabase) -> dict:
         except Exception as loc_exc:
             import logging
             logging.getLogger(__name__).error(f"DQA location snapshots computation failed: {loc_exc}")
+
+        # Denormalizes each record's own scores onto form_submissions, for
+        # the VA Records table's own "Table 2" (Filter By/Group By/sort on
+        # RRS/ICS/ICI/AID) - same isolation reasoning as above.
+        try:
+            await sync_dqa_scores_to_va_records(db, df, rrs_series, ics_series, aid_series, ici_series)
+        except Exception as sync_exc:
+            import logging
+            logging.getLogger(__name__).error(f"DQA scores sync to VA records failed: {sync_exc}")
 
         snapshot = {
             "_key": _SNAPSHOT_KEY,

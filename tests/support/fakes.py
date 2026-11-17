@@ -43,6 +43,7 @@ class FakeCollection:
     def __init__(self, name: str):
         self.name = name
         self.inserted: list[Any] = []
+        self.updated: list[Any] = []
         self.truncated = False
         # In-memory key-value backing for get/has/update, independent of
         # `inserted` (which some tests assert against as an ordered list) -
@@ -87,6 +88,10 @@ class FakeCollection:
         else:
             self._docs[key] = dict(document)
         return self._docs[key]
+
+    def update_many(self, documents, merge: bool = True, **kwargs):
+        self.updated.extend(documents)
+        return [self.update(doc, merge=merge) for doc in documents]
 
 
 class FakeDB:
