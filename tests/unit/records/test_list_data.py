@@ -136,6 +136,50 @@ async def test_sorting_by_an_unrecognized_field_adds_no_sort_clause():
     assert "SORT" not in query
 
 
+# Region/District/Gender/Instrument Type - unlike the CCVA/DQA columns
+# above, these aren't a bare doc.<field> (region/district read the
+# deployment's configured field_mapping, Instrument Type is derived), so
+# sort_by resolves them through _group_expression() instead of
+# _VA_RECORDS_CCVA_SORT_FIELDS's flat name lookup.
+class TestSortingByRegionDistrictGenderAndInstrumentType:
+    async def test_sorting_by_region_sorts_on_the_configured_location_level1_field(self):
+        fake_db = FakeDB(responder=_responder)
+
+        with _patch_config():
+            await fetch_va_records(current_user={}, sort_by="region", sort_dir="asc", db=fake_db)
+
+        query = fake_db.aql.queries[0][0]
+        assert "SORT (doc.id10005r) ASC" in query
+
+    async def test_sorting_by_district_sorts_on_the_configured_location_level2_field(self):
+        fake_db = FakeDB(responder=_responder)
+
+        with _patch_config():
+            await fetch_va_records(current_user={}, sort_by="district", sort_dir="desc", db=fake_db)
+
+        query = fake_db.aql.queries[0][0]
+        assert "SORT (doc.id10005d) DESC" in query
+
+    async def test_sorting_by_gender_sorts_on_the_configured_gender_field(self):
+        fake_db = FakeDB(responder=_responder)
+
+        with _patch_config():
+            await fetch_va_records(current_user={}, sort_by="gender", sort_dir="asc", db=fake_db)
+
+        query = fake_db.aql.queries[0][0]
+        assert "SORT (doc.id10019) ASC" in query
+
+    async def test_sorting_by_questionnaire_type_sorts_on_the_same_instrument_type_classification(self):
+        fake_db = FakeDB(responder=_responder)
+
+        with _patch_config():
+            await fetch_va_records(current_user={}, sort_by="questionnaireType", sort_dir="asc", db=fake_db)
+
+        query = fake_db.aql.queries[0][0]
+        assert 'SORT (TO_STRING(doc.isneonatal) == "1" ? "Neonate"' in query
+        assert 'TO_STRING(doc.isadult) == "1" ? "Adult" : "Unclassified") ASC' in query
+
+
 async def test_filtering_by_a_ccva_column_adds_a_filter_clause_on_the_denormalized_field():
     fake_db = FakeDB(responder=_responder)
 

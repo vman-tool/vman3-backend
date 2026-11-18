@@ -33,6 +33,14 @@ _VA_RECORDS_CCVA_SORT_FIELDS = {
     'dqaIci': 'dqa_ici',
     'dqaAid': 'dqa_aid',
 }
+# Sortable but not a bare doc.<field> - resolved through _group_expression()
+# instead of a flat name lookup (region/district read the deployment's
+# configured field_mapping; questionnaireType is derived, not stored).
+# Deliberately separate from _VA_RECORDS_FILTERABLE_DIMENSIONS - the user
+# asked only for these 4 to become sortable, not new Filter By/Group By
+# options (gender already is one; region/district/questionnaireType
+# aren't, and this doesn't change that).
+_VA_RECORDS_EXPRESSION_SORT_FIELDS = {'region', 'district', 'gender', 'questionnaireType'}
 _VA_RECORDS_CCVA_FILTERABLE_FIELDS = {
     'ccvaCauseBroad': 'ccva_cause1_broad',
     'ccvaCauseMajor': 'ccva_cause1_major',
@@ -71,14 +79,28 @@ def _dqa_tier_expression(field: str, cfg, bind_vars: Dict, prefix: str) -> str:
 
 def _group_expression(config, dimension: str, bind_vars: Dict) -> Optional[str]:
     """The raw AQL expression (no null-coalescing) for one Filter By/Group
-    By dimension, or None if unrecognized. The 4 DQA dimensions need
-    bind_vars (admin-configurable thresholds/labels bound rather than
-    inlined) - every other dimension ignores it."""
+    By/sortable dimension, or None if unrecognized. The 4 DQA dimensions
+    need bind_vars (admin-configurable thresholds/labels bound rather than
+    inlined) - every other dimension ignores it.
+
+    'region'/'district'/'questionnaireType' are sort-only (not in
+    _VA_RECORDS_FILTERABLE_DIMENSIONS, so Filter By/Group By don't offer
+    them) - resolved here anyway since fetch_va_records's sort_by handling
+    reuses this same function for any dimension needing more than a bare
+    doc.<field> (see _VA_RECORDS_EXPRESSION_SORT_FIELDS)."""
     if dimension in _VA_RECORDS_CCVA_FILTERABLE_FIELDS:
         return f"doc.{_VA_RECORDS_CCVA_FILTERABLE_FIELDS[dimension]}"
+    if dimension == 'region':
+        return f"doc.{config.field_mapping.location_level1}"
+    if dimension == 'district':
+        return f"doc.{config.field_mapping.location_level2}"
     if dimension == 'gender':
         return f"doc.{config.field_mapping.deceased_gender}"
-    if dimension == 'age_group':
+    if dimension in ('age_group', 'questionnaireType'):
+        # Same Neonate/Child/Adult priority chain map_to_data_response uses
+        # for the Instrument Type column (responses/data.py) - 'age_group'
+        # is Filter By/Group By's name for it, 'questionnaireType' is the
+        # table column's own name, used only for sort_by.
         is_neonate = config.field_mapping.is_neonate
         is_child = config.field_mapping.is_child
         is_adult = config.field_mapping.is_adult
@@ -259,6 +281,10 @@ async def fetch_va_records(current_user:dict,paging: bool = True, page_number: i
         if sort_by in _VA_RECORDS_CCVA_SORT_FIELDS:
             direction = "DESC" if str(sort_dir).lower() == "desc" else "ASC"
             query += f"SORT doc.{_VA_RECORDS_CCVA_SORT_FIELDS[sort_by]} {direction} "
+        elif sort_by in _VA_RECORDS_EXPRESSION_SORT_FIELDS:
+            direction = "DESC" if str(sort_dir).lower() == "desc" else "ASC"
+            sort_expr = _group_expression(config, sort_by, bind_vars)
+            query += f"SORT ({sort_expr}) {direction} "
 
         if paging and page_number and limit:
             query += "LIMIT @offset, @size "
