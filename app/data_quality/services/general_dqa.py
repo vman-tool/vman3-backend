@@ -389,11 +389,26 @@ async def fetch_ici_stats(
 # ---------------------------------------------------------------------------
 
 def _clean(v):
-    """None-safe scalar cleanup: NaN/None -> None, everything else passed
-    through as-is (caller casts to float where a number is expected)."""
+    """None-safe scalar cleanup: NaN/pd.NA/None -> None, everything else
+    passed through as-is (caller casts to float where a number is
+    expected).
+
+    Was `isinstance(v, float) and pd.isna(v)` - missed pandas' own NA
+    sentinel (pd.NA, type NAType), which shows up instead of float('nan')
+    for nullable-dtype columns (e.g. a column pandas infers as Int64/
+    boolean rather than float64). That NAType value then reached a bare
+    float(v) downstream and raised instead of becoming None - caught live
+    against the dev DB, where it silently failed
+    compute_and_store_dqa_map_points/_trend_points (each wrapped in its
+    own try/except in compute_and_store_dqa_analytics) for however long,
+    and would have done the same to the new sync_dqa_scores_to_va_records.
+    pd.isna() itself already handles both NaN and pd.NA correctly - the
+    bug was only in gating that call behind an isinstance(v, float) check
+    pd.NA fails.
+    """
     if v is None:
         return None
-    if isinstance(v, float) and pd.isna(v):
+    if isinstance(v, (float, type(pd.NA))) and pd.isna(v):
         return None
     return v
 
@@ -508,6 +523,54 @@ async def compute_and_store_dqa_map_points(
         if rows:
             collection.insert_many(rows)
         return len(rows)
+
+    return await run_in_threadpool(run)
+
+
+async def sync_dqa_scores_to_va_records(
+    db: StandardDatabase,
+    df: pd.DataFrame,
+    rrs: pd.Series,
+    ics: pd.Series,
+    aid: pd.Series,
+    ici: pd.Series,
+) -> int:
+    """Denormalizes each VA record's own RRS/ICS/ICI/AID score onto its
+    form_submissions doc (dqa_rrs/dqa_ics/dqa_ici/dqa_aid) - same reasoning
+    as CCVA's _sync_ccva_default_to_va_records: the VA Records table's own
+    "Table 2" (Filter By/Group By/sort) needs these as ordinary stored
+    columns, not something joined/computed at read time.
+
+    Simpler than compute_and_store_dqa_map_points above: `df` here is
+    _fetch_va_dataframe's result - the *whole* VA_TABLE, not GPS/date-
+    gated - so every row's "_key" already IS the matching
+    form_submissions._key. No join/business-key matching needed, just a
+    plain bulk update-by-_key (update_many merges fields into each
+    existing doc rather than replacing it).
+    """
+    if df.empty:
+        return 0
+
+    va_id_col = df["_key"]
+
+    def run():
+        def _num(series, i):
+            v = _clean(series.loc[i])
+            return float(v) if v is not None else None
+
+        updates = [
+            {
+                "_key": str(va_id_col.loc[i]),
+                "dqa_rrs": _num(rrs, i),
+                "dqa_ics": _num(ics, i),
+                "dqa_ici": _num(ici, i),
+                "dqa_aid": _num(aid, i),
+            }
+            for i in df.index
+        ]
+        collection = db.collection(db_collections.VA_TABLE)
+        collection.update_many(updates)
+        return len(updates)
 
     return await run_in_threadpool(run)
 

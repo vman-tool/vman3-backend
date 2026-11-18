@@ -14,6 +14,21 @@ class DataResponse(BaseModel):
     interviewerName: Optional[str] = None
     questionnaireType: Optional[str] = None
     gender: Optional[str] = None
+    # Denormalized from the default CCVA run onto this doc at Set/Clear
+    # Default time (ccva_data_services.py's _sync_ccva_default_to_va_records)
+    # - None (rendered as "-" by the frontend) when this VA has no result
+    # under whichever run is currently marked default.
+    ccvaCauseBroad: Optional[str] = None
+    ccvaCauseMajor: Optional[str] = None
+    ccvaCauseSpecific: Optional[str] = None
+    ccvaAlgorithm: Optional[str] = None
+    # Denormalized by every DQA analytics batch run (general_dqa.py's
+    # sync_dqa_scores_to_va_records) - None (rendered as "-" by the
+    # frontend) until that job has run at least once for this record.
+    dqaRrs: Optional[float] = None
+    dqaIcs: Optional[float] = None
+    dqaIci: Optional[float] = None
+    dqaAid: Optional[float] = None
 
 def map_to_data_response(config: SettingsConfigData, raw_data: dict) -> DataResponse:
     fm = config.field_mapping
@@ -41,4 +56,12 @@ def map_to_data_response(config: SettingsConfigData, raw_data: dict) -> DataResp
         interviewerName=raw_data.get(fm.interviewer_name, ""),
         questionnaireType=questionnaire_type,
         gender=gender,
+        ccvaCauseBroad=raw_data.get("ccva_cause1_broad"),
+        ccvaCauseMajor=raw_data.get("ccva_cause1_major"),
+        ccvaCauseSpecific=raw_data.get("ccva_cause1"),
+        ccvaAlgorithm=raw_data.get("ccva_algorithm"),
+        dqaRrs=raw_data.get("dqa_rrs"),
+        dqaIcs=raw_data.get("dqa_ics"),
+        dqaIci=raw_data.get("dqa_ici"),
+        dqaAid=raw_data.get("dqa_aid"),
     )
