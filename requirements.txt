@@ -1,9 +1,4 @@
-# kombu's Redis transport (pulled in via celery[redis] below) added a
-# hard runtime check requiring redis-py >= 6.1.0 ("Redis transport
-# requires redis-py versions 6.1.0 or later") - celery[redis] itself is
-# unpinned past 5.3.0, so a fresh deploy picks up whatever kombu is
-# current at build time, and this cap must stay ahead of that check.
-redis>=6.1.0,<7.0.0
+redis>=4.6.0,<5.0.0
 aiosmtplib==2.0.2
 annotated-types==0.7.0
 anyio==4.4.0
@@ -87,6 +82,13 @@ xlrd==2.0.1
 xmltodict==0.13.0
 zipp==3.19.2
 celery[redis]>=5.3.0,<6.0.0
+# kombu 5.7.0 (the first version of celery 5.7.0's dependency range to
+# pull it in) added a hard runtime check requiring redis-py >= 6.1.0,
+# which directly conflicts with fastapi-cache2[redis]==0.2.1's own pin
+# (redis<5.0.0) - pip can't satisfy both at once. Capping kombu below
+# 5.7.0 keeps celery on a kombu that only needs redis-py >= 3.2.0, well
+# within fastapi-cache2's range, without touching either of those two.
+kombu<5.7.0
 flower>=2.0.0
 
 # VMan ML — installed from GitHub; ML deps (sklearn, xgboost, shap, etc.)
