@@ -1,4 +1,9 @@
-redis>=4.6.0,<5.0.0
+# kombu's Redis transport (pulled in via celery[redis] below) added a
+# hard runtime check requiring redis-py >= 6.1.0 ("Redis transport
+# requires redis-py versions 6.1.0 or later") - celery[redis] itself is
+# unpinned past 5.3.0, so a fresh deploy picks up whatever kombu is
+# current at build time, and this cap must stay ahead of that check.
+redis>=6.1.0,<7.0.0
 aiosmtplib==2.0.2
 annotated-types==0.7.0
 anyio==4.4.0
