@@ -56,12 +56,28 @@ def _fetch_record(db: StandardDatabase, va_id: str) -> Optional[dict]:
 
 
 def _fetch_dictionary(db: StandardDatabase) -> tuple:
-    """Question names (for padding a lone record) and their display labels."""
+    """Question names (for padding a lone record) and their display labels.
+
+    `q.label` is whatever language that question happened to be authored or
+    imported in - for most WHO VA questions that's English, but some groups
+    (vital registration/civil registry fields, and the generic ODK meta
+    fields like starttime/endtime) have it stored in the deployment's other
+    configured language (Khmer, in this deployment) instead. `q.labels` is
+    the actual per-language map every question has (confirmed: every
+    document checked had a `labels.English` entry, including the ones whose
+    bare `label` was Khmer) - reading that instead is what makes this panel
+    actually honour the admin panel's "default language: English" setting
+    rather than showing whichever language the source form happened to use
+    for a given question.
+    """
     rows = list(db.aql.execute(
-        f"FOR q IN {db_collections.VA_QUESTIONS} RETURN {{name: q.name, label: q.label}}"
+        f"FOR q IN {db_collections.VA_QUESTIONS} RETURN {{name: q.name, label: q.labels.English, fallback: q.label}}"
     ))
     names = [r["name"] for r in rows if r.get("name")]
-    labels = {r["name"].lower(): r.get("label") for r in rows if r.get("name") and r.get("label")}
+    labels = {
+        r["name"].lower(): (r.get("label") or r.get("fallback"))
+        for r in rows if r.get("name") and (r.get("label") or r.get("fallback"))
+    }
     return names, labels
 
 
@@ -126,11 +142,23 @@ def _build_summary(row: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
+def _row_get_ci(row: pd.Series, name: str):
+    """Case-insensitive lookup into a single cleaned_df row."""
+    if name in row.index:
+        return row[name]
+    lname = name.lower()
+    for key in row.index:
+        if key.lower() == lname:
+            return row[key]
+    return None
+
+
 def _top_contributions(
     predictor,
     x_scaled,
     class_index: int,
     labels_by_name: Dict[str, str],
+    cleaned_row: pd.Series,
     top_n: int = 6,
 ) -> list:
     """Which inputs pushed the model toward this cause, and how hard.
@@ -142,6 +170,31 @@ def _top_contributions(
     ValueError before it computes anything - for one record exactly as for
     forty thousand. XGBoost computes the same exact TreeSHAP values internally
     with no such problem.
+
+    Two quality filters this used to skip, both already solved for the batch
+    path's own notes (CCVAPredictor._generate_notes) but never applied here
+    - found while checking a real record (uuid:008d9a0c-...) whose top-ranked
+    "contributor" was `narr_emb_287`, a narrative-embedding vector dimension
+    no coder can act on, and whose third-ranked one (id10080, "What was
+    her/his role in the road traffic accident?") had no answer at all for
+    this record (not asked, since id10079 was "no"):
+
+    - Narrative embedding dimensions (`narr_emb_*`) are collapsed into one
+      aggregate "Free-text description" entry carrying the record's actual
+      narrative text, instead of surfacing uninterpretable dimension names
+      individually - same threshold CCVAPredictor._NARRATIVE_NOTE_THRESHOLD
+      uses for the batch path's notes, so a record with no meaningful
+      narrative signal doesn't get a noise entry.
+    - A structured variable whose own answer is missing/not-applicable for
+      this record (CCVAPredictor._is_informative) is skipped in favour of
+      the next-ranked one, same as CCVAPredictor._SUPPRESSED_FEATURES'
+      administrative columns (id10010 and friends) - a variable the coder
+      cannot even see an answer for is not an explanation they can act on,
+      whatever weight XGBoost's attribution assigns it.
+
+    Each returned entry also carries `response`: the record's actual answer
+    for that variable, so a coder can judge the explanation themselves
+    instead of taking "pushed towards X" on faith.
 
     Returns [] on any failure: an explanation is a bonus, and losing it must
     never cost the prediction itself.
@@ -159,24 +212,71 @@ def _top_contributions(
 
         feature_names = list(predictor.scaler_feature_columns)
         values = row[: len(feature_names)]
+        is_narrative = np.array([n.startswith("narr_emb_") for n in feature_names])
 
-        ranked = np.argsort(-np.abs(values))[:top_n]
+        narrative_entry = None
+        total_abs = float(np.sum(np.abs(values)))
+        if is_narrative.any() and total_abs > 1e-6:
+            narr_values = values[is_narrative]
+            narr_frac = float(np.sum(np.abs(narr_values))) / total_abs
+            if narr_frac >= predictor._NARRATIVE_NOTE_THRESHOLD:
+                narr_signed = float(np.sum(narr_values))
+                text = predictor._narrative_text(cleaned_row)
+                narrative_entry = {
+                    "variable": "narrative_text",
+                    "label": "Free-text description",
+                    "response": text or "(no narrative text recorded)",
+                    "weight": round(narr_signed, 4),
+                    "direction": "towards" if narr_signed > 0 else "away from",
+                }
+
+        structured_idx = np.where(~is_narrative)[0]
+        ranked = structured_idx[np.argsort(-np.abs(values[structured_idx]))]
 
         out = []
         for index in ranked:
+            if len(out) >= top_n:
+                break
             weight = float(values[index])
             if weight == 0:
                 continue
             raw_name = feature_names[index]
-            # Encoded columns carry suffixes (id10120_unit, id10077_a); the
-            # dictionary is keyed by the bare question name.
+            if raw_name.lower() in predictor._SUPPRESSED_FEATURES:
+                continue
+
+            response = _row_get_ci(cleaned_row, raw_name)
+            if isinstance(response, float) and pd.isna(response):
+                response = None
+            if not predictor._is_informative(response):
+                continue
+
+            # Encoded columns sometimes carry suffixes (id10120_unit,
+            # id10077_a) that are themselves real, separately-dictionaried
+            # sub-questions - e.g. id10120_unit is "For how long was (s)he
+            # ill before death?" (the units of a duration), a different and
+            # more specific question than its bare parent id10120 ("Calculated
+            # number of Days with illness"). Try the exact suffixed name
+            # first so a sub-question gets its own label rather than silently
+            # borrowing its parent's - which previously showed "Calculated
+            # number of Days with illness" for a record whose actual answer
+            # was "months" (the unit, not a day count), a mismatch a coder
+            # has no way to catch without already knowing the raw column
+            # names. Only fall back to the bare base name for columns that
+            # don't have their own dictionary entry at all.
             base = raw_name.split("_")[0].lower()
             out.append({
                 "variable": raw_name,
-                "label": labels_by_name.get(base) or labels_by_name.get(raw_name.lower()) or raw_name,
+                "label": labels_by_name.get(raw_name.lower()) or labels_by_name.get(base) or raw_name,
+                "response": str(response),
                 "weight": round(weight, 4),
                 "direction": "towards" if weight > 0 else "away from",
             })
+
+        if narrative_entry:
+            out.append(narrative_entry)
+            out.sort(key=lambda c: -abs(c["weight"]))
+            out = out[:top_n]
+
         return out
     except Exception as exc:  # never let explanation failure lose the answer
         print(f"ML explanation unavailable: {exc}")
@@ -239,7 +339,7 @@ def _predict(record: dict, question_names: list, labels_by_name: Dict[str, str])
         adjusted_probs = predictor._apply_plausibility_constraints(raw_probs, cleaned)
         class_index = int(np.argmax(adjusted_probs[0]))
         row["_contributions"] = _top_contributions(
-            predictor, x_scaled, class_index, labels_by_name
+            predictor, x_scaled, class_index, labels_by_name, cleaned.iloc[0]
         )
         explained_label = predictor.label_encoder.inverse_transform(
             [predictor.model.classes_[class_index]]
