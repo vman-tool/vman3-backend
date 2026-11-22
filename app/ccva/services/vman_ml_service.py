@@ -139,6 +139,20 @@ def _get_cached_predictor(model_path: Path) -> "CCVAPredictor":
     return _predictor_cache[key]
 
 
+def invalidate_predictor_cache(model_path: Path = _DEFAULT_MODEL) -> None:
+    """Drops the cached predictor for model_path so the next call to
+    _get_cached_predictor reloads it from disk - call this right after
+    overwriting the file (settings_routes.py's upload/restore endpoints).
+
+    Only clears *this process's* cache. Celery workers run as separate OS
+    processes with their own independent copy of _predictor_cache (see the
+    comment above it) - this does nothing for them. They need their own
+    cache cleared or the worker process restarted to pick up a new model.
+    """
+    with _predictor_lock:
+        _predictor_cache.pop(str(model_path), None)
+
+
 # Guards the "mutate predictor thresholds -> predict -> restore" critical
 # section below. _predictor_lock (above) only protects cache population -
 # without this second lock, a bulk CCVA run (run_vman_ml) and a single-record

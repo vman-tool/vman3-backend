@@ -767,6 +767,103 @@ _MODEL_REGISTRY = _ML_MODELS_DIR / "model_registry.json"
 _MODEL_ARCHIVE  = _ML_MODELS_DIR / "archive"
 
 
+def _invalidate_this_process_cache() -> None:
+    """Clears vman_ml_service's in-memory predictor cache for _ACTIVE_MODEL in
+    *this* process, so the next prediction in this API process picks up the
+    model file just written, with no restart needed for it specifically.
+
+    Only this process - Celery workers are separate OS processes with their
+    own independent cache and are NOT affected by this call. See that
+    module's invalidate_predictor_cache() docstring for why, and the admin
+    UI's "reload" flow for how workers get a fresh model.
+    """
+    try:
+        from app.ccva.services.vman_ml_service import invalidate_predictor_cache
+        invalidate_predictor_cache(_ACTIVE_MODEL)
+    except Exception:
+        pass  # best-effort - a prediction request will just reload lazily anyway if this fails
+
+
+def _celery_busy_workers(timeout: float = 3.0) -> list:
+    """Worker names currently running at least one task, via Celery's own
+    inspect().active() - used to block a model swap while a DQA/sync job
+    might be mid-run against the soon-to-be-stale cached predictor.
+
+    Returns [] (not busy) if Celery is unreachable or no worker responds in
+    time - if nothing is listening, there's no running process whose cache
+    could go stale, so there's nothing this check needs to protect against.
+    Only a *confirmed* active task blocks the swap; an inconclusive check
+    does not.
+    """
+    try:
+        from app.celery_app import celery_app
+        active = celery_app.control.inspect(timeout=timeout).active() or {}
+    except Exception:
+        return []
+    return [worker for worker, tasks in active.items() if tasks]
+
+
+def _require_celery_idle() -> None:
+    busy = _celery_busy_workers()
+    if busy:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                f"Celery worker(s) are currently running a task ({', '.join(busy)}) - e.g. a "
+                f"DQA or data-sync job. Swapping the model now would leave that job's worker "
+                f"process serving a now-stale predictor for the rest of its run. Wait for it "
+                f"to finish and try again."
+            ),
+        )
+
+
+def _find_existing_version(version: str) -> Optional[str]:
+    """Returns where `version` is already recorded (the active model, or
+    which archived entry), or None if it isn't used anywhere yet.
+
+    The whole point of a version label is to unambiguously identify one
+    specific trained model - two different files sharing one would defeat
+    that and risk real confusion about which is actually deployed, so
+    uploading a version that already exists is rejected outright rather
+    than silently allowed to shadow the original.
+    """
+    if not _MODEL_REGISTRY.exists():
+        return None
+    with open(_MODEL_REGISTRY) as f:
+        registry = _json.load(f)
+    if registry.get("version") == version:
+        return "currently the active model"
+    for h in registry.get("history", []):
+        if h.get("version") == version:
+            return f"already archived ({h.get('archive')})"
+    return None
+
+
+def _require_version_not_duplicate(version: str) -> None:
+    existing = _find_existing_version(version)
+    if existing:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Version '{version}' is {existing}. Retrain with a different "
+                   f"--report-version, or delete/rename the existing one first.",
+        )
+
+
+def _broadcast_cache_clear(timeout: float = 3.0) -> None:
+    """Tells any running Celery workers to drop their own cached predictor
+    (see celery_app.py's clear_vman_ml_cache control command) so they pick up
+    the model just swapped in on their next task - no worker restart, and
+    only ever called right after _require_celery_idle() confirmed nothing
+    was mid-task. Best-effort: a worker that doesn't get this will still
+    self-correct whenever it does eventually restart.
+    """
+    try:
+        from app.celery_app import celery_app
+        celery_app.control.broadcast('clear_vman_ml_cache', reply=False, timeout=timeout)
+    except Exception:
+        pass
+
+
 @settings_router.get("/ml-model", status_code=status.HTTP_200_OK, response_model=ResponseMainModel)
 async def get_ml_model_info(_=Depends(get_current_user)):
     """Return the current model registry (version, metrics, history)."""
@@ -781,24 +878,134 @@ async def get_ml_model_info(_=Depends(get_current_user)):
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
 
 
-@settings_router.post("/ml-model/upload", status_code=status.HTTP_200_OK, response_model=ResponseMainModel)
-async def upload_ml_model(
+_REQUIRED_ARTIFACT_KEYS = ('model', 'scaler', 'label_encoder', 'feature_encoders', 'preprocessor')
+
+
+def _inspect_pkl_bytes(content: bytes) -> dict:
+    """Unpickles an uploaded .pkl's bytes and validates/extracts what the
+    registry needs: version, algorithm, and metrics - all read from the
+    file's own artifacts['metrics'] / ['model_name'], never hand-typed.
+
+    vman_ml >= v1.2.9 (ModelTrainer.save_model()) embeds the model's own
+    headline metrics (accuracy/f1_macro/f1_weighted/auroc_macro/cv_f1_macro/
+    n_training_samples/n_test_samples) and model_name directly in the
+    artifacts dict, computed from the same hold-out evaluation shown in that
+    run's training_summary.md - trusting these means what's recorded can
+    never drift from what's actually in the file, and there's no manual
+    fallback to keep in sync.
+
+    Unpickling here is no new trust boundary: both endpoints that call this
+    already require SETTINGS_CREATE_SYSTEM_CONFIGS, and the same bytes get
+    unpickled anyway the first time a worker loads this file for prediction
+    (vman_ml_service._get_cached_predictor).
+
+    Returns {'valid': True, 'version', 'algorithm', 'metrics'} on success, or
+    {'valid': False, 'error': <message>} - never raises - covering anything
+    from a corrupt file to a pre-v1.2.9 model with no embedded metrics.
+    """
+    try:
+        import io as _io
+        import joblib as _joblib
+        artifacts = _joblib.load(_io.BytesIO(content))
+    except Exception as exc:
+        return {'valid': False, 'error': f"Not a readable model file: {exc}"}
+
+    if not isinstance(artifacts, dict):
+        return {'valid': False, 'error': "File doesn't contain a recognised model bundle."}
+
+    missing = [k for k in _REQUIRED_ARTIFACT_KEYS if k not in artifacts]
+    if missing:
+        return {'valid': False, 'error': f"Missing required model component(s): {', '.join(missing)}."}
+
+    metrics = artifacts.get('metrics') or {}
+    if not metrics:
+        return {
+            'valid': False,
+            'error': "This file has no embedded metrics (requires vman_ml >= v1.2.9). "
+                     "Retrain with a newer vman_ml version to upload it here.",
+        }
+
+    return {
+        'valid':     True,
+        'version':   metrics.get('version'),
+        'notes':     metrics.get('notes') or '',  # absent on pre-notes-embedding files - not an error
+        'algorithm': artifacts.get('model_name') or 'Unknown',
+        'metrics':   metrics,
+    }
+
+
+def _archive_active_model(registry: dict, history: list) -> None:
+    """Copies the current _ACTIVE_MODEL into _MODEL_ARCHIVE and appends its
+    entry to `history` (mutated in place) - shared by upload and restore,
+    which both replace whatever is currently active.
+    """
+    if _ACTIVE_MODEL.exists() and registry.get("version"):
+        _MODEL_ARCHIVE.mkdir(parents=True, exist_ok=True)
+        old_version  = registry["version"]
+        old_date     = registry.get("trained_at", "unknown")
+        archive_name = f"ccva_model_v{old_version}_{old_date}.pkl"
+        _shutil.copy2(_ACTIVE_MODEL, _MODEL_ARCHIVE / archive_name)
+        history.append({
+            "version":     old_version,
+            "trained_at":  old_date,
+            "algorithm":   registry.get("algorithm", ""),
+            "archive":     f"archive/{archive_name}",
+            "replaced_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        })
+
+
+@settings_router.post("/ml-model/validate", status_code=status.HTTP_200_OK, response_model=ResponseMainModel)
+async def validate_ml_model(
     file: UploadFile = File(...),
-    version: str = Form(...),
-    notes: str = Form(""),
-    accuracy: float = Form(...),
-    f1_macro: float = Form(...),
-    f1_weighted: float = Form(...),
-    n_training_samples: int = Form(...),
-    n_test_samples: int = Form(...),
-    cv_f1_macro: Optional[float] = Form(None),
     current_user=Depends(get_current_user),
     required_privs: List[str] = Depends(check_privileges([AccessPrivileges.SETTINGS_CREATE_SYSTEM_CONFIGS])),
 ):
-    """Upload a new .pkl model file and update the model registry."""
+    """Inspects a .pkl without deploying it - lets the UI show detected
+    metrics (or a clear error) right after file selection, before the admin
+    commits to uploading. Writes nothing to disk.
+    """
     if not (file.filename or "").endswith(".pkl"):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,
                             detail="Only .pkl model files are accepted.")
+    content = await file.read()
+    result = _inspect_pkl_bytes(content)
+    if not result['valid']:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=result['error'])
+    if result['version']:
+        _require_version_not_duplicate(result['version'])
+    return ResponseMainModel(data=result, message="File is valid", error=False)
+
+
+@settings_router.post("/ml-model/upload", status_code=status.HTTP_200_OK, response_model=ResponseMainModel)
+async def upload_ml_model(
+    file: UploadFile = File(...),
+    current_user=Depends(get_current_user),
+    required_privs: List[str] = Depends(check_privileges([AccessPrivileges.SETTINGS_CREATE_SYSTEM_CONFIGS])),
+):
+    """Upload a new .pkl model file and update the model registry.
+
+    Every field - version, notes, metrics - is always read from the file
+    itself (see _inspect_pkl_bytes). There's no manual-entry fallback: the
+    person uploading a model has no basis to describe a training run they
+    didn't do, so a file without embedded metadata is rejected outright
+    rather than deployed with blanks or guessed values.
+    """
+    if not (file.filename or "").endswith(".pkl"):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,
+                            detail="Only .pkl model files are accepted.")
+
+    content = await file.read()
+    result = _inspect_pkl_bytes(content)
+    if not result['valid']:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=result['error'])
+    if not result['version']:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="'version' is missing from the uploaded .pkl's embedded metadata.",
+        )
+    _require_version_not_duplicate(result['version'])
+
+    _require_celery_idle()  # raises 409 if any worker is mid-task - checked before any write
 
     # Read old registry before overwriting
     old_registry: dict = {}
@@ -806,52 +1013,154 @@ async def upload_ml_model(
         with open(_MODEL_REGISTRY) as f:
             old_registry = _json.load(f)
 
-    # Archive the current active model
     history: list = list(old_registry.get("history", []))
-    if _ACTIVE_MODEL.exists() and old_registry.get("version"):
-        _MODEL_ARCHIVE.mkdir(parents=True, exist_ok=True)
-        old_version   = old_registry["version"]
-        old_date      = old_registry.get("trained_at", "unknown")
-        archive_name  = f"ccva_model_v{old_version}_{old_date}.pkl"
-        _shutil.copy2(_ACTIVE_MODEL, _MODEL_ARCHIVE / archive_name)
-        history.append({
-            "version":     old_version,
-            "trained_at":  old_date,
-            "algorithm":   old_registry.get("algorithm", ""),
-            "archive":     f"archive/{archive_name}",
-            "replaced_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
-        })
+    _archive_active_model(old_registry, history)
 
-    # Save the new model file
-    content = await file.read()
     with open(_ACTIVE_MODEL, "wb") as f:
         f.write(content)
+    _invalidate_this_process_cache()
+    _broadcast_cache_clear()
 
-    # Build new registry entry
-    metrics: dict = {
-        "accuracy":           round(accuracy, 4),
-        "f1_macro":           round(f1_macro, 4),
-        "f1_weighted":        round(f1_weighted, 4),
-        "n_training_samples": n_training_samples,
-        "n_test_samples":     n_test_samples,
-    }
-    if cv_f1_macro is not None:
-        metrics["cv_f1_macro"] = round(cv_f1_macro, 4)
-
+    metrics = result['metrics']
     new_registry = {
-        "active":       "ccva_model_combined.pkl",
-        "version":      version,
-        "trained_at":   datetime.now(timezone.utc).strftime("%Y-%m-%d"),
-        "source_file":  file.filename,
-        "algorithm":    old_registry.get("algorithm", "XGBoost"),
-        "notes":        notes,
-        "metrics":      metrics,
-        "history":      history,
+        "active":               "ccva_model_combined.pkl",
+        "version":              result['version'],
+        "trained_at":           datetime.now(timezone.utc).strftime("%Y-%m-%d"),
+        "source_file":          file.filename,
+        "algorithm":            result['algorithm'],
+        "notes":                result['notes'],
+        "metrics": {
+            "accuracy":           round(metrics["accuracy"], 4),
+            "f1_macro":           round(metrics["f1_macro"], 4),
+            "f1_weighted":        round(metrics["f1_weighted"], 4),
+            "n_training_samples": metrics["n_training_samples"],
+            "n_test_samples":     metrics["n_test_samples"],
+            **({"cv_f1_macro": round(metrics["cv_f1_macro"], 4)} if metrics.get("cv_f1_macro") is not None else {}),
+        },
+        "metrics_auto_detected": True,
+        "history":              history,
     }
     with open(_MODEL_REGISTRY, "w") as f:
         _json.dump(new_registry, f, indent=2)
 
     return ResponseMainModel(data=new_registry, message="Model updated successfully", error=False)
+
+
+@settings_router.post("/ml-model/restore", status_code=status.HTTP_200_OK, response_model=ResponseMainModel)
+async def restore_ml_model(
+    payload: dict,
+    current_user=Depends(get_current_user),
+    required_privs: List[str] = Depends(check_privileges([AccessPrivileges.SETTINGS_CREATE_SYSTEM_CONFIGS])),
+):
+    """Re-deploys a previously-archived model version as the active one.
+
+    The currently active model is archived first (same as a fresh upload
+    replacing it), then the chosen archive's bytes become the new active
+    model, with its version/algorithm/metrics re-read directly from that
+    file - never from the possibly-stale history entry - so a restore can
+    never show different numbers than the file actually deployed.
+    """
+    archive_rel = (payload or {}).get("archive")
+    if not archive_rel:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="'archive' is required.")
+
+    old_registry: dict = {}
+    if _MODEL_REGISTRY.exists():
+        with open(_MODEL_REGISTRY) as f:
+            old_registry = _json.load(f)
+    history: list = list(old_registry.get("history", []))
+
+    matches = [h for h in history if h.get("archive") == archive_rel]
+    if not matches:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
+                            detail="That version isn't in the history list.")
+
+    # Path confined to _MODEL_ARCHIVE regardless of what the (validated-above)
+    # archive_rel string contains - no path traversal outside this directory.
+    archive_path = _MODEL_ARCHIVE / _Path(archive_rel).name
+    if not archive_path.exists():
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
+                            detail=f"Archived file not found: {archive_path.name}")
+
+    with open(archive_path, "rb") as f:
+        content = f.read()
+    result = _inspect_pkl_bytes(content)
+    if not result['valid']:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Archived file is no longer valid: {result['error']}",
+        )
+
+    _require_celery_idle()  # raises 409 if any worker is mid-task - checked before any write
+
+    _archive_active_model(old_registry, history)
+    history = [h for h in history if h.get("archive") != archive_rel]  # it's active now, not history
+
+    with open(_ACTIVE_MODEL, "wb") as f:
+        f.write(content)
+    _invalidate_this_process_cache()
+    _broadcast_cache_clear()
+
+    metrics = result['metrics']
+    new_registry = {
+        "active":               "ccva_model_combined.pkl",
+        "version":              result['version'] or matches[0].get('version', 'unknown'),
+        "trained_at":           matches[0].get('trained_at', datetime.now(timezone.utc).strftime("%Y-%m-%d")),
+        "source_file":          archive_path.name,
+        "algorithm":            result['algorithm'],
+        # The file's own training notes, same as a fresh upload - plus an
+        # auto-generated (not hand-typed) marker that this came from a restore.
+        "notes":                (result['notes'] + ' ' if result['notes'] else '') + f"(reloaded from {archive_rel})",
+        "metrics": {
+            "accuracy":           round(metrics["accuracy"], 4),
+            "f1_macro":           round(metrics["f1_macro"], 4),
+            "f1_weighted":        round(metrics["f1_weighted"], 4),
+            "n_training_samples": metrics["n_training_samples"],
+            "n_test_samples":     metrics["n_test_samples"],
+            **({"cv_f1_macro": round(metrics["cv_f1_macro"], 4)} if metrics.get("cv_f1_macro") is not None else {}),
+        },
+        "metrics_auto_detected": True,
+        "history":              history,
+    }
+    with open(_MODEL_REGISTRY, "w") as f:
+        _json.dump(new_registry, f, indent=2)
+
+    return ResponseMainModel(data=new_registry, message="Model restored successfully", error=False)
+
+
+@settings_router.post("/ml-model/delete-version", status_code=status.HTTP_200_OK, response_model=ResponseMainModel)
+async def delete_ml_model_version(
+    payload: dict,
+    current_user=Depends(get_current_user),
+    required_privs: List[str] = Depends(check_privileges([AccessPrivileges.SETTINGS_CREATE_SYSTEM_CONFIGS])),
+):
+    """Permanently deletes one archived (non-active) model version.
+
+    Only ever operates on entries in `history` - the currently active model
+    is never stored there (see upload/restore above), so there's no code
+    path here that can delete the deployed model.
+    """
+    archive_rel = (payload or {}).get("archive")
+    if not archive_rel:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="'archive' is required.")
+
+    with open(_MODEL_REGISTRY) as f:
+        registry = _json.load(f)
+    history: list = list(registry.get("history", []))
+
+    if not any(h.get("archive") == archive_rel for h in history):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
+                            detail="That version isn't in the history list.")
+
+    archive_path = _MODEL_ARCHIVE / _Path(archive_rel).name
+    if archive_path.exists():
+        archive_path.unlink()
+
+    registry["history"] = [h for h in history if h.get("archive") != archive_rel]
+    with open(_MODEL_REGISTRY, "w") as f:
+        _json.dump(registry, f, indent=2)
+
+    return ResponseMainModel(data=registry, message="Version deleted", error=False)
 
 @settings_router.post("/xform/upload", status_code=status.HTTP_200_OK, response_model=ResponseMainModel)
 async def upload_xform_dictionary(

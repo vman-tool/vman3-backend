@@ -145,6 +145,32 @@ def _prewarm_vman_ml_predictor(**kwargs):
     t.start()
 
 
+# ── Custom remote-control command: clear a worker's VMan ML cache in place ────
+# vman_ml_service._predictor_cache is per-process (see its own docstring) -
+# a worker that already cached a predictor keeps serving it until either the
+# process restarts or it's told to drop the cache entry. Rather than
+# restarting the whole worker (which would kill any task it's mid-way
+# through), settings_routes.py's /ml-model/upload and /restore broadcast this
+# command to every worker right after a successful model swap - but only
+# once they've confirmed via celery_app.control.inspect().active() that no
+# worker is currently running a task, so this is never fired at anything
+# actually busy.
+from celery.worker.control import control_command, ok, nok
+
+
+@control_command()
+def clear_vman_ml_cache(state):
+    """Drops this worker's cached VMan ML predictor so its next task reloads
+    the model fresh from disk, with no process restart needed.
+    """
+    try:
+        from app.ccva.services.vman_ml_service import invalidate_predictor_cache
+        invalidate_predictor_cache()
+        return ok('vman_ml predictor cache cleared')
+    except Exception as exc:
+        return nok(str(exc))
+
+
 # Beat schedule:
 #   check_dqa_analytics_schedule  — hourly, fires the DQA snapshot recompute
 #                                   at the user-configured UTC hour.
