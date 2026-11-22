@@ -970,3 +970,263 @@ async def delete_ccva_entry(ccva_id: str, db: StandardDatabase) -> ResponseMainM
         raise BadRequestException("Failed to delete record", str(e))
     except Exception as e:
         raise BadRequestException(f"Failed to delete record: {str(e)}", str(e))
+
+
+# ── Compare CoD: per-record Cause-of-Death comparison between two runs ──────
+#
+# Unlike fetch_ccva_individual_results (one run, one CAUSE1/CAUSE2 pair),
+# this inner-joins two runs' results by VA id (doc.ID) so each returned row
+# carries both algorithms' Cause 1/2 + probability side by side. Only VA ids
+# present in BOTH runs are returned - records found in only one run are
+# silently excluded from the table itself, but counted (see
+# get_ccva_compare_filter_options' matched/task totals) so that's visible
+# rather than a silent discrepancy.
+#
+# Broad/Major Category are deliberately NOT included here (unlike the
+# single-run table): both are derived from Cause 1 (see
+# target_cause_categories.py), and Cause 1 can legitimately differ between
+# the two algorithms being compared - a single Broad/Major column would be
+# ambiguous about whose Cause 1 it's describing.
+
+_CCVA_COMPARE_SORT_FIELDS = {
+    "va_id":        "doc1.ID",
+    "region":       "doc1.locationLevel1",
+    "district":     "doc1.locationLevel2",
+    "ward":         "doc1.locationLevel3",
+    "gender":       "doc1.gender",
+    "age_group":    "doc1.age_group",
+    "cause1_algo1": "doc1.CAUSE1",
+    "cause1_algo2": "doc2.CAUSE1",
+}
+
+# "Cause Specific" needs a third dimension (which of the two algorithms the
+# chosen cause belongs to) that single-run filtering never had to deal with -
+# filter_algo picks doc1 ("1") or doc2 ("2") as the side filter_value applies to.
+_CCVA_COMPARE_FILTERABLE_FIELDS = {"gender", "age_group", "cause_specific", "agreement"}
+
+# ArangoDB 3.12.2's "join-index-nodes" optimizer rule turns this module's
+# self-joins (FOR doc1 ... FOR doc2 ... FILTER doc1.ID == doc2.ID, both over
+# the same compound task_id+ID index) into a TwoIndicesMergeJoin executor.
+# Combined with an aggregating executor on top (COLLECT WITH COUNT, or
+# COLLECT value = ...) that executor SIGSEGVs the whole server (confirmed via
+# docker logs: crash inside arangodb::aql::JoinExecutor /
+# TwoIndicesMergeJoin::reset, immediately followed by an auto-restart) -
+# reproduced live against this run's real task ids. Disabling the rule for
+# every query below that pairs the self-join with an aggregate falls back to
+# a plain indexed nested loop (still using the same index per outer row, just
+# not the specialized merge-join operator) and ran in ~25ms against the
+# in-repro 4k-record collections. Remove this once ArangoDB ships a fix.
+_CCVA_COMPARE_JOIN_CRASH_WORKAROUND = {"optimizer_rules": ["-join-index-nodes"]}
+
+
+async def _build_ccva_compare_filters(
+    task_id_1: str,
+    task_id_2: str,
+    search_va_id: Optional[str],
+    filter_by: Optional[str],
+    filter_value: Optional[str],
+    filter_algo: Optional[str],
+    db: StandardDatabase,
+) -> Tuple[List[str], Dict]:
+    bind_vars: Dict = {"task_id_1": task_id_1, "task_id_2": task_id_2}
+    filters = ["doc1.task_id == @task_id_1", "doc2.task_id == @task_id_2", "doc1.ID == doc2.ID"]
+
+    if search_va_id:
+        filters.append("CONTAINS(LOWER(TO_STRING(doc1.ID)), @search_va_id)")
+        bind_vars["search_va_id"] = search_va_id.strip().lower()
+
+    if filter_by in ("gender", "age_group") and filter_value:
+        filters.append(f"doc1.{filter_by} == @filter_value")
+        bind_vars["filter_value"] = filter_value
+    elif filter_by == "cause_specific" and filter_value and filter_algo in ("1", "2"):
+        doc_ref = "doc1" if filter_algo == "1" else "doc2"
+        filters.append(f"{doc_ref}.CAUSE1 == @filter_value")
+        bind_vars["filter_value"] = filter_value
+    elif filter_by == "agreement" and filter_value in ("agreement", "disagreement"):
+        # Mirrors the cause1_agrees flag computed below on the cleaned
+        # values: non-null/non-blank and equal on both sides counts as
+        # agreement, everything else (including either side blank) as
+        # disagreement.
+        agree_condition = (
+            'doc1.CAUSE1 != null AND TRIM(TO_STRING(doc1.CAUSE1)) != "" AND doc1.CAUSE1 == doc2.CAUSE1'
+        )
+        filters.append(agree_condition if filter_value == "agreement" else f"NOT ({agree_condition})")
+
+    return filters, bind_vars
+
+
+async def fetch_ccva_compare_results(
+    task_id_1: str,
+    task_id_2: str,
+    page_number: int = 1,
+    limit: int = 10,
+    search_va_id: Optional[str] = None,
+    filter_by: Optional[str] = None,
+    filter_value: Optional[str] = None,
+    filter_algo: Optional[str] = None,
+    sort_by: Optional[str] = None,
+    sort_dir: str = "asc",
+    db: StandardDatabase = None,
+) -> ResponseMainModel:
+    """The "Compare CoD" table - one row per VA id present in both runs,
+    with each algorithm's Cause 1/2 + probability side by side (see module
+    note above for why Broad/Major Category aren't included)."""
+    try:
+        collection = db.collection(db_collections.CCVA_RESULTS)
+        filters, bind_vars = await _build_ccva_compare_filters(
+            task_id_1, task_id_2, search_va_id, filter_by, filter_value, filter_algo, db,
+        )
+
+        base_query = (
+            f"FOR doc1 IN {collection.name} "
+            f"FOR doc2 IN {collection.name} "
+            "FILTER " + " AND ".join(filters) + " "
+        )
+
+        count_query = base_query + "COLLECT WITH COUNT INTO total RETURN total"
+
+        def execute_count():
+            cursor = db.aql.execute(
+                count_query, bind_vars=dict(bind_vars), **_CCVA_COMPARE_JOIN_CRASH_WORKAROUND
+            )
+            return cursor.next()
+
+        total = await run_in_threadpool(execute_count)
+
+        sort_field = _CCVA_COMPARE_SORT_FIELDS.get(sort_by, "doc1.ID")
+        direction = "DESC" if str(sort_dir).lower() == "desc" else "ASC"
+
+        query = base_query + f"SORT {sort_field} {direction} "
+        if page_number and limit:
+            query += "LIMIT @offset, @size "
+            bind_vars["offset"] = (page_number - 1) * limit
+            bind_vars["size"] = limit
+
+        query += """
+        RETURN {
+            va_id: doc1.ID,
+            locationLevel1: doc1.locationLevel1,
+            locationLevel2: doc1.locationLevel2,
+            locationLevel3: doc1.locationLevel3,
+            gender: doc1.gender,
+            age_group: doc1.age_group,
+            cause1_algo1: doc1.CAUSE1,
+            cause1_probability_algo1: doc1.LIK1,
+            cause2_algo1: doc1.CAUSE2,
+            cause2_probability_algo1: doc1.LIK2,
+            cause1_algo2: doc2.CAUSE1,
+            cause1_probability_algo2: doc2.LIK1,
+            cause2_algo2: doc2.CAUSE2,
+            cause2_probability_algo2: doc2.LIK2
+        }
+        """
+
+        def execute_query():
+            cursor = db.aql.execute(
+                query, bind_vars=bind_vars, **_CCVA_COMPARE_JOIN_CRASH_WORKAROUND
+            )
+            return [document for document in cursor]
+
+        data = await run_in_threadpool(execute_query)
+
+        for row in data:
+            row["cause1_algo1"] = _clean_ccva_text(row.get("cause1_algo1"))
+            row["cause2_algo1"] = _clean_ccva_text(row.get("cause2_algo1"))
+            row["cause1_algo2"] = _clean_ccva_text(row.get("cause1_algo2"))
+            row["cause2_algo2"] = _clean_ccva_text(row.get("cause2_algo2"))
+            row["cause1_probability_algo1"] = _clean_ccva_probability(row.get("cause1_probability_algo1"))
+            row["cause2_probability_algo1"] = _clean_ccva_probability(row.get("cause2_probability_algo1"))
+            row["cause1_probability_algo2"] = _clean_ccva_probability(row.get("cause1_probability_algo2"))
+            row["cause2_probability_algo2"] = _clean_ccva_probability(row.get("cause2_probability_algo2"))
+            # Quick-scan agreement flag - the whole point of this table is
+            # spotting where the two algorithms differ, not just listing both.
+            row["cause1_agrees"] = (
+                row["cause1_algo1"] is not None and row["cause1_algo1"] == row["cause1_algo2"]
+            )
+
+        return ResponseMainModel(
+            data=data,
+            message="CCVA comparison results fetched successfully",
+            total=total,
+        )
+    except ArangoError as e:
+        raise BadRequestException("Failed to fetch CCVA comparison results", str(e))
+    except Exception as e:
+        raise BadRequestException(f"Failed to fetch CCVA comparison results: {str(e)}", str(e))
+
+
+async def get_ccva_compare_filter_options(
+    task_id_1: str, task_id_2: str, db: StandardDatabase
+) -> ResponseMainModel:
+    """Filter Value choices for the Compare CoD table, plus match-rate
+    transparency numbers (how many of each run's records actually lined up
+    by VA id) shown above the table rather than left as a silent gap."""
+    try:
+        collection = db.collection(db_collections.CCVA_RESULTS)
+
+        def execute_distinct_joined(field: str):
+            query = f"""
+                FOR doc1 IN {collection.name}
+                    FILTER doc1.task_id == @task_id_1 AND doc1.{field} != null AND doc1.{field} != ""
+                    FOR doc2 IN {collection.name}
+                        FILTER doc2.task_id == @task_id_2 AND doc2.ID == doc1.ID
+                        COLLECT value = doc1.{field}
+                        RETURN value
+            """
+            cursor = db.aql.execute(
+                query,
+                bind_vars={"task_id_1": task_id_1, "task_id_2": task_id_2},
+                **_CCVA_COMPARE_JOIN_CRASH_WORKAROUND,
+            )
+            return [d for d in cursor]
+
+        def execute_matched_total():
+            query = f"""
+                FOR doc1 IN {collection.name}
+                    FILTER doc1.task_id == @task_id_1
+                    FOR doc2 IN {collection.name}
+                        FILTER doc2.task_id == @task_id_2 AND doc2.ID == doc1.ID
+                        COLLECT WITH COUNT INTO total
+                        RETURN total
+            """
+            cursor = db.aql.execute(
+                query,
+                bind_vars={"task_id_1": task_id_1, "task_id_2": task_id_2},
+                **_CCVA_COMPARE_JOIN_CRASH_WORKAROUND,
+            )
+            return cursor.next()
+
+        def execute_task_total(task_id: str):
+            query = f"""
+                FOR doc IN {collection.name}
+                    FILTER doc.task_id == @task_id
+                    COLLECT WITH COUNT INTO total
+                    RETURN total
+            """
+            cursor = db.aql.execute(query, bind_vars={"task_id": task_id})
+            return cursor.next()
+
+        genders    = await run_in_threadpool(lambda: execute_distinct_joined("gender"))
+        age_groups = await run_in_threadpool(lambda: execute_distinct_joined("age_group"))
+        cause1_algo1 = await _distinct_cause1_values(task_id_1, db)
+        cause1_algo2 = await _distinct_cause1_values(task_id_2, db)
+        matched    = await run_in_threadpool(execute_matched_total)
+        task1_total = await run_in_threadpool(lambda: execute_task_total(task_id_1))
+        task2_total = await run_in_threadpool(lambda: execute_task_total(task_id_2))
+
+        return ResponseMainModel(
+            data={
+                "gender":       sorted(genders),
+                "age_group":    sorted(age_groups),
+                "cause1_algo1": sorted(c for c in cause1_algo1 if _clean_ccva_text(c)),
+                "cause1_algo2": sorted(c for c in cause1_algo2 if _clean_ccva_text(c)),
+                "matched_total": matched,
+                "task1_total":   task1_total,
+                "task2_total":   task2_total,
+            },
+            message="CCVA comparison filter options fetched successfully",
+        )
+    except ArangoError as e:
+        raise BadRequestException("Failed to fetch CCVA comparison filter options", str(e))
+    except Exception as e:
+        raise BadRequestException(f"Failed to fetch CCVA comparison filter options: {str(e)}", str(e))

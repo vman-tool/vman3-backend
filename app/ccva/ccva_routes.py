@@ -14,6 +14,7 @@ from app.ccva.services.ccva_data_services import (
     delete_ccva_entry, fetch_all_processed_ccva_graphs,
     fetch_ccva_individual_results, fetch_ccva_grouped_results,
     fetch_ccva_map_points, get_ccva_filter_options,
+    fetch_ccva_compare_results, get_ccva_compare_filter_options,
     fetch_processed_ccva_graphs, set_ccva_as_default, clear_ccva_default)
 from app.ccva.services.ccva_graph_services import \
     fetch_db_processed_ccva_graphs
@@ -386,6 +387,45 @@ async def get_ccva_filter_options_route(
     db: StandardDatabase = Depends(get_arangodb_session),
 ):
     return await get_ccva_filter_options(task_id=task_id, db=db)
+
+# "Compare CoD": per-record Cause-of-Death comparison between two runs - see
+# fetch_ccva_compare_results' docstring for why this is a separate endpoint
+# from /{task_id}/results rather than just calling that one twice.
+@ccva_router.get("/compare/{task_id_1}/{task_id_2}/results", status_code=status.HTTP_200_OK)
+async def get_ccva_compare_results_route(
+    task_id_1: str,
+    task_id_2: str,
+    page_number: int = Query(1, ge=1),
+    limit: int = Query(10, ge=1, le=200_000),
+    search_va_id: Optional[str] = Query(None),
+    filter_by: Optional[str] = Query(None),
+    filter_value: Optional[str] = Query(None),
+    filter_algo: Optional[str] = Query(None),
+    sort_by: Optional[str] = Query(None),
+    sort_dir: str = Query("asc"),
+    db: StandardDatabase = Depends(get_arangodb_session),
+):
+    return await fetch_ccva_compare_results(
+        task_id_1=task_id_1,
+        task_id_2=task_id_2,
+        page_number=page_number,
+        limit=limit,
+        search_va_id=search_va_id,
+        filter_by=filter_by,
+        filter_value=filter_value,
+        filter_algo=filter_algo,
+        sort_by=sort_by,
+        sort_dir=sort_dir,
+        db=db,
+    )
+
+@ccva_router.get("/compare/{task_id_1}/{task_id_2}/filter-options", status_code=status.HTTP_200_OK)
+async def get_ccva_compare_filter_options_route(
+    task_id_1: str,
+    task_id_2: str,
+    db: StandardDatabase = Depends(get_arangodb_session),
+):
+    return await get_ccva_compare_filter_options(task_id_1=task_id_1, task_id_2=task_id_2, db=db)
 
 @ccva_router.get("/{task_id}/grouped-results", status_code=status.HTTP_200_OK)
 async def get_ccva_grouped_results_route(
