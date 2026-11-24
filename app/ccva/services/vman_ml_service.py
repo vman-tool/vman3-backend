@@ -1,5 +1,5 @@
 """
-VMan ML 1.0 CCVA prediction service.
+VMan MLM v1.0 CCVA prediction service.
 
 Wraps the vman_ml package (CCVAPredictor + DataPreprocessor) so it fits
 the same call pattern as runCCVA / InterVA5.  Returns a list of dicts
@@ -239,7 +239,7 @@ def run_vman_ml(
     start_time: Optional[datetime] = None,
 ) -> list[dict]:
     """
-    Run VMan ML 1.0 prediction on *odk_raw* and return a list of result dicts
+    Run VMan MLM v1.0 prediction on *odk_raw* and return a list of result dicts
     whose 'ID' field contains the VA instance-ID value from *id_col*.
 
     Each dict includes:
@@ -277,7 +277,7 @@ def run_vman_ml(
 
     # ── 2. Preprocess ─────────────────────────────────────────────────────────
     _progress(10, f"Formatting & cleaning {n_records:,} records...",
-              log=f"VMan ML 1.0 | preprocessing {n_records} VA records")
+              log=f"VMan MLM v1.0 | preprocessing {n_records} VA records")
     t_preprocess = time.perf_counter()
 
     preprocessor = DataPreprocessor(verbose=False)
@@ -295,14 +295,14 @@ def run_vman_ml(
     version = detection.get("version", "unknown") if isinstance(detection, dict) else "unknown"
     t_detect = time.perf_counter() - t_detect
     _progress(22, "Validating instrument structure...",
-              log=(f"VMan ML 1.0 | preprocess: {t_preprocess:.1f}s | "
+              log=(f"VMan MLM v1.0 | preprocess: {t_preprocess:.1f}s | "
                    f"instrument version detected: {version} ({t_detect:.2f}s)"))
 
     # ── 4. Load model (from cache when available) ─────────────────────────────
     t_load = time.perf_counter()
     is_cached = str(resolved_model) in _predictor_cache
     _progress(30, "Loading prediction model...",
-              log=f"VMan ML 1.0 | {'reusing cached' if is_cached else 'loading'} model from {resolved_model.name}")
+              log=f"VMan MLM v1.0 | {'reusing cached' if is_cached else 'loading'} model from {resolved_model.name}")
     predictor = _get_cached_predictor(resolved_model)
     t_load = time.perf_counter() - t_load
 
@@ -310,7 +310,7 @@ def run_vman_ml(
     n_classes = len(predictor.original_classes)
     n_features = len(predictor.expected_columns)
     _progress(35, "Configuring prediction model...",
-              log=(f"VMan ML 1.0 | model {'(cached)' if is_cached else f'loaded in {t_load:.1f}s'} | "
+              log=(f"VMan MLM v1.0 | model {'(cached)' if is_cached else f'loaded in {t_load:.1f}s'} | "
                    f"{model_name} | {n_features} features | {n_classes} cause classes | "
                    f"DK threshold: {predictor.dk_threshold:.0%} | "
                    f"OOD entropy > {predictor.ood_entropy_threshold:.3f}"))
@@ -320,12 +320,12 @@ def run_vman_ml(
     # predict_detailed call below - this just logs what's about to change.
     if ood_threshold is not None and 0 < ood_threshold < 1:
         _progress(36, "Applying classification thresholds...",
-                  log=(f"VMan ML 1.0 | OOD confidence threshold overridden to {ood_threshold} "
+                  log=(f"VMan MLM v1.0 | OOD confidence threshold overridden to {ood_threshold} "
                        f"(added alongside, not instead of, the model's own entropy threshold)"))
 
     if dk_threshold is not None and 0 < dk_threshold <= 1:
         _progress(37, "Applying classification thresholds...",
-                  log=f"VMan ML 1.0 | DK threshold overridden to {dk_threshold:.0%}")
+                  log=f"VMan MLM v1.0 | DK threshold overridden to {dk_threshold:.0%}")
 
     # ── 6. Predict — native progress callback + parallel predict_proba ──────────
     # predict_detailed now accepts a progress_callback.  The callback receives
@@ -351,7 +351,7 @@ def run_vman_ml(
         _last_reported_pct[0] = outer_pct
         _progress(outer_pct,
                   f"Making predictions... ({inner_pct}%)" if not msg else f"Predicting: {msg}",
-                  log=f"VMan ML 1.0 | predict_detailed ({inner_pct}%) — {msg}")
+                  log=f"VMan MLM v1.0 | predict_detailed ({inner_pct}%) — {msg}")
 
     def _heartbeat() -> None:
         """Every 5 s: if no callback has arrived, nudge the bar by 1% (max 79%)."""
@@ -362,7 +362,7 @@ def run_vman_ml(
                 _last_reported_pct[0] = nudged
                 _progress(nudged,
                           f"Making predictions... ",
-                          log=f"VMan ML 1.0 | predict_detailed running | "
+                          log=f"VMan MLM v1.0 | predict_detailed running | "
                               f"no callback for {silence:.0f}s | elapsed {_elapsed()}")
 
     _hb = threading.Thread(target=_heartbeat, daemon=True)
@@ -377,7 +377,7 @@ def run_vman_ml(
 
     _progress(40, f"Making CoD predictions for {n_records:,} records "
               f"({n_workers} workers)...",
-              log=f"VMan ML 1.0 | predict start | {n_records} records | "
+              log=f"VMan MLM v1.0 | predict start | {n_records} records | "
                   f"{n_workers} workers | {n_cpus} CPUs")
 
     try:
@@ -394,14 +394,14 @@ def run_vman_ml(
     t_predict = time.perf_counter() - t_predict
     throughput = n_records / t_predict if t_predict > 0 else 0
     _progress(80, "Compiling CoD results...",
-              log=f"VMan ML 1.0 | predict done | {t_predict:.1f}s | "
+              log=f"VMan MLM v1.0 | predict done | {t_predict:.1f}s | "
                   f"{throughput:.0f} records/s | {n_workers} parallel workers")
 
     # ── 7. Log OOD / DK / classified counts ──────────────────────────────────
     n_ood = int((pred_df["prediction"] == "out_of_distribution").sum())
     n_classified = int((pred_df["prediction"] != "out_of_distribution").sum())
     _progress(82, "Mapping CoD codes...",
-              log=(f"VMan ML 1.0 | {n_classified} classified | "
+              log=(f"VMan MLM v1.0 | {n_classified} classified | "
                    f"{n_ood} out-of-distribution | {n_records} total | "
                    f"predict wall-clock {t_predict:.1f}s ({throughput:.0f} rec/s)"))
 
@@ -435,6 +435,6 @@ def run_vman_ml(
 
     logger.info(f"VMan ML produced {len(records)} predictions for task {file_id}")
     _progress(90, f"Finalizing {len(records):,} predictions...",
-              log=(f"VMan ML 1.0 | pipeline complete | "
+              log=(f"VMan MLM v1.0 | pipeline complete | "
                    f"{len(records)} predictions | elapsed {_elapsed()}"))
     return records

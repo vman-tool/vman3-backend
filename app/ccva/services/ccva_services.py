@@ -195,7 +195,7 @@ def runCCVA(odk_raw:pd.DataFrame, id_col: str = None,date_col:str =None,start_ti
             file_id: str = "unnamed_file", update_callback=None, db: StandardDatabase=None, user_id: str = None,
             dk_threshold: Optional[float] = None, ood_threshold: Optional[float] = None):
 
-    # ── VMan ML 1.0 branch ────────────────────────────────────────────────────
+    # ── VMan MLM v1.0 branch ────────────────────────────────────────────────────
     if algorithm == "VManML10":
         from app.ccva.services.vman_ml_service import run_vman_ml
 
@@ -254,7 +254,7 @@ def runCCVA(odk_raw:pd.DataFrame, id_col: str = None,date_col:str =None,start_ti
 
         call_update_callback(update_callback, {
             "progress": 100,
-            "message": "VMan ML 1.0 analysis complete.",
+            "message": "VMan MLM v1.0 analysis complete.",
             "status": "completed",
             "data": ccva_results,
             "elapsed_time": ccva_results["elapsed_time"],
