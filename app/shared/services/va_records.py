@@ -13,6 +13,21 @@ from app.shared.configs.security import build_location_limit_filter
 from app.shared.utils.database_utilities import add_query_filters
 
 
+def _strip_computed_fields(documents: List[Dict]) -> List[Dict]:
+    """Drop CCVA/DQA denormalized columns from raw VA documents.
+
+    `format_records=False` means the caller wants the record as a VA content
+    view (PCVA Coding, View VA) rather than the VA Records table's own named
+    columns, so these computed fields - never part of the actual submission -
+    must not pass through here, regardless of what builds the display from
+    them downstream.
+    """
+    return [
+        {k: v for k, v in document.items() if k not in _COMPUTED_VA_FIELDS}
+        for document in documents
+    ]
+
+
 async def shared_fetch_va_records(paging: bool = True,  page_number: int = 1, limit: int = 10, include_assignment: bool = False, filters: Dict = {}, format_records:bool = True, db: StandardDatabase = None) -> ResponseMainModel:
     va_table_collection = db.collection(db_collections.VA_TABLE)
     assignment_collection_exists = db.has_collection(db_collections.ASSIGNED_VA)
@@ -85,10 +100,8 @@ async def shared_fetch_va_records(paging: bool = True,  page_number: int = 1, li
             if format_records:
                 data = [format_va_record(document, config) for document in cursor_data]
             else:
-                data = cursor_data
-            
-                
-            
+                data = _strip_computed_fields(cursor_data)
+
             return ResponseMainModel(data=data, message="Records fetched successfully!", total=total_count)
         else:
             query = f"""
@@ -165,11 +178,11 @@ async def shared_fetch_va_records(paging: bool = True,  page_number: int = 1, li
                 return [document for document in cursor]
 
             cursor_data = await run_in_threadpool(execute_assignments_query)
-            
+
             if format_records:
                 data = [format_va_record(document, config) for document in cursor_data]
             else:
-                data = cursor_data
+                data = _strip_computed_fields(cursor_data)
 
             return ResponseMainModel(data=data, message="Records fetched successfully!", total = total_count, pager=Pager(page=page_number, limit=limit))
     
@@ -183,6 +196,20 @@ async def shared_fetch_va_records(paging: bool = True,  page_number: int = 1, li
 _INTERNAL_VA_FIELDS = {
     '_key', '_id', '_rev',
     'vman_data_source', 'vman_data_name', '__id', 'version_number', 'trackid',
+}
+
+# Computed/denormalized columns written onto VA record documents after the
+# fact - CCVA's default-run Cause/Algorithm (_sync_ccva_default_to_va_records
+# in ccva_data_services.py) and DQA's quality scores (sync_dqa_scores_to_va_records
+# in general_dqa.py) - purely so the VA Records table can sort/filter/paginate
+# on them without joining ccva_results/dqa_analytics on every page load. They
+# are not submission content: showing a physician the CCVA-computed cause
+# while they code a VA risks biasing their own coding toward it, so these must
+# never reach a "VA content" view (PCVA Coding, View VA, ...), only the VA
+# Records table that explicitly asks for them by name.
+_COMPUTED_VA_FIELDS = {
+    'ccva_cause1', 'ccva_cause1_broad', 'ccva_cause1_major', 'ccva_algorithm',
+    'dqa_rrs', 'dqa_ics', 'dqa_ici', 'dqa_aid',
 }
 
 
@@ -207,7 +234,8 @@ async def get_distinct_va_field_names(db: StandardDatabase = None) -> List[str]:
         return [document for document in cursor]
 
     fields = await run_in_threadpool(execute_field_names_query)
-    return sorted(f for f in fields if f not in _INTERNAL_VA_FIELDS)
+    excluded = _INTERNAL_VA_FIELDS | _COMPUTED_VA_FIELDS
+    return sorted(f for f in fields if f not in excluded)
 
 
 async def get_field_value_from_va_records(
