@@ -96,5 +96,5 @@ flower>=2.0.0
 # vman_ml is pinned at v1.2.1 or later: earlier tags ship the mislabeled
 # va_instr_2016.xlsx, which actually contained the 2022 Tanzania form, so
 # they resolve the "2016" instrument to the wrong field structure.
-git+https://github.com/vman-tool/vman3_ml.git@v1.3.1
-git+https://github.com/vman-tool/vman3_dq.git@v1.2.3
+https://github.com/vman-tool/vman3_ml/archive/refs/tags/v1.3.1.tar.gz
+https://github.com/vman-tool/vman3_dq/archive/refs/tags/v1.2.3.tar.gz
