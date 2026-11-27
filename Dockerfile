@@ -12,8 +12,13 @@ ENV NUMEXPR_NUM_THREADS=1
 WORKDIR /vman3
 
 # ── System deps + Python dependencies ────────────────────────────────────────
-# vman_ml/vman_dq install from a GitHub release tarball (see requirements.txt)
-# rather than `git+https://...`, so git itself is no longer needed here.
+# requirements.txt itself installs vman_ml/vman_dq from GitHub release
+# tarballs rather than `git+https://...` - but vman_ml's own pyproject.toml
+# still declares ITS vman_dq dependency as `git+https://...`, so pip still
+# needs git to resolve that transitively when installing vman_ml. Removing
+# git from this image (as a prior pass here did) breaks that resolution with
+# "ERROR: Cannot find command 'git'", it just didn't show up until a build
+# got far enough to reach it instead of dying earlier on a flaky connection.
 COPY requirements.txt setup.py ./
 
 # Each step below is its own RUN/layer rather than one combined chain, so a
@@ -29,6 +34,7 @@ COPY requirements.txt setup.py ./
 RUN apt-get update -o Acquire::Retries=5 \
     && apt-get install -y -o Acquire::Retries=5 --no-install-recommends \
         gcc \
+        git \
         libffi-dev \
         build-essential \
         libpq-dev \
@@ -56,7 +62,7 @@ RUN pip install -e .
 # the CPU build) - nothing in this codebase runs on a GPU, and stripping it
 # saves ~470MB per image with no functional loss.
 RUN pip uninstall -y nvidia-nccl-cu12 \
-    && apt-get remove -y gcc libffi-dev build-essential \
+    && apt-get remove -y gcc git libffi-dev build-essential \
     && apt-get autoremove -y \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
